@@ -10,6 +10,16 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 import streamlit as st
+
+try:
+    from itsdangerous import URLSafeTimedSerializer
+except Exception:
+    URLSafeTimedSerializer = None
+
+try:
+    from streamlit_cookies_controller import CookieController
+except Exception:
+    CookieController = None
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -69,6 +79,32 @@ html, body, [class*="css"] {
 }
 
 [data-testid="stHeader"] { background: transparent; }
+
+/* Hide Streamlit's default upper-right toolbar/menu icons.
+   The app's own gear control remains visible because it is rendered in the page body. */
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"],
+[data-testid="stAppDeployButton"],
+[data-testid="stMainMenu"],
+button[kind="header"],
+[data-testid="stHeaderActionElements"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Keep the header area clean after removing the native controls. */
+[data-testid="stHeader"] {
+    height: 0 !important;
+    min-height: 0 !important;
+}
+
+/* Hide the default sidebar container; this app uses its own page navigation. */
+[data-testid="stSidebar"],
+[data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
+
 
 .kb-topbar {
     display: flex;
@@ -151,6 +187,23 @@ html, body, [class*="css"] {
 .bottom-nav-spacer { height: 46px; }
 .bottom-nav-label { text-align:center; color:#6c808b; font-size:10px; padding:4px 0 8px; }
 
+
+.auth-shell { max-width: 620px; margin: 70px auto 22px; text-align: center; }
+.auth-brand-mark { width: 55px; height: 8px; border: 3px solid #00a982; margin: 0 auto 10px; }
+.auth-brand { font-size: 14px; font-weight: 700; color: #111; line-height: 1.05; }
+.auth-title { margin-top: 26px; font-size: 31px; font-weight: 700; color: var(--text); }
+.auth-subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
+.auth-card-title { font-size: 24px; font-weight: 700; color: var(--text); margin-top: 20px; }
+.auth-switch { text-align:center; color:var(--muted); font-size:12px; margin:12px 0 6px; }
+.top-user { color:#315468; font-size:12px; margin-right:12px; white-space:nowrap; }
+.best-match-card { background:linear-gradient(110deg,#f1fcf8,#fff 70%); border:1px solid #7ad8bd; border-radius:10px; padding:16px 18px; margin-top:8px; box-shadow:0 3px 12px rgba(12,54,70,.05); }
+.best-match-head { display:flex; justify-content:space-between; align-items:center; }
+.pdf-badge { display:inline-flex; background:#e94b3c; color:white; font-weight:800; font-size:10px; border-radius:4px; padding:4px 6px; margin-right:7px; }
+.best-match-title { color:#07866b; font-size:18px; font-weight:700; }
+.best-match-file { color:#102d42; font-size:20px; font-weight:700; margin-top:8px; }
+.best-match-meta { color:#687b87; font-size:12px; margin-top:4px; }
+.section-excerpt { background:#fff; border-left:4px solid #00a982; padding:14px 16px; color:#263d4a; font-size:14px; line-height:1.65; white-space:pre-wrap; }
+
 /* Streamlit controls */
 button[kind="primary"] { background: var(--teal) !important; border-color: var(--teal) !important; }
 button[kind="primary"]:hover { background: var(--teal-dark) !important; }
@@ -177,6 +230,10 @@ button[kind="primary"]:hover { background: var(--teal-dark) !important; }
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA cache_size=-16000")
     return conn
 
 
@@ -184,6 +241,16 @@ def init_db():
     conn = db()
     conn.executescript(
         """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            employee_id TEXT NOT NULL UNIQUE,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT NOT NULL,
@@ -207,11 +274,242 @@ def init_db():
         );
         """
     )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document_page ON chunks(document_id, page_number)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category)")
     conn.commit()
     conn.close()
 
 
 init_db()
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+
+def normalize_email(email):
+    return email.strip().lower()
+
+
+def hash_password(password, salt=None):
+    if salt is None:
+        salt = os.urandom(16)
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        210_000,
+    )
+    return salt.hex() + ":" + derived.hex()
+
+
+def verify_password(password, stored):
+    try:
+        salt_hex, digest_hex = stored.split(":", 1)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(digest_hex)
+        actual = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            210_000,
+        )
+        return __import__("hmac").compare_digest(actual, expected)
+    except Exception:
+        return False
+
+
+def create_user(first_name, last_name, employee_id, email, password):
+    first_name = first_name.strip()
+    last_name = last_name.strip()
+    employee_id = employee_id.strip()
+    email = normalize_email(email)
+
+    if not all([first_name, last_name, employee_id, email, password]):
+        return False, "All fields are required."
+
+    if "@" not in email:
+        return False, "Enter a valid email address."
+
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters."
+
+    conn = db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO users
+            (first_name, last_name, employee_id, email, password_hash, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                first_name,
+                last_name,
+                employee_id,
+                email,
+                hash_password(password),
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+        conn.commit()
+        return True, "Account created successfully. You can now sign in."
+    except sqlite3.IntegrityError as e:
+        message = str(e).lower()
+        if "employee_id" in message:
+            return False, "That Employee ID is already registered."
+        if "email" in message:
+            return False, "That email address is already registered."
+        return False, "An account with those details already exists."
+    finally:
+        conn.close()
+
+
+def authenticate_user(email, password):
+    conn = db()
+    row = conn.execute(
+        "SELECT * FROM users WHERE email = ?",
+        (normalize_email(email),),
+    ).fetchone()
+    conn.close()
+
+    if not row or not verify_password(password, row["password_hash"]):
+        return None
+
+    return dict(row)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_relevant_section(document_path, page_number, query, max_pages=4):
+    """
+    Extract the original PDF text belonging to the section most related to
+    the search. It favors numbered headings, short headings, Steps, Checklist,
+    Procedure, Requirements, Troubleshooting, etc., and continues onto
+    subsequent pages when the section appears to continue.
+    """
+    try:
+        pdf = fitz.open(document_path)
+        start_page = max(1, page_number)
+        pages = []
+        for pno in range(start_page, min(len(pdf), start_page + max_pages - 1) + 1):
+            raw = pdf[pno - 1].get_text("text")
+            if raw.strip():
+                pages.append((pno, raw))
+
+        if not pages:
+            return []
+
+        terms = [
+            t.lower() for t in re.findall(r"[A-Za-z0-9]+", query)
+            if len(t) > 2
+        ]
+
+        def is_heading(line):
+            x = re.sub(r"\s+", " ", line).strip()
+            if not x or len(x) > 120:
+                return False
+            if re.match(r"^\d+(?:\.\d+)+\s", x):
+                return True
+            if re.search(r"\b(steps?|checklist|procedure|process|requirements?|troubleshooting|instructions?|overview|guidelines?)\b", x, re.I):
+                return True
+            letters = re.sub(r"[^A-Za-z]", "", x)
+            return bool(letters) and letters.isupper() and len(letters) >= 4
+
+        # Locate the strongest matching line across the first page(s).
+        best_page = start_page
+        best_line_index = 0
+        best_score = -1
+        for pno, raw in pages:
+            lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
+            for i, line in enumerate(lines):
+                low = line.lower()
+                score = sum(low.count(t) for t in terms)
+                if score > best_score:
+                    best_score = score
+                    best_page = pno
+                    best_line_index = i
+
+        # Re-read from the best page forward so we can identify the section.
+        relevant = []
+        started = False
+        found_heading = False
+        empty_after = 0
+
+        for pno in range(best_page, min(len(pdf), best_page + max_pages - 1) + 1):
+            raw = pdf[pno - 1].get_text("text")
+            lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
+
+            if pno == best_page:
+                # Find a heading at or before the matching line.
+                heading_idx = None
+                for i in range(min(best_line_index, len(lines) - 1), -1, -1):
+                    if is_heading(lines[i]):
+                        heading_idx = i
+                        break
+                start_idx = heading_idx if heading_idx is not None else max(0, best_line_index)
+                found_heading = heading_idx is not None
+            else:
+                start_idx = 0
+
+            if not started:
+                started = True
+
+            for i in range(start_idx, len(lines)):
+                line = lines[i]
+                if found_heading and i > start_idx and is_heading(line):
+                    # A new heading ends the requested section.
+                    return relevant
+                relevant.append((pno, line))
+
+            # If the section appears to continue without a new heading, include next page.
+            if found_heading:
+                empty_after += 1
+                if empty_after >= max_pages:
+                    break
+            else:
+                break
+
+        # If section extraction was too broad or empty, return the best page text.
+        if len(relevant) < 2:
+            raw = pdf[best_page - 1].get_text("text")
+            return [(best_page, re.sub(r"\s+", " ", raw).strip())]
+
+        # Group lines by page for clean display.
+        grouped = []
+        current_page = None
+        current_lines = []
+        for pno, line in relevant:
+            if current_page is None:
+                current_page = pno
+            if pno != current_page:
+                grouped.append((current_page, " ".join(current_lines)))
+                current_page = pno
+                current_lines = []
+            current_lines.append(line)
+        if current_page is not None and current_lines:
+            grouped.append((current_page, " ".join(current_lines)))
+
+        return grouped
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_document_by_id(document_id):
+    conn = db()
+    row = conn.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+    conn.close()
+    return row
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def pdf_data_uri(document_path):
+    try:
+        data = Path(document_path).read_bytes()
+        encoded = __import__("base64").b64encode(data).decode("ascii")
+        return "data:application/pdf;base64," + encoded
+    except Exception:
+        return None
+
 
 # ============================================================
 # HELPERS
@@ -344,6 +642,7 @@ def add_document(file_name, pdf_bytes, category="General"):
     return True, f"{file_name} indexed successfully."
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def get_documents():
     conn = db()
     rows = conn.execute(
@@ -357,6 +656,7 @@ def get_documents():
     return rows
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def get_categories():
     conn = db()
     rows = conn.execute(
@@ -520,6 +820,7 @@ def build_search_index():
         min_df=1,
         max_df=0.98,
         sublinear_tf=True,
+        dtype="float32",
     )
 
     matrix = vectorizer.fit_transform(texts)
@@ -527,6 +828,7 @@ def build_search_index():
     return vectorizer, matrix, [dict(r) for r in rows]
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def search_documents(query, category="All Categories", top_k=10):
     query = query.strip()
 
@@ -683,6 +985,7 @@ Answer the question using only the document context.
 # PDF VIEWER
 # ============================================================
 
+@st.cache_data(ttl=600, show_spinner=False)
 def render_pdf_page(document_path, page_number):
     try:
         pdf = fitz.open(document_path)
@@ -693,7 +996,7 @@ def render_pdf_page(document_path, page_number):
         page = pdf[page_number - 1]
 
         pix = page.get_pixmap(
-            matrix=fitz.Matrix(1.45, 1.45),
+            matrix=fitz.Matrix(1.25, 1.25),
             alpha=False,
         )
 
@@ -727,6 +1030,7 @@ if "admin_authenticated" not in st.session_state:
 # PDF HIGHLIGHTING
 # ============================================================
 
+@st.cache_data(ttl=600, show_spinner=False)
 def render_pdf_page_highlighted(document_path, page_number, query=""):
     """Render a PDF page and highlight matching terms in the query."""
     try:
@@ -759,7 +1063,7 @@ def render_pdf_page_highlighted(document_path, page_number, query=""):
                 continue
 
         pix = page.get_pixmap(
-            matrix=fitz.Matrix(1.45, 1.45),
+            matrix=fitz.Matrix(1.25, 1.25),
             alpha=False,
         )
 
@@ -790,11 +1094,228 @@ def admin_is_configured():
 
 
 # ============================================================
+# AUTH STATE
+# ============================================================
+
+if "access_authorized" not in st.session_state:
+    st.session_state.access_authorized = False
+
+if "page" not in st.session_state:
+    st.session_state.page = "Search"
+
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
+
+if "selected_document" not in st.session_state:
+    st.session_state.selected_document = None
+
+if "selected_page" not in st.session_state:
+    st.session_state.selected_page = 1
+
+if "show_full_pdf" not in st.session_state:
+    st.session_state.show_full_pdf = False
+
+if "force_result_id" not in st.session_state:
+    st.session_state.force_result_id = None
+
+if "search_results" not in st.session_state:
+    st.session_state.search_results = []
+
+if "search_signature" not in st.session_state:
+    st.session_state.search_signature = None
+
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+
+
+# ============================================================
+# ONE-TIME BROWSER ACCESS
+# ============================================================
+
+ACCESS_CODE = str(
+    st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
+).strip()
+
+
+TOKEN_SECRET = str(
+    st.secrets.get("TOKEN_SECRET", os.getenv("TOKEN_SECRET", ""))
+).strip()
+
+# TOKEN_SECRET should be configured in Streamlit Secrets.
+# This fallback is only for development.
+if not TOKEN_SECRET:
+    TOKEN_SECRET = hashlib.sha256(
+        f"{os.getcwd()}::{os.getenv('HOSTNAME', 'streamlit')}".encode()
+    ).hexdigest()
+
+
+def get_cookie_controller():
+    if CookieController is None:
+        return None
+    if "cookie_controller" not in st.session_state:
+        try:
+            st.session_state.cookie_controller = CookieController()
+        except Exception:
+            st.session_state.cookie_controller = None
+    return st.session_state.cookie_controller
+
+
+def get_token_serializer():
+    if URLSafeTimedSerializer is None:
+        return None
+    return URLSafeTimedSerializer(
+        TOKEN_SECRET,
+        salt="knowledge-base-browser-access",
+    )
+
+
+def create_browser_token():
+    serializer = get_token_serializer()
+    if serializer is None:
+        return ""
+    return serializer.dumps(
+        {
+            "authorized": True,
+            "issued_at": datetime.now().isoformat(timespec="seconds"),
+        }
+    )
+
+
+def validate_browser_token(token):
+    if not token:
+        return False
+
+    serializer = get_token_serializer()
+    if serializer is None:
+        return False
+
+    try:
+        payload = serializer.loads(token)
+        return bool(payload.get("authorized"))
+    except Exception:
+        return False
+
+
+def browser_is_authorized():
+    if st.session_state.access_authorized:
+        return True
+
+    controller = get_cookie_controller()
+
+    if controller is not None:
+        try:
+            token = controller.get("kb_access_token")
+            if validate_browser_token(token):
+                st.session_state.access_authorized = True
+                return True
+        except Exception:
+            pass
+
+    return False
+
+
+def authorize_browser():
+    token = create_browser_token()
+    st.session_state.access_authorized = True
+
+    controller = get_cookie_controller()
+
+    if controller is not None and token:
+        try:
+            controller.set(
+                "kb_access_token",
+                token,
+            )
+        except Exception:
+            pass
+
+
+def clear_browser_access():
+    st.session_state.access_authorized = False
+
+    controller = get_cookie_controller()
+
+    if controller is not None:
+        try:
+            controller.remove("kb_access_token")
+        except Exception:
+            pass
+
+
+def render_access_gate():
+    st.markdown(
+        """
+        <div class="auth-shell">
+            <div class="auth-brand-mark"></div>
+            <div class="auth-brand">Hewlett Packard Enterprise</div>
+            <div class="auth-title">Knowledge Base</div>
+            <div class="auth-subtitle">
+                Secure access to your organization's PDF knowledge base.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if not ACCESS_CODE:
+        st.error(
+            "Access control is not configured. Add ACCESS_CODE to Streamlit Secrets."
+        )
+        st.stop()
+
+    _, center, _ = st.columns([1, 2, 1])
+
+    with center:
+        st.markdown(
+            '<div class="auth-card-title">Enter Access Code</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "You only need to enter the code once on this browser."
+        )
+
+        with st.form("access_code_form"):
+            entered_code = st.text_input(
+                "Access Code",
+                type="password",
+                placeholder="Enter access code",
+            )
+
+            submitted = st.form_submit_button(
+                "Access Knowledge Base",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if submitted:
+            if entered_code.strip() == ACCESS_CODE:
+                authorize_browser()
+                st.success(
+                    f"Access granted. This browser will remain authorized "
+                    f"for up to {PERSISTENT_BROWSER_ACCESS} days."
+                )
+                st.rerun()
+            else:
+                st.error("Invalid access code.")
+
+        st.caption(
+            "The access code is not stored in your browser. "
+            "A signed authorization token is stored instead."
+        )
+
+
+if not browser_is_authorized():
+    render_access_gate()
+    st.stop()
+
+
 # HEADER
 # ============================================================
 
+user_name = "Authorized User"
+
 st.markdown(
-    """
+    f"""
     <div class="kb-topbar">
         <div class="brand-block">
             <div class="brand-mark"></div>
@@ -805,37 +1326,41 @@ st.markdown(
             <div class="app-title">Knowledge Base</div>
             <div class="app-subtitle">Find exact information from your organization's documents</div>
         </div>
-        <div class="top-tagline">
-            Your Knowledge.<br>Anytime. Anywhere.
-        </div>
-        <div class="top-actions">
-            <span class="bell">♧</span>
-        </div>
+        <div class="top-user">{user_name}</div>
+        <div class="top-actions">⚙</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# Gear button / admin menu in the upper-right.
-g1, g2 = st.columns([20, 1], gap="small")
-with g2:
-    with st.popover("⚙", use_container_width=True):
-        st.markdown("**Administration**")
-        st.caption("Document management is restricted to administrators.")
+# Gear/admin menu.
+with st.popover("⚙", use_container_width=False):
+    st.markdown("**Knowledge Base Access**")
+    st.caption(
+        "Browser authorization: Persistent until manually cleared"
+    )
+    st.divider()
 
+    if st.session_state.admin_authenticated:
+        if st.button("Manage Documents", use_container_width=True):
+            st.session_state.page = "Manage Documents"
+            st.rerun()
+
+        if st.button("Sign out admin", use_container_width=True):
+            st.session_state.admin_authenticated = False
+            st.session_state.page = "Search"
+            st.rerun()
+    else:
         if st.button("🔒 Manage Documents", use_container_width=True):
-            if st.session_state.admin_authenticated:
-                st.session_state.page = "Manage Documents"
-                st.rerun()
-            else:
-                st.session_state.page = "Admin Login"
-                st.rerun()
+            st.session_state.page = "Admin Login"
+            st.rerun()
 
-        if st.session_state.admin_authenticated:
-            if st.button("Sign out admin", use_container_width=True):
-                st.session_state.admin_authenticated = False
-                st.session_state.page = "Search"
-                st.rerun()
+    if st.button("Clear Browser Access", use_container_width=True):
+        clear_browser_access()
+        st.session_state.admin_authenticated = False
+        st.session_state.page = "Search"
+        st.rerun()
+
 
 # ============================================================
 # ADMIN LOGIN
@@ -847,29 +1372,18 @@ if st.session_state.page == "Admin Login":
         <div class="admin-card">
             <div class="admin-icon">⚙</div>
             <div class="admin-title">Admin Access</div>
-            <div class="admin-subtitle">Enter the administrator PIN to manage documents.</div>
+            <div class="admin-subtitle">Enter the administrator PIN to manage knowledge-base documents.</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     if not admin_is_configured():
-        st.error(
-            "Admin access is not configured. Set ADMIN_PIN in Streamlit Secrets "
-            "or as an environment variable before using Manage Documents."
-        )
-        if st.button("Back to Search", type="primary"):
-            st.session_state.page = "Search"
-            st.rerun()
+        st.error("Admin access is not configured. Set ADMIN_PIN in Streamlit Secrets or an environment variable.")
     else:
         with st.form("admin_login_form"):
-            pin = st.text_input(
-                "Admin PIN",
-                type="password",
-                placeholder="Enter admin PIN",
-            )
+            pin = st.text_input("Admin PIN", type="password", placeholder="Enter admin PIN")
             submitted = st.form_submit_button("Unlock", type="primary", use_container_width=True)
-
         if submitted:
             if pin == get_admin_pin():
                 st.session_state.admin_authenticated = True
@@ -878,9 +1392,10 @@ if st.session_state.page == "Admin Login":
             else:
                 st.error("Incorrect admin PIN.")
 
-        if st.button("Cancel", use_container_width=True):
-            st.session_state.page = "Search"
-            st.rerun()
+    if st.button("← Back to Search", use_container_width=True):
+        st.session_state.page = "Search"
+        st.rerun()
+
 
 # ============================================================
 # ADMIN: MANAGE DOCUMENTS
@@ -910,20 +1425,15 @@ elif st.session_state.page == "Manage Documents":
         st.markdown('<div class="panel-title">Upload Documents</div>', unsafe_allow_html=True)
         category = st.selectbox(
             "Category",
-            [
-                "General", "Policies", "Procedures", "Technical Support",
-                "Licensing", "Training", "Product", "Account Management", "Other",
-            ],
+            ["General", "Policies", "Procedures", "Technical Support", "Licensing", "Training", "Product", "Account Management", "Other"],
             key="admin_category",
         )
-
         uploaded_files = st.file_uploader(
             "Drag and drop PDF files here",
             type=["pdf"],
             accept_multiple_files=True,
             key="admin_uploader",
         )
-
         if uploaded_files:
             st.caption(f"{len(uploaded_files)} PDF file(s) selected")
             for f in uploaded_files:
@@ -936,40 +1446,30 @@ elif st.session_state.page == "Manage Documents":
                 progress = st.progress(0)
                 success_count = 0
                 for i, uploaded_file in enumerate(uploaded_files):
-                    ok, message = add_document(
-                        uploaded_file.name,
-                        uploaded_file.getvalue(),
-                        category,
-                    )
+                    ok, message = add_document(uploaded_file.name, uploaded_file.getvalue(), category)
                     if ok:
                         success_count += 1
                         st.success(message)
                     else:
                         st.warning(message)
                     progress.progress((i + 1) / len(uploaded_files))
-
                 build_search_index.clear()
+                search_documents.clear()
+                get_documents.clear()
+                get_categories.clear()
+                get_document_by_id.clear()
+                st.session_state.search_results = []
+                st.session_state.search_signature = None
                 st.success(f"Completed. {success_count} document(s) indexed.")
 
     with library_col:
         st.markdown('<div class="panel-title">Document Library</div>', unsafe_allow_html=True)
         docs = get_documents()
-
         lc1, lc2 = st.columns([1.5, 1])
         with lc1:
-            library_search = st.text_input(
-                "Search documents",
-                placeholder="Search documents...",
-                label_visibility="collapsed",
-                key="library_search",
-            )
+            library_search = st.text_input("Search documents", placeholder="Search documents...", label_visibility="collapsed", key="library_search")
         with lc2:
-            library_category = st.selectbox(
-                "Library category",
-                ["All Categories"] + get_categories(),
-                label_visibility="collapsed",
-                key="library_category",
-            )
+            library_category = st.selectbox("Library category", ["All Categories"] + get_categories(), label_visibility="collapsed", key="library_category")
 
         filtered_docs = []
         for doc in docs:
@@ -987,19 +1487,21 @@ elif st.session_state.page == "Manage Documents":
                     a, b = st.columns([4, 1])
                     with a:
                         st.markdown(f"**📄 {doc['filename']}**")
-                        st.caption(
-                            f"{doc['category']} · {doc['page_count']} pages · "
-                            f"{format_bytes(doc['file_size'])} · ✓ {doc['status']}"
-                        )
+                        st.caption(f"{doc['category']} · {doc['page_count']} pages · {format_bytes(doc['file_size'])} · ✓ {doc['status']}")
                     with b:
                         if st.button("Delete", key=f"admin_delete_{doc['id']}"):
                             delete_document(doc["id"])
                             build_search_index.clear()
+                            search_documents.clear()
+                            get_documents.clear()
+                            get_categories.clear()
+                            get_document_by_id.clear()
                             st.rerun()
 
     if st.button("← Back to Search"):
         st.session_state.page = "Search"
         st.rerun()
+
 
 # ============================================================
 # SEARCH KNOWLEDGE BASE
@@ -1008,9 +1510,7 @@ elif st.session_state.page == "Manage Documents":
 else:
     st.session_state.page = "Search"
 
-    # Search controls.
     search_col, button_col, filter_col = st.columns([6.4, 1.0, 1.0], gap="small")
-
     with search_col:
         query = st.text_input(
             "Search",
@@ -1019,170 +1519,147 @@ else:
             label_visibility="collapsed",
             key="main_search_box",
         )
-
     with button_col:
         search_clicked = st.button("Search", type="primary", use_container_width=True)
-
     with filter_col:
         with st.popover("☷ Filters", use_container_width=True):
-            category = st.selectbox(
-                "Category",
-                ["All Categories"] + get_categories(),
-                key="search_category",
-            )
-            top_k = st.selectbox(
-                "Results",
-                [5, 10, 20],
-                index=1,
-                key="search_top_k",
-            )
+            category = st.selectbox("Category", ["All Categories"] + get_categories(), key="search_category")
+            top_k = st.selectbox("Results", [5, 10, 20], index=1, key="search_top_k")
 
     if search_clicked:
         st.session_state.search_query = query
+        st.session_state.show_full_pdf = False
+        st.session_state.force_result_id = None
+        st.session_state.search_signature = None
 
     active_query = st.session_state.search_query.strip()
     category = st.session_state.get("search_category", "All Categories")
     top_k = st.session_state.get("search_top_k", 10)
 
     if active_query:
-        results = search_documents(
-            active_query,
-            category=category,
-            top_k=top_k,
-        )
+        search_signature = (active_query, category, top_k)
+        if st.session_state.get("search_signature") != search_signature:
+            st.session_state.search_results = search_documents(active_query, category=category, top_k=top_k)
+            st.session_state.search_signature = search_signature
+        results = st.session_state.get("search_results", [])
+
+        if st.session_state.force_result_id is not None:
+            forced_id = st.session_state.force_result_id
+            forced = [r for r in results if r["id"] == forced_id]
+            others = [r for r in results if r["id"] != forced_id]
+            if forced:
+                results = forced + others
+            st.session_state.force_result_id = None
 
         if not results:
-            st.warning(
-                "No exact source passage was found. Try different keywords or upload another document."
-            )
+            st.warning("No matching PDF was found. Try different keywords or upload another document.")
         else:
             best = results[0]
             best_score = min(99, max(1, round(best["score"] * 100)))
 
-            # ====================================================
-            # EXACT ANSWER — ALWAYS FIRST
-            # ====================================================
+            # Highest-match document card — no generated/exact-answer card.
             st.markdown(
                 f"""
-                <div class="exact-answer-card">
-                    <div class="exact-answer-head">
+                <div class="best-match-card">
+                    <div class="best-match-head">
                         <div>
-                            <span class="check-circle">✓</span>
-                            <span class="exact-answer-title">Exact Answer (from PDF)</span>
+                            <span class="pdf-badge">PDF</span>
+                            <span class="best-match-title">Highest Match</span>
                         </div>
                         <span class="match-pill">{best_score}% match</span>
                     </div>
-                    <div class="exact-answer-note">
-                        Verbatim text extracted from the uploaded document. No AI paraphrasing applied.
-                    </div>
-                    <div class="exact-answer-text">“{best['exact_passage']}”</div>
-                    <div class="answer-meta">
-                        <span>📄 <b>{best['filename']}</b></span>
-                        <span>Page {best['page_number']}</span>
-                        <span>Category {best['category']}</span>
-                    </div>
+                    <div class="best-match-file">{best['filename']}</div>
+                    <div class="best-match-meta">Page {best['page_number']} · {best['category']} · Matching content highlighted below</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            copy_col, spacer = st.columns([1, 5])
-            with copy_col:
-                st.download_button(
-                    "Copy Answer",
-                    data=best["exact_passage"],
-                    file_name="exact_answer.txt",
-                    mime="text/plain",
-                    use_container_width=True,
-                )
-
-            st.markdown('<div class="content-gap"></div>', unsafe_allow_html=True)
-
-            # ====================================================
-            # SOURCE PDF DIRECTLY BELOW EXACT ANSWER
-            # ====================================================
             source_col, related_col = st.columns([1.55, 0.9], gap="large")
 
             with source_col:
+                best_doc = get_document_by_id(best['document_id'])
+                total_pages = best_doc['page_count'] if best_doc else '?'
                 st.markdown(
                     f"""
                     <div class="source-header">
                         <div>
-                            <div class="source-title">▣ Source Document</div>
-                            <div class="source-meta">{best['filename']} · Page {best['page_number']} of document</div>
+                            <div class="source-title">▣ {best['filename']}</div>
+                            <div class="source-meta">Page {best['page_number']} of {total_pages} · Matching terms highlighted</div>
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-                image_bytes = render_pdf_page_highlighted(
-                    best["stored_path"],
-                    best["page_number"],
-                    active_query,
-                )
-
+                image_bytes = render_pdf_page_highlighted(best["stored_path"], best["page_number"], active_query)
                 if image_bytes:
                     st.image(image_bytes, use_container_width=True)
                 else:
                     st.error("Unable to render the source PDF page.")
 
-                st.caption(
-                    "The highlighted text above is the matching source passage. "
-                    "The wording is taken directly from the uploaded PDF."
-                )
+                # Full related section from the original PDF, not a summary.
+                section = get_relevant_section(best["stored_path"], best["page_number"], active_query)
+                st.markdown('<div class="panel-title">Relevant Section from PDF</div>', unsafe_allow_html=True)
+                st.caption("The text below is extracted from the original PDF and is not rewritten or summarized.")
 
-            # ====================================================
-            # RELATED RESULTS
-            # ====================================================
+                if section:
+                    for section_page, section_text in section:
+                        with st.container(border=True):
+                            st.markdown(f"**Page {section_page}**")
+                            st.markdown(f"<div class='section-excerpt'>{section_text}</div>", unsafe_allow_html=True)
+                else:
+                    st.info("A related section could not be extracted. Use View Source to inspect the full document.")
+
+                # Open the complete PDF in an embedded browser PDF viewer.
+                if st.button("View Source", type="primary", use_container_width=True, key="view_full_source"):
+                    st.session_state.show_full_pdf = True
+
+                if st.session_state.show_full_pdf:
+                    data_uri = pdf_data_uri(best["stored_path"])
+                    if data_uri:
+                        import streamlit.components.v1 as components
+                        components.html(
+                            f"""
+                            <div style='width:100%;height:850px;'>
+                              <iframe src='{data_uri}' style='width:100%;height:100%;border:1px solid #d9e3e8;border-radius:10px;'></iframe>
+                            </div>
+                            """,
+                            height=870,
+                            scrolling=False,
+                        )
+
             with related_col:
                 st.markdown('<div class="panel-title">Related Results</div>', unsafe_allow_html=True)
-
                 for i, result in enumerate(results[1:], start=2):
                     score = min(99, max(1, round(result["score"] * 100)))
-
                     with st.container(border=True):
                         st.markdown(
                             f"""
                             <div class="related-number">{i}</div>
                             <div class="related-title">{result['filename']}</div>
                             <div class="related-meta">Page {result['page_number']} · {result['category']} · {score}% match</div>
-                            <div class="related-text">“{result['exact_passage']}”</div>
+                            <div class="related-text">{result['snippet']}</div>
                             """,
                             unsafe_allow_html=True,
                         )
-
-                        if st.button(
-                            "Use this answer",
-                            key=f"related_{result['id']}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.selected_document = result["stored_path"]
-                            st.session_state.selected_page = result["page_number"]
+                        if st.button("Open Result", key=f"related_{result['id']}", use_container_width=True):
                             st.session_state.search_query = active_query
-                            st.session_state.selected_result_id = result["id"]
+                            st.session_state.show_full_pdf = False
+                            # Put selected result first for the next render by using a session override.
+                            st.session_state.force_result_id = result["id"]
                             st.rerun()
 
     else:
-        # ========================================================
-        # EMPTY STATE
-        # ========================================================
         docs = get_documents()
         total_pages = sum(int(d["page_count"] or 0) for d in docs)
-
         st.markdown(
             f"""
             <div class="welcome-card">
                 <div class="welcome-icon">⌕</div>
                 <div class="welcome-title">Search your knowledge base</div>
-                <div class="welcome-text">
-                    Ask a question or enter keywords. The system will return the exact wording
-                    from your uploaded PDFs and show the matching source page.
-                </div>
-                <div class="welcome-stats">
-                    <span><b>{len(docs)}</b> documents</span>
-                    <span><b>{total_pages:,}</b> indexed pages</span>
-                </div>
+                <div class="welcome-text">Search for a process, checklist, policy, troubleshooting step, or any information contained in your uploaded PDFs.</div>
+                <div class="welcome-stats"><span><b>{len(docs)}</b> documents</span><span><b>{total_pages:,}</b> indexed pages</span></div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1197,14 +1674,7 @@ nav_left, nav_center, nav_right = st.columns([1, 2, 1])
 with nav_center:
     if st.button("⌕  Search Knowledge Base", use_container_width=True):
         st.session_state.page = "Search"
+        st.session_state.show_full_pdf = False
         st.rerun()
 
-st.markdown(
-    """
-    <div class="bottom-nav-label">
-        Knowledge Base · Exact PDF Search
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
+st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search</div>', unsafe_allow_html=True)
