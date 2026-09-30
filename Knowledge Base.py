@@ -1187,8 +1187,8 @@ if "selected_document" not in st.session_state:
 if "selected_page" not in st.session_state:
     st.session_state.selected_page = 1
 
-if "force_result_id" not in st.session_state:
-    st.session_state.force_result_id = None
+if "selected_result_id" not in st.session_state:
+    st.session_state.selected_result_id = None
 
 if "search_results" not in st.session_state:
     st.session_state.search_results = []
@@ -1569,7 +1569,7 @@ else:
 
     if search_clicked:
         st.session_state.search_query = query
-        st.session_state.force_result_id = None
+        st.session_state.selected_result_id = None
         st.session_state.search_signature = None
 
     active_query = st.session_state.search_query.strip()
@@ -1585,24 +1585,32 @@ else:
 
         results = st.session_state.get("search_results", [])
 
-        if st.session_state.force_result_id is not None:
-            forced_id = st.session_state.force_result_id
-            forced = [r for r in results if r["id"] == forced_id]
-            others = [r for r in results if r["id"] != forced_id]
-            if forced:
-                results = forced + others
-                st.session_state.viewer_page = forced[0]["page_number"]
-            st.session_state.force_result_id = None
+        if not results:
+            st.session_state.selected_result_id = None
 
         if not results:
             st.warning("No matching PDF was found. Try different keywords or upload another document.")
         else:
             best = results[0]
-            best_doc = get_document_by_id(best["document_id"])
-            total_pages = int(best_doc["page_count"] or 0) if best_doc else 0
+
+            # The selected result controls the PDF shown in the viewer.
+            # The search ranking itself stays unchanged; selecting a result only
+            # changes which PDF/page is displayed on the right.
+            selected_result_id = st.session_state.get("selected_result_id")
+            selected_matches = [r for r in results if r["id"] == selected_result_id]
+            selected_result = selected_matches[0] if selected_matches else best
+
+            # If the selected result disappeared because filters/search changed,
+            # automatically fall back to the highest match.
+            if selected_result_id != selected_result["id"]:
+                st.session_state.selected_result_id = selected_result["id"]
+                st.session_state.viewer_page = int(selected_result["page_number"])
+
+            selected_doc = get_document_by_id(selected_result["document_id"])
+            total_pages = int(selected_doc["page_count"] or 0) if selected_doc else 0
 
             if st.session_state.get("viewer_page") is None:
-                st.session_state.viewer_page = int(best["page_number"])
+                st.session_state.viewer_page = int(selected_result["page_number"])
 
             viewer_page = max(1, min(int(st.session_state.viewer_page), max(total_pages, 1)))
 
@@ -1632,15 +1640,15 @@ else:
                             unsafe_allow_html=True,
                         )
                         if st.button("Open Result", key=f"open_result_{result['id']}", use_container_width=True):
-                            st.session_state.force_result_id = result["id"]
-                            st.session_state.viewer_page = result["page_number"]
+                            st.session_state.selected_result_id = result["id"]
+                            st.session_state.viewer_page = int(result["page_number"])
                             st.rerun()
 
-                matches = find_document_matches(best["stored_path"], active_query, limit=8)
+                matches = find_document_matches(selected_result["stored_path"], active_query, limit=8)
                 st.markdown('<div class="match-panel"><div class="match-panel-title">Matches in this PDF</div></div>', unsafe_allow_html=True)
                 if matches:
                     for match in matches:
-                        if st.button(f"Page {match['page']}", key=f"jump_match_{best['id']}_{match['page']}", use_container_width=True):
+                        if st.button(f"Page {match['page']}", key=f"jump_match_{selected_result['id']}_{match['page']}", use_container_width=True):
                             st.session_state.viewer_page = match["page"]
                             st.rerun()
                         st.markdown(
@@ -1655,9 +1663,9 @@ else:
                 st.markdown(
                     f"""
                     <div class='reader-toolbar'>
-                        <div class='reader-title'>▣ {best['filename']}</div>
+                        <div class='reader-title'>▣ {selected_result['filename']}</div>
                         <div class='reader-meta'>Page {viewer_page} of {total_pages} · Search: “{active_query}”</div>
-                        <div class='reader-match'>Highest match · source text shown exactly as it appears in the PDF</div>
+                        <div class='reader-match'>Selected result · source text shown exactly as it appears in the PDF</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -1677,7 +1685,7 @@ else:
                 with nav4:
                     zoom = st.selectbox("Zoom", [125, 150, 175, 200], index=1, format_func=lambda x: f"{x}%", label_visibility="collapsed", key="pdf_zoom")
 
-                image = render_pdf_page_highlighted(best["stored_path"], viewer_page, active_query, scale=zoom / 100 * 1.25)
+                image = render_pdf_page_highlighted(selected_result["stored_path"], viewer_page, active_query, scale=zoom / 100 * 1.25)
                 if image:
                     # Do not force the image to the column width: that makes every zoom
                     # level look identical.  A fixed display width lets the selected zoom
@@ -1689,7 +1697,7 @@ else:
 
                 current_text = ""
                 try:
-                    with fitz.open(best["stored_path"]) as pdf:
+                    with fitz.open(selected_result["stored_path"]) as pdf:
                         current_text = clean_text(pdf[viewer_page - 1].get_text("text"))
                 except Exception:
                     current_text = ""
