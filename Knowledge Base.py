@@ -1066,6 +1066,9 @@ def admin_is_configured():
 if "access_authorized" not in st.session_state:
     st.session_state.access_authorized = False
 
+if "cookie_restore_checked" not in st.session_state:
+    st.session_state.cookie_restore_checked = False
+
 if "page" not in st.session_state:
     st.session_state.page = "Search"
 
@@ -1167,9 +1170,8 @@ def browser_is_authorized():
     if st.session_state.access_authorized:
         return True
 
-    # First read cookies from the browser request itself. This is reliable
-    # after F5/refresh because Streamlit receives these cookies on the
-    # initial WebSocket handshake.
+    # Fast path: Streamlit can expose cookies received with the initial
+    # browser request.
     try:
         token = st.context.cookies.get("kb_access_token")
         if validate_browser_token(token):
@@ -1178,9 +1180,28 @@ def browser_is_authorized():
     except Exception:
         pass
 
-    # Fallback for the cookie-controller component during normal reruns.
+    # The cookie-controller component is client-side. On a brand-new
+    # Streamlit session (including F5), give the component time to hydrate
+    # before deciding that the cookie is missing. The component's documented
+    # reload pattern uses getAll() followed by a short wait.
     controller = get_cookie_controller()
     if controller is not None:
+        try:
+            if not st.session_state.get("cookie_restore_checked", False):
+                controller.getAll()
+                time.sleep(1.0)
+                st.session_state.cookie_restore_checked = True
+
+            cookies = controller.getAll()
+            token = cookies.get("kb_access_token") if isinstance(cookies, dict) else None
+            if validate_browser_token(token):
+                st.session_state.access_authorized = True
+                return True
+        except Exception:
+            pass
+
+        # Final component read in case getAll() returned before the browser
+        # finished hydrating the component.
         try:
             token = controller.get("kb_access_token")
             if validate_browser_token(token):
@@ -1220,6 +1241,7 @@ def authorize_browser():
         # actually committed.
         time.sleep(0.8)
         st.session_state.access_authorized = True
+        st.session_state.cookie_restore_checked = True
         return True
     except Exception:
         return False
@@ -1286,15 +1308,17 @@ def render_access_gate():
         if submitted:
             if entered_code.strip() == ACCESS_CODE:
                 if authorize_browser():
-                    # Authorization is automatic after successful submission.
-                    # The short delay gives the browser time to commit the
-                    # persistent cookie before the app reruns into the KB.
-                    time.sleep(0.25)
+                    st.success(
+                        "Access granted. This browser will remain authorized until you manually clear browser access."
+                    )
+                    # Give the browser one additional moment to receive the
+                    # component update before the next Streamlit run.
+                    time.sleep(0.2)
                     st.rerun()
                 else:
                     st.error(
                         "The browser authorization cookie could not be saved. "
-                        "Please try submitting the access code again."
+                        "Please refresh the page and try again."
                     )
             else:
                 st.error("Invalid access code.")
