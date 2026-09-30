@@ -1,6 +1,6 @@
-streamlit
-PyMuPDF
-scikit-learn
-openai
-itsdangerous
-streamlit-cookies-controller
+streamlit>=1.40
+PyMuPDF>=1.24
+scikit-learn>=1.5
+openai>=1.40
+itsdangerous>=2.2
+streamlit-cookies-controller==0.0.4
