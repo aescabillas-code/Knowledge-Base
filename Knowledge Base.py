@@ -131,24 +131,33 @@ button[kind="header"],
 .title-block { flex: 1; }
 .top-tagline { text-align: right; color: #18394e; font-size: 12px; line-height: 1.3; margin-right: 12px; }
 .top-actions { width: 36px; }
-/* The admin gear is rendered by Streamlit immediately after the header.
-   Position it beside Authorized User so there is only one gear control. */
-div[data-testid="stPopover"] {
-    position: absolute !important;
-    top: 18px !important;
-    right: 8px !important;
+/* Admin gear placement.  Only the dedicated gear wrapper is positioned.
+   The Filters popover must remain in the search controls row. */
+.st-key-gear_wrap {
+    position: relative !important;
+    height: 0 !important;
+    margin-top: -58px !important;
+    margin-bottom: 58px !important;
     z-index: 1000 !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    padding-right: 18px !important;
+    pointer-events: none !important;
 }
-div[data-testid="stPopover"] > button {
+.st-key-gear_wrap div[data-testid="stPopover"] {
+    pointer-events: auto !important;
+}
+.st-key-gear_wrap div[data-testid="stPopover"] > button {
     border: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
     color: #173d53 !important;
     padding: 2px 4px !important;
     min-height: 28px !important;
+    min-width: 28px !important;
     font-size: 15px !important;
 }
-div[data-testid="stPopover"] > button:hover {
+.st-key-gear_wrap div[data-testid="stPopover"] > button:hover {
     background: rgba(0,169,130,.08) !important;
     color: #087c63 !important;
 }
@@ -183,10 +192,8 @@ div[data-testid="stPopover"] > button:hover {
 .source-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
 
 .panel-title { font-size: 19px; font-weight: 700; color: var(--text); margin: 5px 0 12px; }
-.related-title { color: #0561a0; font-weight: 700; font-size: 14px; padding-left: 30px; }
+.related-title { color: #0561a0; font-weight: 700; font-size: 14px; }
 .related-number { float: left; width: 23px; height: 23px; background: #dfe9ed; border-radius: 4px; text-align: center; line-height: 23px; font-weight: 700; color: #294a5c; }
-.related-meta { color: var(--muted); font-size: 11px; margin: 4px 0 7px 30px; }
-.related-text { color: #354b59; font-size: 12px; line-height: 1.45; margin-left: 30px; }
 
 .welcome-card {
     margin: 42px auto; max-width: 720px; text-align: center; background: white;
@@ -225,7 +232,7 @@ div[data-testid="stPopover"] > button:hover {
 .best-match-title { color:#07866b; font-size:18px; font-weight:700; }
 .best-match-file { color:#102d42; font-size:20px; font-weight:700; margin-top:8px; }
 .best-match-meta { color:#687b87; font-size:12px; margin-top:4px; }
-.section-excerpt { background:#fff; border-left:4px solid #00a982; padding:14px 16px; color:#263d4a; font-size:14px; line-height:1.65; white-space:pre-wrap; }
+.source-page-label { font-size:12px; font-weight:700; color:#315468; margin:14px 0 6px; padding:6px 10px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
 
 /* Streamlit controls */
 button[kind="primary"] { background: var(--teal) !important; border-color: var(--teal) !important; }
@@ -504,16 +511,6 @@ def get_document_by_id(document_id):
     conn.close()
     # Return plain Python data so Streamlit's cache can serialize the result.
     return dict(row) if row is not None else None
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def pdf_data_uri(document_path):
-    try:
-        data = Path(document_path).read_bytes()
-        encoded = __import__("base64").b64encode(data).decode("ascii")
-        return "data:application/pdf;base64," + encoded
-    except Exception:
-        return None
 
 
 # ============================================================
@@ -1004,6 +1001,22 @@ def render_pdf_page(document_path, page_number):
         return None
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def render_full_pdf_pages(document_path):
+    """Render every page of the original PDF as an image for reliable in-app viewing."""
+    pages = []
+    try:
+        with fitz.open(document_path) as pdf:
+            total = len(pdf)
+            for page_number in range(1, total + 1):
+                page = pdf[page_number - 1]
+                pix = page.get_pixmap(matrix=fitz.Matrix(1.15, 1.15), alpha=False)
+                pages.append((page_number, total, pix.tobytes("png")))
+    except Exception:
+        return []
+    return pages
+
+
 # ============================================================
 # UI STATE
 # ============================================================
@@ -1057,7 +1070,7 @@ def render_pdf_page_highlighted(document_path, page_number, query=""):
 
 def clear_knowledge_caches():
     """Invalidate cached database/search/PDF-derived data after document changes."""
-    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, pdf_data_uri, render_pdf_page, render_pdf_page_highlighted):
+    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, render_pdf_page, render_full_pdf_pages, render_pdf_page_highlighted):
         try:
             fn.clear()
         except Exception:
@@ -1300,32 +1313,34 @@ st.markdown(
 )
 
 # Gear/admin menu.
-with st.popover("⚙", use_container_width=False):
-    st.markdown("**Knowledge Base Access**")
-    st.caption(
-        "Browser authorization: Persistent until manually cleared"
-    )
-    st.divider()
+# Keep the gear in a dedicated keyed wrapper so the Filters popover is never repositioned.
+with st.container(key="gear_wrap"):
+    with st.popover("⚙", use_container_width=False):
+        st.markdown("**Knowledge Base Access**")
+        st.caption(
+            "Browser authorization: Persistent until manually cleared"
+        )
+        st.divider()
 
-    if st.session_state.admin_authenticated:
-        if st.button("Manage Documents", use_container_width=True):
-            st.session_state.page = "Manage Documents"
-            st.rerun()
+        if st.session_state.admin_authenticated:
+            if st.button("Manage Documents", use_container_width=True):
+                st.session_state.page = "Manage Documents"
+                st.rerun()
 
-        if st.button("Sign out admin", use_container_width=True):
+            if st.button("Sign out admin", use_container_width=True):
+                st.session_state.admin_authenticated = False
+                st.session_state.page = "Search"
+                st.rerun()
+        else:
+            if st.button("🔒 Manage Documents", use_container_width=True):
+                st.session_state.page = "Admin Login"
+                st.rerun()
+
+        if st.button("Clear Browser Access", use_container_width=True):
+            clear_browser_access()
             st.session_state.admin_authenticated = False
             st.session_state.page = "Search"
             st.rerun()
-    else:
-        if st.button("🔒 Manage Documents", use_container_width=True):
-            st.session_state.page = "Admin Login"
-            st.rerun()
-
-    if st.button("Clear Browser Access", use_container_width=True):
-        clear_browser_access()
-        st.session_state.admin_authenticated = False
-        st.session_state.page = "Search"
-        st.rerun()
 
 
 # ============================================================
@@ -1556,49 +1571,32 @@ else:
                 else:
                     st.error("Unable to render the source PDF page.")
 
-                # Full related section from the original PDF, not a summary.
-                section = get_relevant_section(best["stored_path"], best["page_number"], active_query)
-                st.markdown('<div class="panel-title">Relevant Section from PDF</div>', unsafe_allow_html=True)
-                st.caption("The text below is extracted from the original PDF and is not rewritten or summarized.")
-
-                if section:
-                    for section_page, section_text in section:
-                        with st.container(border=True):
-                            st.markdown(f"**Page {section_page}**")
-                            st.markdown(f"<div class='section-excerpt'>{section_text}</div>", unsafe_allow_html=True)
-                else:
-                    st.info("A related section could not be extracted. Use View Source to inspect the full document.")
-
-                # Open the complete PDF in an embedded browser PDF viewer.
+                # View the complete original PDF inside Streamlit.
+                # We render each original page directly instead of using a data: PDF iframe,
+                # which Chrome can block with "This page has been blocked by Chrome".
                 if st.button("View Source", type="primary", use_container_width=True, key="view_full_source"):
                     st.session_state.show_full_pdf = True
 
                 if st.session_state.show_full_pdf:
-                    data_uri = pdf_data_uri(best["stored_path"])
-                    if data_uri:
-                        import streamlit.components.v1 as components
-                        components.html(
-                            f"""
-                            <div style='width:100%;height:850px;'>
-                              <iframe src='{data_uri}' style='width:100%;height:100%;border:1px solid #d9e3e8;border-radius:10px;'></iframe>
-                            </div>
-                            """,
-                            height=870,
-                            scrolling=False,
-                        )
+                    st.markdown('<div class="panel-title">Original PDF</div>', unsafe_allow_html=True)
+                    st.caption("Complete original document — all pages shown below.")
 
+                    full_pages = render_full_pdf_pages(best["stored_path"])
+                    if full_pages:
+                        for source_page_number, source_total_pages, source_image in full_pages:
+                            st.markdown(
+                                f"<div class='source-page-label'>Page {source_page_number} of {source_total_pages}</div>",
+                                unsafe_allow_html=True,
+                            )
+                            st.image(source_image, use_container_width=True)
+                    else:
+                        st.error("Unable to render the original PDF.")
             with related_col:
                 st.markdown('<div class="panel-title">Related Results</div>', unsafe_allow_html=True)
                 for i, result in enumerate(results[1:], start=2):
-                    score = min(99, max(1, round(result["score"] * 100)))
                     with st.container(border=True):
                         st.markdown(
-                            f"""
-                            <div class="related-number">{i}</div>
-                            <div class="related-title">{result['filename']}</div>
-                            <div class="related-meta">Page {result['page_number']} · {result['category']} · {score}% match</div>
-                            <div class="related-text">{result['snippet']}</div>
-                            """,
+                            f"<div class='related-title'>{result['filename']}</div>",
                             unsafe_allow_html=True,
                         )
                         if st.button("Open Result", key=f"related_{result['id']}", use_container_width=True):
