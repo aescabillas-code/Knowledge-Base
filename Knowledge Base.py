@@ -335,6 +335,46 @@ button[kind="header"],
     border-radius:5px; padding:5px 8px; font-size:10px; font-weight:700;
     display:inline-block; margin-top:5px;
 }
+.ai-answer-card {
+    background: linear-gradient(110deg, #f1fcf8, #ffffff 72%);
+    border: 1px solid #9bdcc8;
+    border-radius: 10px;
+    padding: 14px 17px;
+    margin: 8px 0 12px;
+    box-shadow: 0 3px 12px rgba(12,54,70,.04);
+}
+.ai-answer-head {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+}
+.ai-answer-title {
+    color:#087c63;
+    font-size:16px;
+    font-weight:700;
+}
+.ai-answer-badge {
+    background:#d9f5ea;
+    color:#087b64;
+    font-size:10px;
+    font-weight:700;
+    border-radius:12px;
+    padding:4px 8px;
+    white-space:nowrap;
+}
+.ai-answer-body {
+    margin-top:8px;
+    color:#172f42;
+    font-size:14px;
+    line-height:1.55;
+}
+.ai-source-note {
+    margin-top:8px;
+    color:#687b87;
+    font-size:10px;
+}
+
 .match-panel {
     background:#ffffff; border:1px solid var(--border); border-radius:8px;
     padding:10px; margin-top:10px;
@@ -998,115 +1038,113 @@ def search_documents(query, category="All Categories", top_k=10):
 # ============================================================
 
 def get_openai_client():
-    api_key = os.getenv("OPENAI_API_KEY")
-
+    """Create the OpenAI client from Streamlit Secrets or environment."""
+    api_key = ""
+    try:
+        api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+    except Exception:
+        pass
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key or OpenAI is None:
         return None
-
     try:
         return OpenAI(api_key=api_key)
     except Exception:
         return None
 
 
-def extractive_answer(question, results):
-    if not results:
-        return (
-            "I could not find relevant information in the uploaded knowledge base."
-        )
-
-    selected = results[:5]
-
-    answer_parts = []
-
-    for item in selected:
-        text = item["text"].strip()
-
-        # Keep answer reasonably concise.
-        if len(text) > 700:
-            text = text[:700].rsplit(" ", 1)[0] + "..."
-
-        answer_parts.append(text)
-
-    return "\n\n".join(answer_parts)
+def get_openai_model():
+    """Model can be changed in Secrets without editing the application."""
+    try:
+        model = str(st.secrets.get("OPENAI_MODEL", "")).strip()
+    except Exception:
+        model = ""
+    return model or os.getenv("OPENAI_MODEL", "gpt-5.6-luna").strip()
 
 
 def ai_answer(question, results):
+    """Answer strictly from locally retrieved chunks from uploaded PDFs."""
     if not results:
-        return (
-            "I could not find relevant information in the uploaded documents.",
-            [],
-        )
+        return "I couldn't find that information in the Knowledge Base.", []
 
     client = get_openai_client()
-
     if client is None:
-        return extractive_answer(question, results), results[:5]
+        return (
+            "AI answering is not configured. Add OPENAI_API_KEY to Streamlit "
+            "Secrets. The PDF search results are still available below.",
+            results[:6],
+        )
 
     context_blocks = []
-
-    for i, item in enumerate(results[:8], start=1):
+    for i, item in enumerate(results[:6], start=1):
+        source_text = re.sub(r"\s+", " ", item["text"]).strip()
+        if len(source_text) > 5000:
+            source_text = source_text[:5000].rsplit(" ", 1)[0] + "..."
         context_blocks.append(
-            f"""
-SOURCE {i}
+            f"""SOURCE [{i}]
 Document: {item['filename']}
 Page: {item['page_number']}
 Category: {item['category']}
 
 CONTENT:
-{item['text']}
+{source_text}
 """
         )
 
-    context = "\n".join(context_blocks)
+    context = "\n\n".join(context_blocks)
 
-    system_prompt = """
-You are a company knowledge-base assistant.
+    instructions = """
+You are the AI assistant for a corporate PDF Knowledge Base.
 
-Answer the user's question using ONLY the provided document context.
-Do not invent policies, procedures, facts, dates, or instructions.
-If the documents do not contain enough information, explicitly say that
-the knowledge base does not provide enough information.
+Answer the user's question using ONLY the retrieved content supplied in the
+prompt. The retrieved content comes from PDFs uploaded to this Streamlit
+application.
 
-Keep answers concise and practical.
-When appropriate, use numbered steps or bullet points.
-
-Do not cite a source that was not provided in the context.
+Rules:
+- Do not use outside knowledge.
+- Do not browse the web.
+- Do not invent policies, procedures, dates, requirements, product behavior,
+  or instructions.
+- Do not infer an answer when the retrieved PDF content does not support it.
+- If the supplied PDF content does not contain enough information, say:
+  "I couldn't find enough information in the Knowledge Base."
+- Keep the answer concise and practical.
+- Preserve important terminology from the source documents.
+- If the source describes a procedure, use numbered steps.
+- When making a factual statement, append the supporting source number in
+  brackets, for example [1] or [2].
 """
 
-    user_prompt = f"""
-QUESTION:
+    user_input = f"""USER QUESTION:
 {question}
 
-DOCUMENT CONTEXT:
+RETRIEVED PDF CONTENT:
 {context}
 
-Answer the question using only the document context.
+Answer only from the retrieved PDF content.
 """
 
     try:
-        response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+        response = client.responses.create(
+            model=get_openai_model(),
+            instructions=instructions,
+            input=user_input,
             temperature=0.1,
+            max_output_tokens=900,
+        )
+        answer = (response.output_text or "").strip()
+        if not answer:
+            answer = "I couldn't generate an answer from the Knowledge Base."
+        return answer, results[:6]
+    except Exception:
+        return (
+            "The AI model is temporarily unavailable. "
+            "The retrieved PDF results are still available below.",
+            results[:6],
         )
 
-        answer = response.choices[0].message.content.strip()
-        return answer, results[:8]
 
-    except Exception as e:
-        # Graceful fallback if AI service is unavailable.
-        return (
-            "AI answering is temporarily unavailable. "
-            "Here are the most relevant passages from the knowledge base:\n\n"
-            + extractive_answer(question, results)
-        ), results[:5]
-
-
-# ============================================================
 # PDF VIEWER
 # ============================================================
 
@@ -1261,6 +1299,12 @@ if "search_results" not in st.session_state:
 
 if "search_signature" not in st.session_state:
     st.session_state.search_signature = None
+
+if "ai_answer" not in st.session_state:
+    st.session_state.ai_answer = ""
+
+if "ai_answer_signature" not in st.session_state:
+    st.session_state.ai_answer_signature = None
 
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
@@ -1568,6 +1612,8 @@ elif st.session_state.page == "Manage Documents":
                 clear_knowledge_caches()
                 st.session_state.search_results = []
                 st.session_state.search_signature = None
+                st.session_state.ai_answer = ""
+                st.session_state.ai_answer_signature = None
                 st.success(f"Completed. {success_count} document(s) indexed.")
 
     with library_col:
@@ -1600,6 +1646,10 @@ elif st.session_state.page == "Manage Documents":
                         if st.button("Delete", key=f"admin_delete_{doc['id']}"):
                             delete_document(doc["id"])
                             clear_knowledge_caches()
+                            st.session_state.search_results = []
+                            st.session_state.search_signature = None
+                            st.session_state.ai_answer = ""
+                            st.session_state.ai_answer_signature = None
                             st.rerun()
 
     if st.button("← Back to Search"):
@@ -1634,6 +1684,8 @@ else:
         st.session_state.search_query = query
         st.session_state.force_result_id = None
         st.session_state.search_signature = None
+        st.session_state.ai_answer = ""
+        st.session_state.ai_answer_signature = None
 
     active_query = st.session_state.search_query.strip()
     category = st.session_state.get("search_category", "All Categories")
@@ -1660,6 +1712,35 @@ else:
         if not results:
             st.warning("No matching PDF was found. Try different keywords or upload another document.")
         else:
+            ai_signature = (
+                active_query,
+                category,
+                top_k,
+                tuple((r["id"], r["page_number"], round(r["score"], 6)) for r in results[:6]),
+            )
+            if st.session_state.get("ai_answer_signature") != ai_signature:
+                with st.spinner("AI is reviewing the most relevant PDF content..."):
+                    ai_text, _ = ai_answer(active_query, results)
+                st.session_state.ai_answer = ai_text
+                st.session_state.ai_answer_signature = ai_signature
+
+            st.markdown(
+                f"""
+                <div class="ai-answer-card">
+                    <div class="ai-answer-head">
+                        <div class="ai-answer-title">AI Answer</div>
+                        <div class="ai-answer-badge">PDF SOURCES ONLY</div>
+                    </div>
+                    <div class="ai-answer-body">{st.session_state.ai_answer}</div>
+                    <div class="ai-source-note">
+                        Generated from the highest-ranked uploaded PDF matches.
+                        Verify the source using the PDF viewer and page references below.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
             best = results[0]
             best_doc = get_document_by_id(best["document_id"])
             total_pages = int(best_doc["page_count"] or 0) if best_doc else 0
