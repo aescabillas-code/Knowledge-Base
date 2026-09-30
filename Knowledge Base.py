@@ -462,6 +462,15 @@ button[kind="header"],
 }
 .source-page-label { font-size:11px; font-weight:700; color:#315468; margin:8px 0 5px; padding:5px 8px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
 
+/* Interactive knowledge tiles */
+.explorer-title { font-size:15px; font-weight:800; color:#123b50; margin:14px 0 8px; }
+.explorer-subtitle { font-size:10px; color:#687b87; margin-bottom:8px; }
+.tile-grid { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+.knowledge-tile { background:#fff; border:1px solid #d9e3e8; border-radius:10px; padding:9px 12px; box-shadow:0 1px 2px rgba(11,37,56,.04); }
+.knowledge-tile:hover { border-color:#00a982; box-shadow:0 2px 8px rgba(0,169,130,.10); }
+.tile-name { font-size:11px; font-weight:700; color:#123b50; }
+.tile-count { font-size:9px; color:#687b87; margin-top:2px; }
+
 /* Streamlit controls */
 button[kind="primary"] { background: var(--teal) !important; border-color: var(--teal) !important; }
 button[kind="primary"]:hover { background: var(--teal-dark) !important; }
@@ -887,6 +896,73 @@ def get_documents():
 
 
 @st.cache_data(ttl=60, show_spinner=False)
+def get_knowledge_tiles():
+    """Build interactive Category / Device / Topic facets from the locally indexed PDFs.
+
+    Categories come directly from the document records. Devices and topics are
+    detected from indexed filenames/text using a deterministic vocabulary; no AI
+    service is required. Only terms actually present in the library are returned.
+    """
+    conn = db()
+    docs = conn.execute("SELECT id, filename, category FROM documents ORDER BY filename").fetchall()
+    chunks = conn.execute("SELECT document_id, text FROM chunks ORDER BY document_id, id").fetchall()
+    conn.close()
+
+    text_by_doc = {}
+    for row in chunks:
+        text_by_doc.setdefault(row["document_id"], []).append(row["text"] or "")
+
+    # Practical HPE / enterprise support vocabulary. A tile is only shown when
+    # the term actually occurs in a filename or indexed PDF text.
+    device_terms = [
+        "Aruba", "ClearPass", "ProLiant", "Alletra", "Nimble", "Primera",
+        "3PAR", "MSA", "StoreEasy", "StoreOnce", "Synergy", "Apollo",
+        "Superdome", "OneView", "iLO", "InfoSight", "HPE SimpliVity",
+        "HPE GreenLake", "HPE Ezmeral", "HPE Networking", "HPE Switch",
+        "HPE Router", "HPE Server", "HPE Storage", "HPE SAN", "HPE DL",
+        "HPE ML", "HPE BL", "VMware", "FortiGate", "Cisco", "Switch",
+        "Router", "Firewall", "Server", "Storage", "Printer", "Laptop",
+        "Desktop", "Monitor", "Docking Station", "Access Point", "AP",
+    ]
+
+    topic_terms = [
+        "Licensing", "Contracts", "Warranty", "Support", "Installation",
+        "Configuration", "Troubleshooting", "Connectivity", "Networking",
+        "Security", "Authentication", "Access", "Account", "Portal",
+        "Firmware", "Software", "Hardware", "Drivers", "Updates",
+        "Upgrade", "Migration", "Backup", "Recovery", "Storage",
+        "Performance", "Incident", "Case", "Escalation", "Subscription",
+        "Renewal", "Entitlement", "Serial Number", "Product Number",
+        "Order", "Shipping", "Replacement", "RMA", "API", "SLA",
+        "ClearPass", "Aruba", "OneView", "iLO", "VMware",
+    ]
+
+    def count_terms(terms):
+        counts = {}
+        for term in terms:
+            needle = term.lower()
+            count = 0
+            for doc in docs:
+                corpus = (doc["filename"] or "") + " " + " ".join(text_by_doc.get(doc["id"], []))
+                if re.search(r"(?<![A-Za-z0-9])" + re.escape(needle) + r"(?![A-Za-z0-9])", corpus, re.I):
+                    count += 1
+            if count:
+                counts[term] = count
+        return sorted(counts.items(), key=lambda x: (-x[1], x[0].lower()))
+
+    category_counts = {}
+    for doc in docs:
+        category = (doc["category"] or "General").strip() or "General"
+        category_counts[category] = category_counts.get(category, 0) + 1
+
+    return {
+        "Category": sorted(category_counts.items(), key=lambda x: x[0].lower()),
+        "Device": count_terms(device_terms),
+        "Topic": count_terms(topic_terms),
+    }
+
+
+@st.cache_data(ttl=60, show_spinner=False)
 def get_categories():
     conn = db()
     rows = conn.execute(
@@ -1063,6 +1139,31 @@ def build_search_index():
 def search_documents(query, category="All Categories", top_k=10):
     query = query.strip()
 
+    # Category tiles can browse a category without requiring a keyword.
+    if not query and category != "All Categories":
+        conn = db()
+        docs = conn.execute(
+            "SELECT * FROM documents WHERE category = ? ORDER BY uploaded_at DESC LIMIT ?",
+            (category, top_k),
+        ).fetchall()
+        results = []
+        for doc in docs:
+            chunk = conn.execute(
+                "SELECT * FROM chunks WHERE document_id = ? ORDER BY page_number, chunk_index LIMIT 1",
+                (doc["id"],),
+            ).fetchone()
+            if chunk:
+                results.append({
+                    "id": chunk["id"], "document_id": doc["id"],
+                    "page_number": chunk["page_number"], "chunk_index": chunk["chunk_index"],
+                    "text": chunk["text"], "filename": doc["filename"],
+                    "category": doc["category"], "stored_path": doc["stored_path"],
+                    "score": 0.0, "snippet": make_snippet(chunk["text"], ""),
+                    "exact_passage": "",
+                })
+        conn.close()
+        return results
+
     if not query:
         return []
 
@@ -1171,6 +1272,12 @@ if "selected_page" not in st.session_state:
 
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
+
+if "knowledge_tile_type" not in st.session_state:
+    st.session_state.knowledge_tile_type = "Category"
+
+if "knowledge_tile_value" not in st.session_state:
+    st.session_state.knowledge_tile_value = None
 
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
@@ -1623,6 +1730,53 @@ elif st.session_state.page == "Manage Documents":
 else:
     st.session_state.page = "Search"
 
+    # ========================================================
+    # INTERACTIVE KNOWLEDGE TILES
+    # ========================================================
+    tile_data = get_knowledge_tiles()
+    st.markdown('<div class="explorer-title">Explore the Knowledge Base</div>', unsafe_allow_html=True)
+    st.markdown('<div class="explorer-subtitle">Click a category, device, or topic to instantly search the indexed PDFs.</div>', unsafe_allow_html=True)
+
+    tile_type = st.session_state.get("knowledge_tile_type", "Category")
+    type_cols = st.columns(3)
+    for idx, label in enumerate(["Category", "Device", "Topic"]):
+        with type_cols[idx]:
+            if st.button(
+                f"{label}  ·  {len(tile_data.get(label, []))}",
+                key=f"tile_type_{label}",
+                use_container_width=True,
+                type="primary" if tile_type == label else "secondary",
+            ):
+                st.session_state.knowledge_tile_type = label
+                st.session_state.knowledge_tile_value = None
+                st.rerun()
+
+    active_tiles = tile_data.get(tile_type, [])
+    if active_tiles:
+        # Render tiles in compact rows.
+        tile_cols = st.columns(4, gap="small")
+        for idx, (label, count) in enumerate(active_tiles):
+            with tile_cols[idx % 4]:
+                if st.button(
+                    f"{label}\n{count} PDF{'s' if count != 1 else ''}",
+                    key=f"knowledge_tile_{tile_type}_{idx}_{label}",
+                    use_container_width=True,
+                    type="secondary",
+                ):
+                    st.session_state.knowledge_tile_value = label
+                    # A tile acts like a search shortcut. Category tiles also
+                    # activate the normal Category filter.
+                    if tile_type == "Category":
+                        st.session_state.search_category = label
+                        st.session_state.search_query = ""
+                    else:
+                        st.session_state.search_query = label
+                    st.session_state.selected_result_id = None
+                    st.session_state.search_signature = None
+                    st.rerun()
+    else:
+        st.caption(f"No {tile_type.lower()} tiles were detected in the indexed PDFs yet.")
+
     # Put the search box and Search button inside a Streamlit form so pressing
     # Enter in the text field submits the search exactly like clicking Search.
     # The filter popover remains outside the form so changing filters does not
@@ -1655,7 +1809,15 @@ else:
     category = st.session_state.get("search_category", "All Categories")
     top_k = st.session_state.get("search_top_k", 10)
 
-    if active_query:
+    selected_tile = st.session_state.get("knowledge_tile_value")
+    if selected_tile:
+        st.markdown(
+            f'<div class="search-count">Selected {tile_type.lower()}: <b>{selected_tile}</b> · click another tile to change it</div>',
+            unsafe_allow_html=True,
+        )
+
+    if active_query or (tile_type == "Category" and category != "All Categories"):
+
         search_signature = (active_query, category, top_k)
         if st.session_state.get("search_signature") != search_signature:
             st.session_state.search_results = search_documents(active_query, category=category, top_k=top_k)
