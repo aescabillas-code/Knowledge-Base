@@ -24,12 +24,10 @@ except Exception:
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Optional AI support:
-# pip install openai
-try:
-    from openai import OpenAI
-except Exception:
-    OpenAI = None
+# Local/offline AI support via Ollama.
+# No OpenAI API key is required.
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 # ============================================================
 # CONFIG
@@ -1034,47 +1032,121 @@ def search_documents(query, category="All Categories", top_k=10):
 
 
 # ============================================================
-# AI Q&A
+# LOCAL / OFFLINE AI Q&A
 # ============================================================
-
-def get_openai_client():
-    """Create the OpenAI client from Streamlit Secrets or environment."""
-    api_key = ""
-    try:
-        api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
-    except Exception:
-        pass
-    if not api_key:
-        api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key or OpenAI is None:
-        return None
-    try:
-        return OpenAI(api_key=api_key)
-    except Exception:
-        return None
+# The AI runs locally through Ollama. The Streamlit app sends only the
+# retrieved PDF passages to the local model. No OpenAI API key is required.
+#
+# Local configuration can be supplied with Streamlit Secrets or environment:
+# OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+# OLLAMA_MODEL = "llama3.2:3b"   # change to any model installed in Ollama
 
 
-def get_openai_model():
-    """Model can be changed in Secrets without editing the application."""
+def get_ollama_base_url():
     try:
-        model = str(st.secrets.get("OPENAI_MODEL", "")).strip()
+        value = str(st.secrets.get("OLLAMA_BASE_URL", "")).strip()
     except Exception:
-        model = ""
-    return model or os.getenv("OPENAI_MODEL", "gpt-5.6-luna").strip()
+        value = ""
+    return (value or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
+
+
+def get_ollama_model():
+    try:
+        value = str(st.secrets.get("OLLAMA_MODEL", "")).strip()
+    except Exception:
+        value = ""
+    return value or os.getenv("OLLAMA_MODEL", "llama3.2:3b").strip()
+
+
+def ollama_is_available():
+    try:
+        req = Request(f"{get_ollama_base_url()}/api/tags", method="GET")
+        with urlopen(req, timeout=2) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+
+def get_installed_ollama_models():
+    try:
+        req = Request(f"{get_ollama_base_url()}/api/tags", method="GET")
+        with urlopen(req, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        return [m.get("name", "") for m in payload.get("models", []) if m.get("name")]
+    except Exception:
+        return []
+
+
+def local_ai_generate(question, context):
+    """Generate an answer with a locally running Ollama model."""
+    system_prompt = """
+You are the AI assistant for a corporate PDF Knowledge Base.
+
+Use ONLY the retrieved PDF content supplied by the application.
+Do not use the internet, outside knowledge, memory, or assumptions.
+Do not invent policies, procedures, dates, requirements, product behavior,
+or instructions.
+If the supplied PDF content does not contain enough information, respond:
+"I couldn't find enough information in the Knowledge Base."
+
+Keep the answer concise and practical.
+Preserve important terminology from the PDF.
+If the source describes a procedure, use numbered steps.
+Every factual statement must include the supporting source number such as [1].
+Do not create citations for sources that were not supplied.
+""".strip()
+
+    prompt = f"""SYSTEM INSTRUCTIONS:
+{system_prompt}
+
+USER QUESTION:
+{question}
+
+RETRIEVED PDF CONTENT:
+{context}
+
+Answer only from the retrieved PDF content."""
+
+    payload = json.dumps({
+        "model": get_ollama_model(),
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0.1},
+    }).encode("utf-8")
+
+    req = Request(
+        f"{get_ollama_base_url()}/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urlopen(req, timeout=180) as response:
+        result = json.loads(response.read().decode("utf-8"))
+
+    answer = str(result.get("response", "")).strip()
+    if not answer:
+        raise RuntimeError("The local AI model returned an empty response.")
+    return answer
+
+
+def extractive_answer(question, results):
+    if not results:
+        return "I couldn't find that information in the Knowledge Base."
+
+    answer_parts = []
+    for i, item in enumerate(results[:5], start=1):
+        text = re.sub(r"\s+", " ", item["text"]).strip()
+        if len(text) > 700:
+            text = text[:700].rsplit(" ", 1)[0] + "..."
+        answer_parts.append(f"[{i}] {text}")
+    return "\n\n".join(answer_parts)
 
 
 def ai_answer(question, results):
-    """Answer strictly from locally retrieved chunks from uploaded PDFs."""
+    """Answer strictly from local PDF retrieval using a local Ollama model."""
     if not results:
         return "I couldn't find that information in the Knowledge Base.", []
-
-    client = get_openai_client()
-    if client is None:
-        return (
-            "AI answering is not configured. Add OPENAI_API_KEY to Streamlit "
-            "Secrets. The PDF search results are still available below.",
-            results[:6],
-        )
 
     context_blocks = []
     for i, item in enumerate(results[:6], start=1):
@@ -1088,61 +1160,34 @@ Page: {item['page_number']}
 Category: {item['category']}
 
 CONTENT:
-{source_text}
-"""
+{source_text}"""
         )
 
     context = "\n\n".join(context_blocks)
 
-    instructions = """
-You are the AI assistant for a corporate PDF Knowledge Base.
-
-Answer the user's question using ONLY the retrieved content supplied in the
-prompt. The retrieved content comes from PDFs uploaded to this Streamlit
-application.
-
-Rules:
-- Do not use outside knowledge.
-- Do not browse the web.
-- Do not invent policies, procedures, dates, requirements, product behavior,
-  or instructions.
-- Do not infer an answer when the retrieved PDF content does not support it.
-- If the supplied PDF content does not contain enough information, say:
-  "I couldn't find enough information in the Knowledge Base."
-- Keep the answer concise and practical.
-- Preserve important terminology from the source documents.
-- If the source describes a procedure, use numbered steps.
-- When making a factual statement, append the supporting source number in
-  brackets, for example [1] or [2].
-"""
-
-    user_input = f"""USER QUESTION:
-{question}
-
-RETRIEVED PDF CONTENT:
-{context}
-
-Answer only from the retrieved PDF content.
-"""
-
     try:
-        response = client.responses.create(
-            model=get_openai_model(),
-            instructions=instructions,
-            input=user_input,
-            temperature=0.1,
-            max_output_tokens=900,
-        )
-        answer = (response.output_text or "").strip()
-        if not answer:
-            answer = "I couldn't generate an answer from the Knowledge Base."
+        answer = local_ai_generate(question, context)
         return answer, results[:6]
-    except Exception:
-        return (
-            "The AI model is temporarily unavailable. "
-            "The retrieved PDF results are still available below.",
-            results[:6],
+    except HTTPError as e:
+        if e.code == 404:
+            message = (
+                f"Local AI model '{get_ollama_model()}' was not found in Ollama. "
+                f"Install that model in Ollama, or change OLLAMA_MODEL."
+            )
+        else:
+            message = f"The local AI service returned HTTP {e.code}."
+    except (URLError, TimeoutError):
+        message = (
+            "Local AI is not running. Start Ollama on the machine running the app "
+            f"and make sure it is available at {get_ollama_base_url()}."
         )
+    except Exception as e:
+        message = f"Local AI could not answer this question: {e}"
+
+    return message + "\n\nShowing the most relevant PDF passages instead:\n\n" + extractive_answer(question, results), results[:6]
+
+
+# ============================================================
 
 
 # PDF VIEWER
@@ -1719,7 +1764,7 @@ else:
                 tuple((r["id"], r["page_number"], round(r["score"], 6)) for r in results[:6]),
             )
             if st.session_state.get("ai_answer_signature") != ai_signature:
-                with st.spinner("AI is reviewing the most relevant PDF content..."):
+                with st.spinner("Local AI is reviewing the most relevant PDF content..."):
                     ai_text, _ = ai_answer(active_query, results)
                 st.session_state.ai_answer = ai_text
                 st.session_state.ai_answer_signature = ai_signature
@@ -1729,11 +1774,11 @@ else:
                 <div class="ai-answer-card">
                     <div class="ai-answer-head">
                         <div class="ai-answer-title">AI Answer</div>
-                        <div class="ai-answer-badge">PDF SOURCES ONLY</div>
+                        <div class="ai-answer-badge">LOCAL AI · PDF SOURCES ONLY</div>
                     </div>
                     <div class="ai-answer-body">{st.session_state.ai_answer}</div>
                     <div class="ai-source-note">
-                        Generated from the highest-ranked uploaded PDF matches.
+                        Generated by your local AI model from the highest-ranked uploaded PDF matches.
                         Verify the source using the PDF viewer and page references below.
                     </div>
                 </div>
