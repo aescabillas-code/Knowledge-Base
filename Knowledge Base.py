@@ -3,6 +3,7 @@ import re
 import io
 import json
 import math
+import time
 import hashlib
 import sqlite3
 from datetime import datetime
@@ -1192,24 +1193,36 @@ def browser_is_authorized():
 
 
 def authorize_browser():
-    """Write a persistent cookie before granting access; never hide write errors."""
-    controller = get_cookie_controller()
-    if controller is None:
-        return False, "Browser cookie support is unavailable. Install streamlit-cookies-controller."
-
+    """Persist authorization in the browser before rerunning the app."""
     token = create_browser_token()
+    controller = get_cookie_controller()
+
     if not token:
-        return False, "Token signing is unavailable. Install itsdangerous."
+        return False
+
+    if controller is None:
+        return False
 
     try:
-        # Keep the component mounted for a browser round-trip. An immediate
-        # st.rerun() here can interrupt its asynchronous JavaScript cookie write.
-        controller.set("kb_access_token", token, max_age=315360000)
-    except Exception as exc:
-        return False, f"Could not save browser authorization: {type(exc).__name__}: {exc}"
+        # streamlit-cookies-controller supports max_age/same_site.
+        # Explicitly make this a persistent HTTPS cookie.
+        controller.set(
+            "kb_access_token",
+            token,
+            path="/",
+            max_age=10 * 365 * 24 * 60 * 60,
+            secure=True,
+            same_site="lax",
+        )
 
-    st.session_state.access_authorized = True
-    return True, None
+        # The cookie component writes asynchronously. Do NOT call st.rerun()
+        # immediately or the browser can be reloaded before the cookie is
+        # actually committed.
+        time.sleep(0.8)
+        st.session_state.access_authorized = True
+        return True
+    except Exception:
+        return False
 
 
 def clear_browser_access():
@@ -1220,6 +1233,7 @@ def clear_browser_access():
     if controller is not None:
         try:
             controller.remove("kb_access_token")
+            time.sleep(0.5)
         except Exception:
             pass
 
@@ -1271,15 +1285,17 @@ def render_access_gate():
 
         if submitted:
             if entered_code.strip() == ACCESS_CODE:
-                saved, error = authorize_browser()
-                if saved:
-                    st.success("Access granted. Browser authorization is being saved. Click Continue once the page finishes loading.")
-                    # Do not rerun immediately: the cookie controller writes
-                    # through a frontend component that needs time to mount.
-                    if st.button("Continue to Knowledge Base", type="primary"):
-                        st.rerun()
+                if authorize_browser():
+                    # Authorization is automatic after successful submission.
+                    # The short delay gives the browser time to commit the
+                    # persistent cookie before the app reruns into the KB.
+                    time.sleep(0.25)
+                    st.rerun()
                 else:
-                    st.error(error)
+                    st.error(
+                        "The browser authorization cookie could not be saved. "
+                        "Please try submitting the access code again."
+                    )
             else:
                 st.error("Invalid access code.")
 
