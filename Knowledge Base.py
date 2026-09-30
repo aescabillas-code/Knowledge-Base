@@ -1098,39 +1098,30 @@ if "admin_authenticated" not in st.session_state:
 
 
 # ============================================================
-# ONE-TIME BROWSER ACCESS
 # ============================================================
+# PERSISTENT BROWSER ACCESS
+# ============================================================
+# Streamlit Cloud can lose client-side cookies across a fresh WebSocket
+# connection. To make F5/refresh deterministic, the signed authorization
+# token is persisted in the app URL. The token contains no user information.
+# IMPORTANT: anyone who has the full authorized URL can access the app.
 
 ACCESS_CODE = str(
     st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
 ).strip()
 
-
 TOKEN_SECRET = str(
     st.secrets.get("TOKEN_SECRET", os.getenv("TOKEN_SECRET", ""))
 ).strip()
 
-# TOKEN_SECRET should be configured in Streamlit Secrets.
-# This fallback is only for development.
 if not TOKEN_SECRET:
     TOKEN_SECRET = hashlib.sha256(
         f"{os.getcwd()}::{os.getenv('HOSTNAME', 'streamlit')}".encode()
     ).hexdigest()
 
 
-def get_cookie_controller():
-    if CookieController is None:
-        return None
-    if "cookie_controller" not in st.session_state:
-        try:
-            st.session_state.cookie_controller = CookieController()
-        except Exception:
-            st.session_state.cookie_controller = None
-    return st.session_state.cookie_controller
-
-
 def get_token_serializer():
-    if URLSafeTimedSerializer is None:
+    if URLSafeTimedSerializer is None or not TOKEN_SECRET:
         return None
     return URLSafeTimedSerializer(
         TOKEN_SECRET,
@@ -1142,122 +1133,58 @@ def create_browser_token():
     serializer = get_token_serializer()
     if serializer is None:
         return ""
-    return serializer.dumps(
-        {
-            "authorized": True,
-            "issued_at": datetime.now().isoformat(timespec="seconds"),
-        }
-    )
+    return serializer.dumps({"authorized": True})
 
 
 def validate_browser_token(token):
     if not token:
         return False
-
     serializer = get_token_serializer()
     if serializer is None:
         return False
-
     try:
-        payload = serializer.loads(token)
+        payload = serializer.loads(str(token))
         return bool(payload.get("authorized"))
     except Exception:
         return False
 
 
+def get_url_access_token():
+    try:
+        return st.query_params.get("kb_access", "")
+    except Exception:
+        return ""
+
+
 def browser_is_authorized():
-    """Restore authorization after a browser refresh/reconnect."""
     if st.session_state.access_authorized:
         return True
 
-    # Fast path: Streamlit can expose cookies received with the initial
-    # browser request.
-    try:
-        token = st.context.cookies.get("kb_access_token")
-        if validate_browser_token(token):
-            st.session_state.access_authorized = True
-            return True
-    except Exception:
-        pass
-
-    # The cookie-controller component is client-side. On a brand-new
-    # Streamlit session (including F5), give the component time to hydrate
-    # before deciding that the cookie is missing. The component's documented
-    # reload pattern uses getAll() followed by a short wait.
-    controller = get_cookie_controller()
-    if controller is not None:
-        try:
-            if not st.session_state.get("cookie_restore_checked", False):
-                controller.getAll()
-                time.sleep(1.0)
-                st.session_state.cookie_restore_checked = True
-
-            cookies = controller.getAll()
-            token = cookies.get("kb_access_token") if isinstance(cookies, dict) else None
-            if validate_browser_token(token):
-                st.session_state.access_authorized = True
-                return True
-        except Exception:
-            pass
-
-        # Final component read in case getAll() returned before the browser
-        # finished hydrating the component.
-        try:
-            token = controller.get("kb_access_token")
-            if validate_browser_token(token):
-                st.session_state.access_authorized = True
-                return True
-        except Exception:
-            pass
+    token = get_url_access_token()
+    if validate_browser_token(token):
+        st.session_state.access_authorized = True
+        return True
 
     return False
 
 
 def authorize_browser():
-    """Persist authorization in the browser before rerunning the app."""
     token = create_browser_token()
-    controller = get_cookie_controller()
-
     if not token:
         return False
 
-    if controller is None:
-        return False
-
-    try:
-        # streamlit-cookies-controller supports max_age/same_site.
-        # Explicitly make this a persistent HTTPS cookie.
-        controller.set(
-            "kb_access_token",
-            token,
-            path="/",
-            max_age=10 * 365 * 24 * 60 * 60,
-            secure=True,
-            same_site="lax",
-        )
-
-        # The cookie component writes asynchronously. Do NOT call st.rerun()
-        # immediately or the browser can be reloaded before the cookie is
-        # actually committed.
-        time.sleep(0.8)
-        st.session_state.access_authorized = True
-        st.session_state.cookie_restore_checked = True
-        return True
-    except Exception:
-        return False
+    # Query parameters survive a normal browser refresh on Streamlit Cloud.
+    st.query_params["kb_access"] = token
+    st.session_state.access_authorized = True
+    return True
 
 
 def clear_browser_access():
     st.session_state.access_authorized = False
-
-    controller = get_cookie_controller()
-
-    if controller is not None:
-        try:
-            controller.remove("kb_access_token")
-            time.sleep(0.5)
-        except Exception:
-            pass
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
 
 
 def render_access_gate():
@@ -1288,9 +1215,7 @@ def render_access_gate():
             '<div class="auth-card-title">Enter Access Code</div>',
             unsafe_allow_html=True,
         )
-        st.caption(
-            "You only need to enter the code once on this browser."
-        )
+        st.caption("You only need to enter the code once on this browser.")
 
         with st.form("access_code_form"):
             entered_code = st.text_input(
@@ -1298,7 +1223,6 @@ def render_access_gate():
                 type="password",
                 placeholder="Enter access code",
             )
-
             submitted = st.form_submit_button(
                 "Access Knowledge Base",
                 type="primary",
@@ -1308,24 +1232,17 @@ def render_access_gate():
         if submitted:
             if entered_code.strip() == ACCESS_CODE:
                 if authorize_browser():
-                    st.success(
-                        "Access granted. This browser will remain authorized until you manually clear browser access."
-                    )
-                    # Give the browser one additional moment to receive the
-                    # component update before the next Streamlit run.
-                    time.sleep(0.2)
+                    # No Continue button. The signed token is placed in the
+                    # URL and the app immediately loads the Knowledge Base.
                     st.rerun()
                 else:
-                    st.error(
-                        "The browser authorization cookie could not be saved. "
-                        "Please refresh the page and try again."
-                    )
+                    st.error("Unable to create the browser authorization token.")
             else:
                 st.error("Invalid access code.")
 
         st.caption(
-            "The access code is not stored in your browser. "
-            "A signed authorization token is stored instead."
+            "The access code is never stored in the URL. A signed authorization "
+            "token is used to keep this browser authorized."
         )
 
 
