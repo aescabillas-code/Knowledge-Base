@@ -141,24 +141,30 @@ button[kind="header"],
     z-index: 1000 !important;
     display: flex !important;
     justify-content: flex-end !important;
-    padding-right: 18px !important;
+    padding-right: 12px !important;
     pointer-events: none !important;
 }
+
+.st-key-gear_wrap > div {
+    margin-right: 0 !important;
+}
+
 .st-key-gear_wrap div[data-testid="stPopover"] {
     pointer-events: auto !important;
 }
 .st-key-gear_wrap div[data-testid="stPopover"] > button {
     border: 0 !important;
-    background: transparent !important;
+    background: #e8f7f7 !important;
     box-shadow: none !important;
-    color: #173d53 !important;
-    padding: 2px 4px !important;
-    min-height: 28px !important;
-    min-width: 28px !important;
-    font-size: 15px !important;
+    color: #315468 !important;
+    padding: 1px 4px !important;
+    min-height: 26px !important;
+    min-width: 26px !important;
+    font-size: 14px !important;
+    border-radius: 4px !important;
 }
 .st-key-gear_wrap div[data-testid="stPopover"] > button:hover {
-    background: rgba(0,169,130,.08) !important;
+    background: #e8f7f7 !important;
     color: #087c63 !important;
 }
 
@@ -191,7 +197,7 @@ button[kind="header"],
 .source-title { font-size: 18px; font-weight: 700; color: var(--text); }
 .source-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
 
-.panel-title { font-size: 19px; font-weight: 700; color: var(--text); margin: 5px 0 12px; }
+.panel-title { font-size: 17px; font-weight: 700; color: var(--text); margin: 3px 0 8px; }
 .related-title { color: #0561a0; font-weight: 700; font-size: 14px; }
 .related-number { float: left; width: 23px; height: 23px; background: #dfe9ed; border-radius: 4px; text-align: center; line-height: 23px; font-weight: 700; color: #294a5c; }
 
@@ -225,7 +231,81 @@ button[kind="header"],
 .auth-subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
 .auth-card-title { font-size: 24px; font-weight: 700; color: var(--text); margin-top: 20px; }
 .auth-switch { text-align:center; color:var(--muted); font-size:12px; margin:12px 0 6px; }
-.top-user { color:#315468; font-size:12px; margin-right:34px; white-space:nowrap; }
+.top-user {
+    color:#315468;
+    font-size:12px;
+    margin-right:56px;
+    white-space:nowrap;
+    background: transparent;
+    position: relative;
+    z-index: 2;
+}
+
+/* Compact search-result cards */
+.st-key-search_result_best,
+.st-key-search_result_1,
+.st-key-search_result_2,
+.st-key-search_result_3,
+.st-key-search_result_4,
+.st-key-search_result_5,
+.st-key-search_result_6,
+.st-key-search_result_7,
+.st-key-search_result_8,
+.st-key-search_result_9 {
+    margin-bottom: 7px !important;
+}
+
+.st-key-search_result_best [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_1 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_2 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_3 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_4 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_5 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_6 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_7 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_8 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_9 [data-testid="stVerticalBlockBorderWrapper"] {
+    padding: 8px 10px !important;
+    border-radius: 7px !important;
+}
+
+.result-label {
+    color:#0561a0;
+    font-weight:700;
+    font-size:11px;
+    line-height:1.2;
+}
+.result-filename {
+    margin-top:3px;
+    color:#0561a0;
+    font-weight:700;
+    font-size:12px;
+    line-height:1.35;
+    word-break:break-word;
+}
+.result-score {
+    margin-top:3px;
+    color:#687b87;
+    font-size:10px;
+}
+
+.st-key-search_result_best button,
+.st-key-search_result_1 button,
+.st-key-search_result_2 button,
+.st-key-search_result_3 button,
+.st-key-search_result_4 button,
+.st-key-search_result_5 button,
+.st-key-search_result_6 button,
+.st-key-search_result_7 button,
+.st-key-search_result_8 button,
+.st-key-search_result_9 button {
+    min-height: 28px !important;
+    height: 28px !important;
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+    margin-top: 4px !important;
+}
+
 .best-match-card { background:linear-gradient(110deg,#f1fcf8,#fff 70%); border:1px solid #7ad8bd; border-radius:10px; padding:16px 18px; margin-top:8px; box-shadow:0 3px 12px rgba(12,54,70,.05); }
 .best-match-head { display:flex; justify-content:space-between; align-items:center; }
 .pdf-badge { display:inline-flex; background:#e94b3c; color:white; font-weight:800; font-size:10px; border-radius:4px; padding:4px 6px; margin-right:7px; }
@@ -1575,13 +1655,13 @@ else:
                 st.markdown('<div class="panel-title">Search Results</div>', unsafe_allow_html=True)
 
                 # Highest match is now the first item in the Search Results panel.
-                with st.container(border=True):
+                with st.container(key="search_result_best", border=True):
                     best_score = min(99, max(1, round(best["score"] * 100)))
                     st.markdown(
                         f"""
-                        <div class='related-title'>Highest Match</div>
-                        <div style='margin-top:6px;color:#0561a0;font-weight:700;font-size:14px;'>{best['filename']}</div>
-                        <div style='margin-top:5px;color:#687b87;font-size:11px;'>{best_score}% match</div>
+                        <div class='result-label'>Highest Match</div>
+                        <div class='result-filename'>{best['filename']}</div>
+                        <div class='result-score'>{best_score}% match</div>
                         """,
                         unsafe_allow_html=True,
                     )
@@ -1590,12 +1670,12 @@ else:
                         st.session_state.force_result_id = best["id"]
                         st.rerun()
 
-                for i, result in enumerate(results[1:], start=2):
-                    with st.container(border=True):
+                for i, result in enumerate(results[1:], start=1):
+                    with st.container(key=f"search_result_{i}", border=True):
                         st.markdown(
                             f"""
-                            <div class='related-title'>Search Result</div>
-                            <div style='margin-top:6px;color:#0561a0;font-weight:700;font-size:14px;'>{result['filename']}</div>
+                            <div class='result-label'>Search Result</div>
+                            <div class='result-filename'>{result['filename']}</div>
                             """,
                             unsafe_allow_html=True,
                         )
