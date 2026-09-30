@@ -1119,11 +1119,6 @@ if "selected_document" not in st.session_state:
 if "selected_page" not in st.session_state:
     st.session_state.selected_page = 1
 
-if "show_full_pdf" not in st.session_state:
-    st.session_state.show_full_pdf = False
-if "source_pdf_page" not in st.session_state:
-    st.session_state.source_pdf_page = 1
-
 if "force_result_id" not in st.session_state:
     st.session_state.force_result_id = None
 
@@ -1503,7 +1498,6 @@ else:
 
     if search_clicked:
         st.session_state.search_query = query
-        st.session_state.show_full_pdf = False
         st.session_state.force_result_id = None
         st.session_state.search_signature = None
 
@@ -1530,25 +1524,6 @@ else:
             st.warning("No matching PDF was found. Try different keywords or upload another document.")
         else:
             best = results[0]
-            best_score = min(99, max(1, round(best["score"] * 100)))
-
-            # Highest-match document card — no generated/exact-answer card.
-            st.markdown(
-                f"""
-                <div class="best-match-card">
-                    <div class="best-match-head">
-                        <div>
-                            <span class="pdf-badge">PDF</span>
-                            <span class="best-match-title">Highest Match</span>
-                        </div>
-                        <span class="match-pill">{best_score}% match</span>
-                    </div>
-                    <div class="best-match-file">{best['filename']}</div>
-                    <div class="best-match-meta">Page {best['page_number']} · {best['category']} · Matching content highlighted below</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
 
             source_col, related_col = st.columns([1.55, 0.9], gap="large")
 
@@ -1560,88 +1535,75 @@ else:
                     <div class="source-header">
                         <div>
                             <div class="source-title">▣ {best['filename']}</div>
-                            <div class="source-meta">Page {best['page_number']} of {total_pages} · Matching terms highlighted</div>
+                            <div class="source-meta">Scroll to view all pages · Page {best['page_number']} highlighted as the highest match</div>
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-                image_bytes = render_pdf_page_highlighted(best["stored_path"], best["page_number"], active_query)
-                if image_bytes:
-                    st.image(image_bytes, use_container_width=True)
-                else:
-                    st.error("Unable to render the source PDF page.")
+                # Show the complete PDF directly in a scrollable in-app viewer.
+                # The matching page is highlighted; all other pages remain visible below/above it.
+                try:
+                    all_pages = render_full_pdf_pages(best["stored_path"])
+                except Exception:
+                    all_pages = []
 
-                # View the complete original PDF only after the user clicks View Source.
-                # The source is paginated one page at a time to avoid Chrome PDF iframe blocking.
-                if st.button("View Source", type="primary", use_container_width=True, key="view_full_source"):
-                    st.session_state.show_full_pdf = True
-                    st.session_state.source_pdf_page = 1
-                    st.rerun()
-
-                if st.session_state.show_full_pdf:
-                    st.markdown('<div class="panel-title">Original PDF</div>', unsafe_allow_html=True)
-                    try:
-                        with fitz.open(best["stored_path"]) as source_pdf:
-                            source_total_pages = len(source_pdf)
-                    except Exception:
-                        source_total_pages = 0
-
-                    if source_total_pages > 0:
-                        current_source_page = max(1, min(st.session_state.source_pdf_page, source_total_pages))
-                        st.session_state.source_pdf_page = current_source_page
-                        source_image = render_pdf_page(best["stored_path"], current_source_page)
-
-                        if source_image:
+                if all_pages:
+                    with st.container(height=900, border=True):
+                        for page_number, source_total_pages, source_image in all_pages:
                             st.markdown(
-                                f"<div class='source-page-label'>Page {current_source_page} of {source_total_pages}</div>",
+                                f"<div class='source-page-label'>Page {page_number} of {source_total_pages}"
+                                + (" · Highest match" if page_number == best["page_number"] else "")
+                                + "</div>",
                                 unsafe_allow_html=True,
                             )
-                            st.image(source_image, use_container_width=True)
-
-                            prev_col, page_col, next_col = st.columns([1, 2, 1])
-                            with prev_col:
-                                if st.button(
-                                    "← Previous",
-                                    use_container_width=True,
-                                    disabled=current_source_page <= 1,
-                                    key="source_prev_page",
-                                ):
-                                    st.session_state.source_pdf_page = current_source_page - 1
-                                    st.rerun()
-                            with page_col:
-                                st.markdown(
-                                    f"<div style='text-align:center;padding:8px 0;color:#315468;font-weight:700;'>Page {current_source_page} / {source_total_pages}</div>",
-                                    unsafe_allow_html=True,
+                            if page_number == best["page_number"]:
+                                highlighted_image = render_pdf_page_highlighted(
+                                    best["stored_path"], page_number, active_query
                                 )
-                            with next_col:
-                                if st.button(
-                                    "Next →",
+                                st.image(
+                                    highlighted_image if highlighted_image else source_image,
                                     use_container_width=True,
-                                    disabled=current_source_page >= source_total_pages,
-                                    key="source_next_page",
-                                ):
-                                    st.session_state.source_pdf_page = current_source_page + 1
-                                    st.rerun()
-                        else:
-                            st.error("Unable to render this PDF page.")
-                    else:
-                        st.error("Unable to open the original PDF.")
+                                )
+                            else:
+                                st.image(source_image, use_container_width=True)
+                else:
+                    st.error("Unable to open the original PDF.")
+
             with related_col:
-                st.markdown('<div class="panel-title">Related Results</div>', unsafe_allow_html=True)
+                st.markdown('<div class="panel-title">Search Results</div>', unsafe_allow_html=True)
+
+                # Highest match is now the first item in the Search Results panel.
+                with st.container(border=True):
+                    best_score = min(99, max(1, round(best["score"] * 100)))
+                    st.markdown(
+                        f"""
+                        <div class='related-title'>Highest Match</div>
+                        <div style='margin-top:6px;color:#0561a0;font-weight:700;font-size:14px;'>{best['filename']}</div>
+                        <div style='margin-top:5px;color:#687b87;font-size:11px;'>{best_score}% match</div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("Open Result", key=f"best_result_{best['id']}", use_container_width=True):
+                        st.session_state.search_query = active_query
+                        st.session_state.force_result_id = best["id"]
+                        st.rerun()
+
                 for i, result in enumerate(results[1:], start=2):
                     with st.container(border=True):
                         st.markdown(
-                            f"<div class='related-title'>{result['filename']}</div>",
+                            f"""
+                            <div class='related-title'>Search Result</div>
+                            <div style='margin-top:6px;color:#0561a0;font-weight:700;font-size:14px;'>{result['filename']}</div>
+                            """,
                             unsafe_allow_html=True,
                         )
                         if st.button("Open Result", key=f"related_{result['id']}", use_container_width=True):
                             st.session_state.search_query = active_query
-                            st.session_state.show_full_pdf = False
-                            # Put selected result first for the next render by using a session override.
                             st.session_state.force_result_id = result["id"]
                             st.rerun()
+
 
     else:
         docs = get_documents()
@@ -1667,7 +1629,6 @@ nav_left, nav_center, nav_right = st.columns([1, 2, 1])
 with nav_center:
     if st.button("⌕  Search Knowledge Base", use_container_width=True):
         st.session_state.page = "Search"
-        st.session_state.show_full_pdf = False
         st.rerun()
 
 st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search</div>', unsafe_allow_html=True)
