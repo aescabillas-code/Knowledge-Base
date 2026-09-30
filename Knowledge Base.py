@@ -314,6 +314,42 @@ button[kind="header"],
 .best-match-meta { color:#687b87; font-size:12px; margin-top:4px; }
 .source-page-label { font-size:12px; font-weight:700; color:#315468; margin:14px 0 6px; padding:6px 10px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
 
+
+/* Search / document reader redesign */
+.search-count { color:#687b87; font-size:11px; margin:2px 0 8px; }
+.reader-toolbar {
+    background:#ffffff; border:1px solid var(--border); border-radius:8px;
+    padding:7px 10px; margin-bottom:8px;
+}
+.reader-title { font-size:15px; font-weight:700; color:var(--text); line-height:1.3; word-break:break-word; }
+.reader-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+.reader-match {
+    background:#e7f8f1; border:1px solid #9bdcc8; color:#087c63;
+    border-radius:5px; padding:5px 8px; font-size:10px; font-weight:700;
+    display:inline-block; margin-top:5px;
+}
+.match-panel {
+    background:#ffffff; border:1px solid var(--border); border-radius:8px;
+    padding:10px; margin-top:10px;
+}
+.match-panel-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:7px; }
+.match-item {
+    background:#f7fafb; border:1px solid #e1e8ec; border-radius:6px;
+    padding:7px 8px; margin-bottom:6px;
+}
+.match-item-page { color:#0561a0; font-size:10px; font-weight:700; }
+.match-item-text { color:#385362; font-size:10px; line-height:1.35; margin-top:2px; }
+.result-snippet {
+    color:#536b78; font-size:10px; line-height:1.4; margin-top:5px;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+}
+.result-page { color:#687b87; font-size:10px; margin-top:3px; }
+.result-score-pill {
+    float:right; background:#e7f8f1; color:#087c63; border-radius:10px;
+    padding:2px 6px; font-size:9px; font-weight:700;
+}
+.source-page-label { font-size:11px; font-weight:700; color:#315468; margin:8px 0 5px; padding:5px 8px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
+
 /* Streamlit controls */
 button[kind="primary"] { background: var(--teal) !important; border-color: var(--teal) !important; }
 button[kind="primary"]:hover { background: var(--teal-dark) !important; }
@@ -1069,32 +1105,71 @@ Answer the question using only the document context.
 # ============================================================
 
 @st.cache_data(ttl=600, show_spinner=False)
-def render_pdf_page(document_path, page_number):
+def render_pdf_page(document_path, page_number, scale=1.75):
     try:
         with fitz.open(document_path) as pdf:
             if page_number < 1 or page_number > len(pdf):
                 return None
             page = pdf[page_number - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(1.25, 1.25), alpha=False)
+            pix = page.get_pixmap(matrix=fitz.Matrix(float(scale), float(scale)), alpha=False)
             return pix.tobytes("png")
     except Exception:
         return None
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def render_full_pdf_pages(document_path):
-    """Render every page of the original PDF as an image for reliable in-app viewing."""
-    pages = []
+def render_pdf_page_highlighted(document_path, page_number, query="", scale=1.75):
+    """Render one readable PDF page with matching query terms highlighted."""
     try:
         with fitz.open(document_path) as pdf:
-            total = len(pdf)
-            for page_number in range(1, total + 1):
-                page = pdf[page_number - 1]
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.15, 1.15), alpha=False)
-                pages.append((page_number, total, pix.tobytes("png")))
+            if page_number < 1 or page_number > len(pdf):
+                return None
+            page = pdf[page_number - 1]
+            terms = [t for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
+            highlighted = set()
+            for term in terms[:12]:
+                try:
+                    for rect in page.search_for(term):
+                        key = (round(rect.x0, 1), round(rect.y0, 1), round(rect.x1, 1), round(rect.y1, 1))
+                        if key in highlighted:
+                            continue
+                        highlighted.add(key)
+                        annot = page.add_highlight_annot(rect)
+                        annot.update()
+                except Exception:
+                    continue
+            pix = page.get_pixmap(matrix=fitz.Matrix(float(scale), float(scale)), alpha=False)
+            return pix.tobytes("png")
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def find_document_matches(document_path, query, limit=8):
+    """Find pages containing the user's actual search terms and return verbatim context."""
+    try:
+        terms = [t.lower() for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
+        if not terms:
+            return []
+        matches = []
+        with fitz.open(document_path) as pdf:
+            for page_number, page in enumerate(pdf, start=1):
+                raw = clean_text(page.get_text("text"))
+                if not raw:
+                    continue
+                low = raw.lower()
+                score = sum(low.count(term) for term in terms)
+                if score <= 0:
+                    continue
+                matches.append({
+                    "page": page_number,
+                    "score": score,
+                    "snippet": make_snippet(raw, query, radius=190),
+                })
+        matches.sort(key=lambda x: (-x["score"], x["page"]))
+        return matches[:limit]
     except Exception:
         return []
-    return pages
 
 
 # ============================================================
@@ -1150,7 +1225,7 @@ def render_pdf_page_highlighted(document_path, page_number, query=""):
 
 def clear_knowledge_caches():
     """Invalidate cached database/search/PDF-derived data after document changes."""
-    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, render_pdf_page, render_full_pdf_pages, render_pdf_page_highlighted):
+    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, render_pdf_page, render_pdf_page_highlighted):
         try:
             fn.clear()
         except Exception:
@@ -1590,6 +1665,8 @@ else:
         if st.session_state.get("search_signature") != search_signature:
             st.session_state.search_results = search_documents(active_query, category=category, top_k=top_k)
             st.session_state.search_signature = search_signature
+            st.session_state.viewer_page = None
+
         results = st.session_state.get("search_results", [])
 
         if st.session_state.force_result_id is not None:
@@ -1598,92 +1675,114 @@ else:
             others = [r for r in results if r["id"] != forced_id]
             if forced:
                 results = forced + others
+                st.session_state.viewer_page = forced[0]["page_number"]
             st.session_state.force_result_id = None
 
         if not results:
             st.warning("No matching PDF was found. Try different keywords or upload another document.")
         else:
             best = results[0]
+            best_doc = get_document_by_id(best["document_id"])
+            total_pages = int(best_doc["page_count"] or 0) if best_doc else 0
 
-            source_col, related_col = st.columns([1.55, 0.9], gap="large")
+            if st.session_state.get("viewer_page") is None:
+                st.session_state.viewer_page = int(best["page_number"])
+
+            viewer_page = max(1, min(int(st.session_state.viewer_page), max(total_pages, 1)))
+
+            st.markdown(
+                f'<div class="search-count">{len(results)} search result(s) · Showing the highest match first</div>',
+                unsafe_allow_html=True,
+            )
+
+            source_col, related_col = st.columns([1.8, 0.82], gap="large")
 
             with source_col:
-                best_doc = get_document_by_id(best['document_id'])
-                total_pages = best_doc['page_count'] if best_doc else '?'
                 st.markdown(
                     f"""
-                    <div class="source-header">
-                        <div>
-                            <div class="source-title">▣ {best['filename']}</div>
-                            <div class="source-meta">Scroll to view all pages · Page {best['page_number']} highlighted as the highest match</div>
-                        </div>
+                    <div class='reader-toolbar'>
+                        <div class='reader-title'>▣ {best['filename']}</div>
+                        <div class='reader-meta'>Page {viewer_page} of {total_pages} · Search: “{active_query}”</div>
+                        <div class='reader-match'>Highest match · source text shown exactly as it appears in the PDF</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-                # Show the complete PDF directly in a scrollable in-app viewer.
-                # The matching page is highlighted; all other pages remain visible below/above it.
-                try:
-                    all_pages = render_full_pdf_pages(best["stored_path"])
-                except Exception:
-                    all_pages = []
+                nav1, nav2, nav3, nav4 = st.columns([1, 1.1, 1, 1.1], gap="small")
+                with nav1:
+                    if st.button("‹ Previous", disabled=(viewer_page <= 1), use_container_width=True, key="pdf_prev"):
+                        st.session_state.viewer_page = max(1, viewer_page - 1)
+                        st.rerun()
+                with nav2:
+                    st.markdown(f"<div style='text-align:center;padding-top:8px;font-size:11px;color:#687b87;'>Page <b>{viewer_page}</b> / {total_pages}</div>", unsafe_allow_html=True)
+                with nav3:
+                    if st.button("Next ›", disabled=(viewer_page >= total_pages), use_container_width=True, key="pdf_next"):
+                        st.session_state.viewer_page = min(total_pages, viewer_page + 1)
+                        st.rerun()
+                with nav4:
+                    zoom = st.selectbox("Zoom", [125, 150, 175, 200], index=1, format_func=lambda x: f"{x}%", label_visibility="collapsed", key="pdf_zoom")
 
-                if all_pages:
-                    with st.container(height=900, border=True):
-                        for page_number, source_total_pages, source_image in all_pages:
-                            st.markdown(
-                                f"<div class='source-page-label'>Page {page_number} of {source_total_pages}"
-                                + (" · Highest match" if page_number == best["page_number"] else "")
-                                + "</div>",
-                                unsafe_allow_html=True,
-                            )
-                            if page_number == best["page_number"]:
-                                highlighted_image = render_pdf_page_highlighted(
-                                    best["stored_path"], page_number, active_query
-                                )
-                                st.image(
-                                    highlighted_image if highlighted_image else source_image,
-                                    use_container_width=True,
-                                )
-                            else:
-                                st.image(source_image, use_container_width=True)
+                image = render_pdf_page_highlighted(best["stored_path"], viewer_page, active_query, scale=zoom / 100 * 1.25)
+                if image:
+                    st.image(image, use_container_width=True)
                 else:
-                    st.error("Unable to open the original PDF.")
+                    st.error("Unable to render this PDF page.")
+
+                current_text = ""
+                try:
+                    with fitz.open(best["stored_path"]) as pdf:
+                        current_text = clean_text(pdf[viewer_page - 1].get_text("text"))
+                except Exception:
+                    current_text = ""
+
+                if current_text:
+                    st.markdown(
+                        f"""
+                        <div class='match-panel'>
+                            <div class='match-panel-title'>Match context · Page {viewer_page}</div>
+                            <div class='result-snippet' style='font-size:12px;line-height:1.55;color:#294a5c;'>{make_snippet(current_text, active_query, radius=520)}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
             with related_col:
                 st.markdown('<div class="panel-title">Search Results</div>', unsafe_allow_html=True)
 
-                # Highest match is now the first item in the Search Results panel.
-                with st.container(key="search_result_best", border=True):
-                    best_score = min(99, max(1, round(best["score"] * 100)))
-                    st.markdown(
-                        f"""
-                        <div class='result-label'>Highest Match</div>
-                        <div class='result-filename'>{best['filename']}</div>
-                        <div class='result-score'>{best_score}% match</div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    if st.button("Open Result", key=f"best_result_{best['id']}", use_container_width=True):
-                        st.session_state.search_query = active_query
-                        st.session_state.force_result_id = best["id"]
-                        st.rerun()
-
-                for i, result in enumerate(results[1:], start=1):
-                    with st.container(key=f"search_result_{i}", border=True):
+                for i, result in enumerate(results):
+                    is_best = i == 0
+                    key_prefix = "best" if is_best else str(i)
+                    with st.container(key=f"search_result_{key_prefix}", border=True):
+                        score_pct = min(99, max(1, round(result["score"] * 100)))
+                        label = "Highest Match" if is_best else "Search Result"
                         st.markdown(
                             f"""
-                            <div class='result-label'>Search Result</div>
+                            <div class='result-label'>{label}<span class='result-score-pill'>{score_pct}%</span></div>
                             <div class='result-filename'>{result['filename']}</div>
+                            <div class='result-page'>Page {result['page_number']}</div>
+                            <div class='result-snippet'>{result['snippet']}</div>
                             """,
                             unsafe_allow_html=True,
                         )
-                        if st.button("Open Result", key=f"related_{result['id']}", use_container_width=True):
-                            st.session_state.search_query = active_query
+                        if st.button("Open Result", key=f"open_result_{result['id']}", use_container_width=True):
                             st.session_state.force_result_id = result["id"]
+                            st.session_state.viewer_page = result["page_number"]
                             st.rerun()
 
+                matches = find_document_matches(best["stored_path"], active_query, limit=8)
+                st.markdown('<div class="match-panel"><div class="match-panel-title">Matches in this PDF</div></div>', unsafe_allow_html=True)
+                if matches:
+                    for match in matches:
+                        if st.button(f"Page {match['page']}", key=f"jump_match_{best['id']}_{match['page']}", use_container_width=True):
+                            st.session_state.viewer_page = match["page"]
+                            st.rerun()
+                        st.markdown(
+                            f"<div class='match-item'><div class='match-item-page'>Page {match['page']} · {match['score']} term match(es)</div><div class='match-item-text'>{match['snippet']}</div></div>",
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.caption("No exact text occurrence was detected on the other pages.")
 
     else:
         docs = get_documents()
