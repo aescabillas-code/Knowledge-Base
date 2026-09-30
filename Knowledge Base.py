@@ -131,42 +131,46 @@ button[kind="header"],
 .title-block { flex: 1; }
 .top-tagline { text-align: right; color: #18394e; font-size: 12px; line-height: 1.3; margin-right: 12px; }
 .top-actions { width: 36px; }
-/* Admin gear placement.  Only the dedicated gear wrapper is positioned.
-   The Filters popover must remain in the search controls row. */
+/* Admin gear: anchored to the header instead of taking space in the layout. */
 .st-key-gear_wrap {
-    position: relative !important;
-    height: 0 !important;
-    margin-top: -58px !important;
-    margin-bottom: 58px !important;
-    z-index: 1000 !important;
-    display: flex !important;
-    justify-content: flex-end !important;
-    padding-right: 12px !important;
-    pointer-events: none !important;
+    position:absolute !important;
+    top:92px !important;
+    right:30px !important;
+    width:30px !important;
+    height:30px !important;
+    margin:0 !important;
+    padding:0 !important;
+    z-index:10000 !important;
+    pointer-events:none !important;
 }
-
-.st-key-gear_wrap > div {
-    margin-right: 0 !important;
-}
-
+.st-key-gear_wrap > div,
 .st-key-gear_wrap div[data-testid="stPopover"] {
-    pointer-events: auto !important;
+    width:30px !important;
+    margin:0 !important;
+    padding:0 !important;
+    pointer-events:auto !important;
 }
 .st-key-gear_wrap div[data-testid="stPopover"] > button {
-    border: 0 !important;
-    background: #e8f7f7 !important;
-    box-shadow: none !important;
-    color: #315468 !important;
-    padding: 1px 4px !important;
-    min-height: 26px !important;
-    min-width: 26px !important;
-    font-size: 14px !important;
-    border-radius: 4px !important;
+    width:30px !important;
+    min-width:30px !important;
+    height:30px !important;
+    min-height:30px !important;
+    padding:0 !important;
+    border:0 !important;
+    border-radius:4px !important;
+    background:#e8f7f7 !important;
+    box-shadow:none !important;
+    color:#315468 !important;
+    font-size:14px !important;
+    line-height:30px !important;
 }
-.st-key-gear_wrap div[data-testid="stPopover"] > button:hover {
-    background: #e8f7f7 !important;
-    color: #087c63 !important;
+.st-key-gear_wrap div[data-testid="stPopover"] > button:hover,
+.st-key-gear_wrap div[data-testid="stPopover"] > button:focus {
+    background:#e8f7f7 !important;
+    color:#087c63 !important;
+    box-shadow:none !important;
 }
+
 
 .bell { font-size: 22px; color: var(--navy); }
 
@@ -234,11 +238,13 @@ button[kind="header"],
 .top-user {
     color:#315468;
     font-size:12px;
-    margin-right:56px;
+    margin-right:52px;
     white-space:nowrap;
-    background: transparent;
-    position: relative;
-    z-index: 2;
+    background:#e8f7f7;
+    padding:7px 10px;
+    border-radius:4px;
+    position:relative;
+    z-index:2;
 }
 
 /* Compact search-result cards */
@@ -1725,7 +1731,11 @@ else:
 
                 image = render_pdf_page_highlighted(best["stored_path"], viewer_page, active_query, scale=zoom / 100 * 1.25)
                 if image:
-                    st.image(image, use_container_width=True)
+                    # Do not force the image to the column width: that makes every zoom
+                    # level look identical.  A fixed display width lets the selected zoom
+                    # visibly enlarge the rendered PDF page.
+                    display_width = {125: 780, 150: 930, 175: 1080, 200: 1230}.get(int(zoom), 930)
+                    st.image(image, width=display_width)
                 else:
                     st.error("Unable to render this PDF page.")
 
