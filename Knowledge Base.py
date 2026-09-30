@@ -1121,6 +1121,8 @@ if "selected_page" not in st.session_state:
 
 if "show_full_pdf" not in st.session_state:
     st.session_state.show_full_pdf = False
+if "source_pdf_page" not in st.session_state:
+    st.session_state.source_pdf_page = 1
 
 if "force_result_id" not in st.session_state:
     st.session_state.force_result_id = None
@@ -1571,26 +1573,61 @@ else:
                 else:
                     st.error("Unable to render the source PDF page.")
 
-                # View the complete original PDF inside Streamlit.
-                # We render each original page directly instead of using a data: PDF iframe,
-                # which Chrome can block with "This page has been blocked by Chrome".
+                # View the complete original PDF only after the user clicks View Source.
+                # The source is paginated one page at a time to avoid Chrome PDF iframe blocking.
                 if st.button("View Source", type="primary", use_container_width=True, key="view_full_source"):
                     st.session_state.show_full_pdf = True
+                    st.session_state.source_pdf_page = 1
+                    st.rerun()
 
                 if st.session_state.show_full_pdf:
                     st.markdown('<div class="panel-title">Original PDF</div>', unsafe_allow_html=True)
-                    st.caption("Complete original document — all pages shown below.")
+                    try:
+                        with fitz.open(best["stored_path"]) as source_pdf:
+                            source_total_pages = len(source_pdf)
+                    except Exception:
+                        source_total_pages = 0
 
-                    full_pages = render_full_pdf_pages(best["stored_path"])
-                    if full_pages:
-                        for source_page_number, source_total_pages, source_image in full_pages:
+                    if source_total_pages > 0:
+                        current_source_page = max(1, min(st.session_state.source_pdf_page, source_total_pages))
+                        st.session_state.source_pdf_page = current_source_page
+                        source_image = render_pdf_page(best["stored_path"], current_source_page)
+
+                        if source_image:
                             st.markdown(
-                                f"<div class='source-page-label'>Page {source_page_number} of {source_total_pages}</div>",
+                                f"<div class='source-page-label'>Page {current_source_page} of {source_total_pages}</div>",
                                 unsafe_allow_html=True,
                             )
                             st.image(source_image, use_container_width=True)
+
+                            prev_col, page_col, next_col = st.columns([1, 2, 1])
+                            with prev_col:
+                                if st.button(
+                                    "← Previous",
+                                    use_container_width=True,
+                                    disabled=current_source_page <= 1,
+                                    key="source_prev_page",
+                                ):
+                                    st.session_state.source_pdf_page = current_source_page - 1
+                                    st.rerun()
+                            with page_col:
+                                st.markdown(
+                                    f"<div style='text-align:center;padding:8px 0;color:#315468;font-weight:700;'>Page {current_source_page} / {source_total_pages}</div>",
+                                    unsafe_allow_html=True,
+                                )
+                            with next_col:
+                                if st.button(
+                                    "Next →",
+                                    use_container_width=True,
+                                    disabled=current_source_page >= source_total_pages,
+                                    key="source_next_page",
+                                ):
+                                    st.session_state.source_pdf_page = current_source_page + 1
+                                    st.rerun()
+                        else:
+                            st.error("Unable to render this PDF page.")
                     else:
-                        st.error("Unable to render the original PDF.")
+                        st.error("Unable to open the original PDF.")
             with related_col:
                 st.markdown('<div class="panel-title">Related Results</div>', unsafe_allow_html=True)
                 for i, result in enumerate(results[1:], start=2):
