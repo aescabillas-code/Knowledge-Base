@@ -1192,25 +1192,24 @@ def browser_is_authorized():
 
 
 def authorize_browser():
-    token = create_browser_token()
-    st.session_state.access_authorized = True
-
+    """Write a persistent cookie before granting access; never hide write errors."""
     controller = get_cookie_controller()
+    if controller is None:
+        return False, "Browser cookie support is unavailable. Install streamlit-cookies-controller."
 
-    if controller is not None and token:
-        try:
-            controller.set(
-                "kb_access_token",
-                token,
-                path="/",
-                # Keep the browser authorization persistent. The signed token
-                # itself has no expiry; this cookie is retained for 10 years
-                # unless the user clears browser access or browser cookies.
-                max_age=10 * 365 * 24 * 60 * 60,
-                same_site="lax",
-            )
-        except Exception:
-            pass
+    token = create_browser_token()
+    if not token:
+        return False, "Token signing is unavailable. Install itsdangerous."
+
+    try:
+        # Keep the component mounted for a browser round-trip. An immediate
+        # st.rerun() here can interrupt its asynchronous JavaScript cookie write.
+        controller.set("kb_access_token", token, max_age=315360000)
+    except Exception as exc:
+        return False, f"Could not save browser authorization: {type(exc).__name__}: {exc}"
+
+    st.session_state.access_authorized = True
+    return True, None
 
 
 def clear_browser_access():
@@ -1272,11 +1271,15 @@ def render_access_gate():
 
         if submitted:
             if entered_code.strip() == ACCESS_CODE:
-                authorize_browser()
-                st.success(
-                    "Access granted. This browser will remain authorized until you manually clear browser access."
-                )
-                st.rerun()
+                saved, error = authorize_browser()
+                if saved:
+                    st.success("Access granted. Browser authorization is being saved. Click Continue once the page finishes loading.")
+                    # Do not rerun immediately: the cookie controller writes
+                    # through a frontend component that needs time to mount.
+                    if st.button("Continue to Knowledge Base", type="primary"):
+                        st.rerun()
+                else:
+                    st.error(error)
             else:
                 st.error("Invalid access code.")
 
