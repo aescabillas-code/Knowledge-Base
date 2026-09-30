@@ -229,7 +229,7 @@ button[kind="header"],
 .admin-title { font-size:24px; font-weight:700; color:var(--text); }
 .admin-subtitle { color:var(--muted); margin-top:5px; font-size:13px; }
 .content-gap { height: 10px; }
-.bottom-nav-spacer { height: 46px; }
+.bottom-nav-spacer { height: 18px; }
 .bottom-nav-label { text-align:center; color:#6c808b; font-size:10px; padding:4px 0 8px; }
 
 
@@ -329,12 +329,32 @@ button[kind="header"],
 
 
 /* Search / document reader redesign */
+.search-results-heading {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin:18px 0 2px;
+    color:#102d42;
+    font-size:15px;
+    font-weight:800;
+}
+.sort-chip {
+    border:1px solid #d8e3e8;
+    background:#fff;
+    border-radius:7px;
+    padding:7px 10px;
+    font-size:10px;
+    font-weight:600;
+    color:#315468;
+}
+
 .search-count { color:#687b87; font-size:11px; margin:2px 0 8px; }
 .reader-toolbar {
-    background:#ffffff; border:1px solid var(--border); border-radius:8px;
-    padding:7px 10px; margin-bottom:8px;
+    background:#ffffff; border:1px solid var(--border); border-radius:9px;
+    padding:10px 12px; margin-bottom:7px;
+    box-shadow:0 1px 3px rgba(11,37,56,.03);
 }
-.reader-title { font-size:15px; font-weight:700; color:var(--text); line-height:1.3; word-break:break-word; }
+.reader-title { font-size:13px; font-weight:700; color:var(--text); line-height:1.3; word-break:break-word; }
 .reader-meta { font-size:11px; color:var(--muted); margin-top:2px; }
 .reader-match {
     background:#e7f8f1; border:1px solid #9bdcc8; color:#087c63;
@@ -462,7 +482,7 @@ button[kind="header"],
 }
 .source-page-label { font-size:11px; font-weight:700; color:#315468; margin:8px 0 5px; padding:5px 8px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
 
-/* Interactive knowledge tiles */
+/* Interactive knowledge tiles — visual language follows the supplied mockup */
 .explorer-title { font-size:15px; font-weight:800; color:#123b50; margin:14px 0 8px; }
 .explorer-subtitle { font-size:10px; color:#687b87; margin-bottom:8px; }
 .tile-grid { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
@@ -470,6 +490,90 @@ button[kind="header"],
 .knowledge-tile:hover { border-color:#00a982; box-shadow:0 2px 8px rgba(0,169,130,.10); }
 .tile-name { font-size:11px; font-weight:700; color:#123b50; }
 .tile-count { font-size:9px; color:#687b87; margin-top:2px; }
+
+/* Four explorer summary cards */
+.st-key-knowledge_mode_all button,
+.st-key-knowledge_mode_category button,
+.st-key-knowledge_mode_device button,
+.st-key-knowledge_mode_topic button {
+    min-height:66px !important;
+    height:66px !important;
+    padding:8px 12px !important;
+    border-radius:9px !important;
+    text-align:left !important;
+    white-space:pre-line !important;
+    font-size:13px !important;
+    font-weight:700 !important;
+    line-height:1.35 !important;
+    border:1px solid #d8e3e8 !important;
+    box-shadow:0 1px 3px rgba(11,37,56,.04) !important;
+}
+.st-key-knowledge_mode_all button[kind="primary"] {
+    background:#18394d !important;
+    border-color:#18394d !important;
+    color:#fff !important;
+}
+.st-key-knowledge_mode_category button,
+.st-key-knowledge_mode_device button,
+.st-key-knowledge_mode_topic button {
+    background:#fff !important;
+    color:#17344a !important;
+}
+.st-key-knowledge_mode_category button:hover,
+.st-key-knowledge_mode_device button:hover,
+.st-key-knowledge_mode_topic button:hover {
+    border-color:#00a982 !important;
+    color:#087c63 !important;
+}
+
+.browse-heading {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin:16px 0 7px;
+    color:#102d42;
+    font-size:15px;
+    font-weight:800;
+}
+.browse-viewall { color:#0067c5; font-size:11px; font-weight:700; }
+.selected-explorer {
+    margin:5px 0 8px;
+    color:#087c63;
+    background:#e8f8f3;
+    border:1px solid #a8dfd0;
+    border-radius:6px;
+    padding:5px 8px;
+    font-size:10px;
+}
+
+/* Six compact browse tiles per row */
+.st-key-knowledge_tile_Category_0 button,
+.st-key-knowledge_tile_Category_1 button,
+.st-key-knowledge_tile_Category_2 button,
+.st-key-knowledge_tile_Category_3 button,
+.st-key-knowledge_tile_Category_4 button,
+.st-key-knowledge_tile_Category_5 button,
+.st-key-knowledge_tile_Device_0 button,
+.st-key-knowledge_tile_Device_1 button,
+.st-key-knowledge_tile_Device_2 button,
+.st-key-knowledge_tile_Device_3 button,
+.st-key-knowledge_tile_Device_4 button,
+.st-key-knowledge_tile_Device_5 button,
+.st-key-knowledge_tile_Topic_0 button,
+.st-key-knowledge_tile_Topic_1 button,
+.st-key-knowledge_tile_Topic_2 button,
+.st-key-knowledge_tile_Topic_3 button,
+.st-key-knowledge_tile_Topic_4 button,
+.st-key-knowledge_tile_Topic_5 button {
+    min-height:86px !important;
+    height:86px !important;
+    padding:7px 4px !important;
+    border-radius:8px !important;
+    white-space:pre-line !important;
+    line-height:1.35 !important;
+    font-size:10px !important;
+    font-weight:700 !important;
+}
 
 /* Streamlit controls */
 button[kind="primary"] { background: var(--teal) !important; border-color: var(--teal) !important; }
@@ -1549,7 +1653,7 @@ with st.container(key="header_shell"):
             <div class="brand-divider"></div>
             <div class="title-block">
                 <div class="app-title">Knowledge Base</div>
-                <div class="app-subtitle">Find exact information from your organization's documents</div>
+                <div class="app-subtitle">Search. Find. Resolve.</div>
             </div>
             <div class="top-user">{user_name}</div>
         </div>
@@ -1730,75 +1834,25 @@ elif st.session_state.page == "Manage Documents":
 else:
     st.session_state.page = "Search"
 
-    # ========================================================
-    # INTERACTIVE KNOWLEDGE TILES
-    # ========================================================
-    tile_data = get_knowledge_tiles()
-    st.markdown('<div class="explorer-title">Explore the Knowledge Base</div>', unsafe_allow_html=True)
-    st.markdown('<div class="explorer-subtitle">Click a category, device, or topic to instantly search the indexed PDFs.</div>', unsafe_allow_html=True)
-
-    tile_type = st.session_state.get("knowledge_tile_type", "Category")
-    type_cols = st.columns(3)
-    for idx, label in enumerate(["Category", "Device", "Topic"]):
-        with type_cols[idx]:
-            if st.button(
-                f"{label}  ·  {len(tile_data.get(label, []))}",
-                key=f"tile_type_{label}",
+    # --------------------------------------------------------
+    # SEARCH BAR — kept at the very top, matching the reference
+    # --------------------------------------------------------
+    with st.form("main_search_form", clear_on_submit=False):
+        search_col, button_col = st.columns([7.2, 1.0], gap="small")
+        with search_col:
+            query = st.text_input(
+                "Search",
+                value=st.session_state.search_query,
+                placeholder="Search the knowledge base...",
+                label_visibility="collapsed",
+                key="main_search_box",
+            )
+        with button_col:
+            search_clicked = st.form_submit_button(
+                "⌕  Search",
+                type="primary",
                 use_container_width=True,
-                type="primary" if tile_type == label else "secondary",
-            ):
-                st.session_state.knowledge_tile_type = label
-                st.session_state.knowledge_tile_value = None
-                st.rerun()
-
-    active_tiles = tile_data.get(tile_type, [])
-    if active_tiles:
-        # Render tiles in compact rows.
-        tile_cols = st.columns(4, gap="small")
-        for idx, (label, count) in enumerate(active_tiles):
-            with tile_cols[idx % 4]:
-                if st.button(
-                    f"{label}\n{count} PDF{'s' if count != 1 else ''}",
-                    key=f"knowledge_tile_{tile_type}_{idx}_{label}",
-                    use_container_width=True,
-                    type="secondary",
-                ):
-                    st.session_state.knowledge_tile_value = label
-                    # A tile acts like a search shortcut. Category tiles also
-                    # activate the normal Category filter.
-                    if tile_type == "Category":
-                        st.session_state.search_category = label
-                        st.session_state.search_query = ""
-                    else:
-                        st.session_state.search_query = label
-                    st.session_state.selected_result_id = None
-                    st.session_state.search_signature = None
-                    st.rerun()
-    else:
-        st.caption(f"No {tile_type.lower()} tiles were detected in the indexed PDFs yet.")
-
-    # Put the search box and Search button inside a Streamlit form so pressing
-    # Enter in the text field submits the search exactly like clicking Search.
-    # The filter popover remains outside the form so changing filters does not
-    # require a separate form submission.
-    search_form_col, filter_col = st.columns([7.4, 1.0], gap="small")
-    with search_form_col:
-        with st.form("main_search_form", clear_on_submit=False):
-            search_col, button_col = st.columns([6.4, 1.0], gap="small")
-            with search_col:
-                query = st.text_input(
-                    "Search",
-                    value=st.session_state.search_query,
-                    placeholder="What should I check or find in the knowledge base?",
-                    label_visibility="collapsed",
-                    key="main_search_box",
-                )
-            with button_col:
-                search_clicked = st.form_submit_button("Search", type="primary", use_container_width=True)
-    with filter_col:
-        with st.popover("☷ Filters", use_container_width=True):
-            category = st.selectbox("Category", ["All Categories"] + get_categories(), key="search_category")
-            top_k = st.selectbox("Results", [5, 10, 20], index=1, key="search_top_k")
+            )
 
     if search_clicked:
         st.session_state.search_query = query
@@ -1809,204 +1863,285 @@ else:
     category = st.session_state.get("search_category", "All Categories")
     top_k = st.session_state.get("search_top_k", 10)
 
+    # --------------------------------------------------------
+    # TOP EXPLORER SWITCHER — All / Category / Device / Topic
+    # --------------------------------------------------------
+    tile_data = get_knowledge_tiles()
+    docs = get_documents()
+    total_docs = len(docs)
+    tile_type = st.session_state.get("knowledge_tile_type", "Category")
+
+    mode_cols = st.columns(4, gap="small")
+    mode_defs = [
+        ("All", total_docs),
+        ("Category", len(tile_data.get("Category", []))),
+        ("Device", len(tile_data.get("Device", []))),
+        ("Topic", len(tile_data.get("Topic", []))),
+    ]
+
+    for idx, (label, count) in enumerate(mode_defs):
+        with mode_cols[idx]:
+            is_active = label == "All"
+            if label == "All":
+                mode_text = f"▱  All\n{count} PDFs"
+            elif label == "Category":
+                mode_text = f"▰  Category\n{count} categories"
+            elif label == "Device":
+                mode_text = f"▣  Device\n{count} devices"
+            else:
+                mode_text = f"▤  Topic\n{count} topics"
+
+            if st.button(
+                mode_text,
+                key=f"knowledge_mode_{label.lower()}",
+                use_container_width=True,
+                type="primary" if is_active else "secondary",
+            ):
+                if label == "All":
+                    st.session_state.knowledge_tile_type = "Category"
+                    st.session_state.knowledge_tile_value = None
+                    st.session_state.search_category = "All Categories"
+                    st.session_state.search_query = ""
+                else:
+                    st.session_state.knowledge_tile_type = label
+                    st.session_state.knowledge_tile_value = None
+                st.session_state.knowledge_tile_show_all = False
+                st.session_state.selected_result_id = None
+                st.session_state.search_signature = None
+                st.rerun()
+
+    # Keep filtering state available to the search engine without adding a
+    # visible sidebar or filter row to the reference layout.
+    if "search_category" not in st.session_state:
+        st.session_state.search_category = "All Categories"
+    if "search_top_k" not in st.session_state:
+        st.session_state.search_top_k = 10
+
+    category = st.session_state.get("search_category", "All Categories")
+    top_k = st.session_state.get("search_top_k", 10)
+
+    # A selected Category tile is a category browse. Device/Topic tiles are
+    # keyword shortcuts that use the normal TF-IDF PDF search.
     selected_tile = st.session_state.get("knowledge_tile_value")
     if selected_tile:
         st.markdown(
-            f'<div class="search-count">Selected {tile_type.lower()}: <b>{selected_tile}</b> · click another tile to change it</div>',
+            f'<div class="selected-explorer">Selected {tile_type.lower()}: <b>{selected_tile}</b></div>',
             unsafe_allow_html=True,
         )
 
-    if active_query or (tile_type == "Category" and category != "All Categories"):
+    should_search = bool(active_query) or (tile_type == "Category" and category != "All Categories")
 
+    if should_search:
         search_signature = (active_query, category, top_k)
         if st.session_state.get("search_signature") != search_signature:
-            st.session_state.search_results = search_documents(active_query, category=category, top_k=top_k)
+            st.session_state.search_results = search_documents(
+                active_query,
+                category=category,
+                top_k=top_k,
+            )
             st.session_state.search_signature = search_signature
             st.session_state.viewer_page = None
 
-        results = st.session_state.get("search_results", [])
+    results = st.session_state.get("search_results", []) if should_search else []
 
-        if not results:
-            st.session_state.selected_result_id = None
+    # --------------------------------------------------------
+    # MAIN BODY — left browser/results + right PDF reader
+    # --------------------------------------------------------
+    left_col, right_col = st.columns([1.12, 1.0], gap="large")
 
-        if not results:
-            st.warning("No matching PDF was found. Try different keywords or upload another document.")
+    with left_col:
+        # Browse section title follows the reference image.
+        browse_label = {
+            "Category": "Browse by Category",
+            "Device": "Browse by Device",
+            "Topic": "Browse by Topic",
+        }.get(tile_type, "Browse by Category")
+        st.markdown(
+            f'<div class="browse-heading"><span>{browse_label}</span><span class="browse-viewall">View All</span></div>',
+            unsafe_allow_html=True,
+        )
+
+        active_tiles = tile_data.get(tile_type, [])
+        show_all = st.session_state.get("knowledge_tile_show_all", False)
+        visible_tiles = active_tiles if show_all else active_tiles[:6]
+
+        if visible_tiles:
+            tile_cols = st.columns(6, gap="small")
+            tile_icons = {
+                "Category": ["▤", "♧", "✚", "⬢", "▤", "⌁"],
+                "Device": ["♧", "⬡", "▰", "◉", "▣", "▥"],
+                "Topic": ["⇩", "⚙", "☷", "⬢", "●", "⚠"],
+            }
+            icons = tile_icons.get(tile_type, [])
+
+            for idx, (label, count) in enumerate(visible_tiles):
+                with tile_cols[idx % 6]:
+                    selected = selected_tile == label
+                    icon = icons[idx % len(icons)] if icons else "▤"
+                    if st.button(
+                        f"{icon}\n{label}\n{count} PDFs",
+                        key=f"knowledge_tile_{tile_type}_{idx}_{label}",
+                        use_container_width=True,
+                        type="primary" if selected else "secondary",
+                    ):
+                        st.session_state.knowledge_tile_value = label
+                        st.session_state.knowledge_tile_show_all = False
+                        if tile_type == "Category":
+                            st.session_state.search_category = label
+                            st.session_state.search_query = ""
+                        else:
+                            st.session_state.search_query = label
+                        st.session_state.selected_result_id = None
+                        st.session_state.search_signature = None
+                        st.rerun()
+
+            if len(active_tiles) > 6:
+                if st.button(
+                    "Show fewer" if show_all else "›",
+                    key=f"view_all_{tile_type}",
+                    help="Show all available tiles" if not show_all else "Show fewer tiles",
+                ):
+                    st.session_state.knowledge_tile_show_all = not show_all
+                    st.rerun()
         else:
-            best = results[0]
+            st.caption(f"No {tile_type.lower()} tiles were detected in the indexed PDFs yet.")
 
-            # The selected result controls the PDF shown in the viewer.
-            # The search ranking itself stays unchanged; selecting a result only
-            # changes which PDF/page is displayed on the right.
+        # Search results stay directly below the browse tiles.
+        if results:
+            st.markdown(
+                f'<div class="search-results-heading"><span>Search Results</span><span class="sort-chip">Sort by: Relevance ˅</span></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f'<div class="search-count">{len(results)} result(s) for “{active_query or selected_tile or category}” — Showing the highest match first</div>',
+                unsafe_allow_html=True,
+            )
+
+            for i, result in enumerate(results):
+                is_best = i == 0
+                key_prefix = "best" if is_best else str(i)
+                is_selected = result["id"] == st.session_state.get("selected_result_id")
+                with st.container(key=f"search_result_{key_prefix}", border=True):
+                    score_pct = min(99, max(1, round(result["score"] * 100))) if result["score"] else 0
+                    label = "Highest Match" if is_best else "Search Result"
+                    if is_selected:
+                        label = "Selected Result"
+                    st.markdown(
+                        f"""
+                        <div class='result-label'>{label}<span class='result-score-pill'>{score_pct}%</span></div>
+                        <div class='result-filename'>{result['filename']}</div>
+                        <div class='result-page'>Page {result['page_number']}</div>
+                        <div class='result-snippet'>{result['snippet']}</div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("Open Result", key=f"open_result_{result['id']}", use_container_width=True):
+                        st.session_state.selected_result_id = result["id"]
+                        st.session_state.viewer_page = int(result["page_number"])
+                        st.rerun()
+        elif should_search:
+            st.warning("No matching PDF was found. Try different keywords or upload another document.")
+
+    with right_col:
+        if results:
+            best = results[0]
             selected_result_id = st.session_state.get("selected_result_id")
             selected_matches = [r for r in results if r["id"] == selected_result_id]
             selected_result = selected_matches[0] if selected_matches else best
 
-            # If the selected result disappeared because filters/search changed,
-            # automatically fall back to the highest match.
             if selected_result_id != selected_result["id"]:
                 st.session_state.selected_result_id = selected_result["id"]
                 st.session_state.viewer_page = int(selected_result["page_number"])
 
             selected_doc = get_document_by_id(selected_result["document_id"])
             total_pages = int(selected_doc["page_count"] or 0) if selected_doc else 0
-
             if st.session_state.get("viewer_page") is None:
                 st.session_state.viewer_page = int(selected_result["page_number"])
-
             viewer_page = max(1, min(int(st.session_state.viewer_page), max(total_pages, 1)))
 
             st.markdown(
-                f'<div class="search-count">{len(results)} search result(s) · Showing the highest match first</div>',
+                f"""
+                <div class='reader-toolbar'>
+                    <div class='reader-title'>▤ {selected_result['filename']}</div>
+                    <div class='reader-meta'>Page {viewer_page} of {total_pages} · Search: “{active_query or selected_tile or ''}”</div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
 
-            related_col, source_col = st.columns([0.82, 1.8], gap="large")
+            zoom = st.selectbox(
+                "Zoom",
+                [100, 125, 150, 175, 200],
+                index=0,
+                format_func=lambda x: f"{x}%",
+                label_visibility="collapsed",
+                key="pdf_zoom",
+            )
 
-            with related_col:
-                st.markdown('<div class="panel-title">Search Results</div>', unsafe_allow_html=True)
+            render_scale = zoom / 100 * 1.05
+            image = render_pdf_page_highlighted(
+                selected_result["stored_path"],
+                viewer_page,
+                active_query or selected_tile or "",
+                scale=render_scale,
+            )
 
-                for i, result in enumerate(results):
-                    is_best = i == 0
-                    key_prefix = "best" if is_best else str(i)
-                    with st.container(key=f"search_result_{key_prefix}", border=True):
-                        score_pct = min(99, max(1, round(result["score"] * 100)))
-                        label = "Highest Match" if is_best else "Search Result"
-                        st.markdown(
-                            f"""
-                            <div class='result-label'>{label}<span class='result-score-pill'>{score_pct}%</span></div>
-                            <div class='result-filename'>{result['filename']}</div>
-                            <div class='result-page'>Page {result['page_number']}</div>
-                            <div class='result-snippet'>{result['snippet']}</div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                        if st.button("Open Result", key=f"open_result_{result['id']}", use_container_width=True):
-                            st.session_state.selected_result_id = result["id"]
-                            st.session_state.viewer_page = int(result["page_number"])
+            if image:
+                display_width = {100: 760, 125: 860, 150: 960, 175: 1080, 200: 1200}.get(int(zoom), 760)
+                with st.container(key="pdf_viewer_shell"):
+                    with st.container(key="pdf_prev_wrap"):
+                        if st.button(
+                            "‹",
+                            disabled=(viewer_page <= 1),
+                            key="pdf_prev",
+                            help="Previous page",
+                        ):
+                            st.session_state.viewer_page = max(1, viewer_page - 1)
                             st.rerun()
+                    with st.container(key="pdf_next_wrap"):
+                        if st.button(
+                            "›",
+                            disabled=(viewer_page >= total_pages),
+                            key="pdf_next",
+                            help="Next page",
+                        ):
+                            st.session_state.viewer_page = min(total_pages, viewer_page + 1)
+                            st.rerun()
+                    st.image(image, width=display_width)
+            else:
+                st.error("Unable to render this PDF page.")
 
-                matches = find_document_matches(selected_result["stored_path"], active_query, limit=8)
-                st.markdown('<div class="match-panel"><div class="match-panel-title">Matches in this PDF</div></div>', unsafe_allow_html=True)
-                if matches:
+            matches = find_document_matches(
+                selected_result["stored_path"],
+                active_query or selected_tile or "",
+                limit=8,
+            )
+            if matches:
+                with st.expander("Matches in this PDF", expanded=False):
                     for match in matches:
-                        if st.button(f"Page {match['page']}", key=f"jump_match_{selected_result['id']}_{match['page']}", use_container_width=True):
+                        if st.button(
+                            f"Page {match['page']}",
+                            key=f"jump_match_{selected_result['id']}_{match['page']}",
+                            use_container_width=True,
+                        ):
                             st.session_state.viewer_page = match["page"]
                             st.rerun()
                         st.markdown(
                             f"<div class='match-item'><div class='match-item-page'>Page {match['page']} · {match['score']} term match(es)</div><div class='match-item-text'>{match['snippet']}</div></div>",
                             unsafe_allow_html=True,
                         )
-                else:
-                    st.caption("No exact text occurrence was detected on the other pages.")
+        else:
+            st.markdown(
+                """
+                <div class="welcome-card">
+                    <div class="welcome-icon">⌕</div>
+                    <div class="welcome-title">Search your knowledge base</div>
+                    <div class="welcome-text">Search for a process, checklist, policy, troubleshooting step, or any information contained in your uploaded PDFs.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-
-            with source_col:
-                st.markdown(
-                    f"""
-                    <div class='reader-toolbar'>
-                        <div class='reader-title'>▣ {selected_result['filename']}</div>
-                        <div class='reader-meta'>Page {viewer_page} of {total_pages} · Search: “{active_query}”</div>
-                        <div class='reader-match'>Selected result · source text shown exactly as it appears in the PDF</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                # Keep zoom controls in the toolbar, while the page navigation arrows
-                # float over the left/right edges of the PDF itself.  This keeps the
-                # reader compact and makes page turning feel like a real document viewer.
-                zoom_col, page_col = st.columns([1, 1.25], gap="small")
-                with zoom_col:
-                    zoom = st.selectbox(
-                        "Zoom",
-                        [100, 125, 150, 175, 200],
-                        index=2,
-                        format_func=lambda x: f"{x}%",
-                        label_visibility="collapsed",
-                        key="pdf_zoom",
-                    )
-                with page_col:
-                    st.markdown(
-                        f"<div class='reader-page-indicator'>Page <b>{viewer_page}</b> / {total_pages}</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                # Render at a slightly lower pixel density than the old 1.25x multiplier.
-                # The displayed width still follows the zoom setting, but the browser has
-                # fewer pixels to paint, which makes scrolling and page navigation faster.
-                render_scale = zoom / 100 * 1.05
-                image = render_pdf_page_highlighted(
-                    selected_result["stored_path"],
-                    viewer_page,
-                    active_query,
-                    scale=render_scale,
-                )
-
-                if image:
-                    display_width = {100: 700, 125: 820, 150: 930, 175: 1040, 200: 1180}.get(int(zoom), 930)
-
-                    with st.container(key="pdf_viewer_shell"):
-                        # These are intentionally icon-only and positioned over the PDF.
-                        # They remain disabled at the first/last page.
-                        with st.container(key="pdf_prev_wrap"):
-                            if st.button(
-                                "‹",
-                                disabled=(viewer_page <= 1),
-                                key="pdf_prev",
-                                help="Previous page",
-                            ):
-                                st.session_state.viewer_page = max(1, viewer_page - 1)
-                                st.rerun()
-
-                        with st.container(key="pdf_next_wrap"):
-                            if st.button(
-                                "›",
-                                disabled=(viewer_page >= total_pages),
-                                key="pdf_next",
-                                help="Next page",
-                            ):
-                                st.session_state.viewer_page = min(total_pages, viewer_page + 1)
-                                st.rerun()
-
-                        st.image(image, width=display_width)
-                else:
-                    st.error("Unable to render this PDF page.")
-
-                current_text = ""
-                try:
-                    with fitz.open(selected_result["stored_path"]) as pdf:
-                        current_text = clean_text(pdf[viewer_page - 1].get_text("text"))
-                except Exception:
-                    current_text = ""
-
-                if current_text:
-                    st.markdown(
-                        f"""
-                        <div class='match-panel'>
-                            <div class='match-panel-title'>Match context · Page {viewer_page}</div>
-                            <div class='result-snippet' style='font-size:12px;line-height:1.55;color:#294a5c;'>{make_snippet(current_text, active_query, radius=520)}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-    else:
-        docs = get_documents()
-        total_pages = sum(int(d["page_count"] or 0) for d in docs)
-        st.markdown(
-            f"""
-            <div class="welcome-card">
-                <div class="welcome-icon">⌕</div>
-                <div class="welcome-title">Search your knowledge base</div>
-                <div class="welcome-text">Search for a process, checklist, policy, troubleshooting step, or any information contained in your uploaded PDFs.</div>
-                <div class="welcome-stats"><span><b>{len(docs)}</b> documents</span><span><b>{total_pages:,}</b> indexed pages</span></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-# ============================================================
-# BOTTOM NAVIGATION
 # ============================================================
 
 st.markdown('<div class="bottom-nav-spacer"></div>', unsafe_allow_html=True)
