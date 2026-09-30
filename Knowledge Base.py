@@ -123,46 +123,57 @@ button[kind="header"],
 .title-block { flex: 1; }
 .top-tagline { text-align: right; color: #18394e; font-size: 12px; line-height: 1.3; margin-right: 12px; }
 .top-actions { width: 36px; }
-/* Admin gear: visually docked directly beside Authorized User.
-   It is fixed so it never consumes space in the header or moves filters/search controls. */
-.kb-topbar { position: relative; }
+/* Header action group: Authorized User + admin gear stay together. */
+.st-key-header_shell {
+    position: relative !important;
+    width: 100% !important;
+    height: 76px !important;
+    min-height: 76px !important;
+    margin: 0 0 8px 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+}
+.st-key-header_shell .kb-topbar {
+    position: relative !important;
+}
 .st-key-gear_wrap {
-    position:fixed !important;
-    top:23px !important;
-    right:12px !important;
-    width:30px !important;
-    height:30px !important;
-    margin:0 !important;
-    padding:0 !important;
-    z-index:10000 !important;
-    pointer-events:none !important;
+    position: absolute !important;
+    top: 50% !important;
+    right: 10px !important;
+    width: 30px !important;
+    height: 30px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: translateY(-50%) !important;
+    z-index: 10000 !important;
+    pointer-events: none !important;
 }
 .st-key-gear_wrap > div,
 .st-key-gear_wrap div[data-testid="stPopover"] {
-    width:30px !important;
-    margin:0 !important;
-    padding:0 !important;
-    pointer-events:auto !important;
+    width: 30px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: auto !important;
 }
 .st-key-gear_wrap div[data-testid="stPopover"] > button {
-    width:30px !important;
-    min-width:30px !important;
-    height:30px !important;
-    min-height:30px !important;
-    padding:0 !important;
-    border:0 !important;
-    border-radius:4px !important;
-    background:#e8f7f7 !important;
-    box-shadow:none !important;
-    color:#315468 !important;
-    font-size:13px !important;
-    line-height:30px !important;
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border: 1px solid #cfdde2 !important;
+    border-radius: 6px !important;
+    background: #e8f7f7 !important;
+    box-shadow: none !important;
+    color: #315468 !important;
+    font-size: 13px !important;
+    line-height: 30px !important;
 }
 .st-key-gear_wrap div[data-testid="stPopover"] > button:hover,
 .st-key-gear_wrap div[data-testid="stPopover"] > button:focus {
-    background:#e8f7f7 !important;
-    color:#087c63 !important;
-    box-shadow:none !important;
+    background: #e8f7f7 !important;
+    color: #087c63 !important;
+    box-shadow: none !important;
 }
 
 
@@ -237,7 +248,7 @@ button[kind="header"],
     padding:7px 10px;
     border-radius:4px;
     position:absolute;
-    right:50px;
+    right:46px;
     top:50%;
     transform:translateY(-50%);
     z-index:2;
@@ -1348,53 +1359,54 @@ if not browser_is_authorized():
 
 user_name = "Authorized User"
 
-st.markdown(
-    f"""
-    <div class="kb-topbar">
-        <div class="brand-block">
-            <div class="brand-mark"></div>
-            <div class="brand-name">Hewlett Packard<br>Enterprise</div>
+with st.container(key="header_shell"):
+    st.markdown(
+        f"""
+        <div class="kb-topbar">
+            <div class="brand-block">
+                <div class="brand-mark"></div>
+                <div class="brand-name">Hewlett Packard<br>Enterprise</div>
+            </div>
+            <div class="brand-divider"></div>
+            <div class="title-block">
+                <div class="app-title">Knowledge Base</div>
+                <div class="app-subtitle">Find exact information from your organization's documents</div>
+            </div>
+            <div class="top-user">{user_name}</div>
         </div>
-        <div class="brand-divider"></div>
-        <div class="title-block">
-            <div class="app-title">Knowledge Base</div>
-            <div class="app-subtitle">Find exact information from your organization's documents</div>
-        </div>
-        <div class="top-user">{user_name}</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
 
-# Gear/admin menu.
-# Keep the gear in a dedicated keyed wrapper so the Filters popover is never repositioned.
-with st.container(key="gear_wrap"):
-    with st.popover("⚙", use_container_width=False):
-        st.markdown("**Knowledge Base Access**")
-        st.caption(
-            "Browser authorization: Persistent until manually cleared"
-        )
-        st.divider()
+    # Gear is inside the same header container as Authorized User, so its vertical
+    # position is tied to the header rather than the browser viewport.
+    with st.container(key="gear_wrap"):
+        with st.popover("⚙", use_container_width=False):
+            st.markdown("**Knowledge Base Access**")
+            st.caption(
+                "Browser authorization: Persistent until manually cleared"
+            )
+            st.divider()
 
-        if st.session_state.admin_authenticated:
-            if st.button("Manage Documents", use_container_width=True):
-                st.session_state.page = "Manage Documents"
-                st.rerun()
+            if st.session_state.admin_authenticated:
+                if st.button("Manage Documents", use_container_width=True):
+                    st.session_state.page = "Manage Documents"
+                    st.rerun()
 
-            if st.button("Sign out admin", use_container_width=True):
+                if st.button("Sign out admin", use_container_width=True):
+                    st.session_state.admin_authenticated = False
+                    st.session_state.page = "Search"
+                    st.rerun()
+            else:
+                if st.button("🔒 Manage Documents", use_container_width=True):
+                    st.session_state.page = "Admin Login"
+                    st.rerun()
+
+            if st.button("Clear Browser Access", use_container_width=True):
+                clear_browser_access()
                 st.session_state.admin_authenticated = False
                 st.session_state.page = "Search"
                 st.rerun()
-        else:
-            if st.button("🔒 Manage Documents", use_container_width=True):
-                st.session_state.page = "Admin Login"
-                st.rerun()
-
-        if st.button("Clear Browser Access", use_container_width=True):
-            clear_browser_access()
-            st.session_state.admin_authenticated = False
-            st.session_state.page = "Search"
-            st.rerun()
 
 
 # ============================================================
