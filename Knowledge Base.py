@@ -24,11 +24,6 @@ except Exception:
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Local/offline AI support via Ollama.
-# No OpenAI API key is required.
-from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
-
 # ============================================================
 # CONFIG
 # ============================================================
@@ -463,6 +458,17 @@ def init_db():
             chunk_index INTEGER NOT NULL,
             text TEXT NOT NULL,
             FOREIGN KEY(document_id) REFERENCES documents(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS decision_trees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            category TEXT DEFAULT 'General',
+            description TEXT DEFAULT '',
+            start_node TEXT NOT NULL,
+            nodes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
         );
         """
     )
@@ -1032,162 +1038,115 @@ def search_documents(query, category="All Categories", top_k=10):
 
 
 # ============================================================
-# LOCAL / OFFLINE AI Q&A
+# DECISION TREE ENGINE
 # ============================================================
-# The AI runs locally through Ollama. The Streamlit app sends only the
-# retrieved PDF passages to the local model. No OpenAI API key is required.
-#
-# Local configuration can be supplied with Streamlit Secrets or environment:
-# OLLAMA_BASE_URL = "http://127.0.0.1:11434"
-# OLLAMA_MODEL = "llama3.2:3b"   # change to any model installed in Ollama
+
+def get_decision_trees():
+    conn = db()
+    rows = conn.execute("SELECT * FROM decision_trees ORDER BY name").fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
-def get_ollama_base_url():
+def get_decision_tree(tree_id):
+    conn = db()
+    row = conn.execute("SELECT * FROM decision_trees WHERE id = ?", (tree_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_decision_tree(name, category, description, start_node, nodes):
+    name = name.strip(); category = category.strip() or "General"; description = description.strip(); start_node = start_node.strip()
+    if not name or not start_node or not isinstance(nodes, dict) or start_node not in nodes:
+        return False, "Tree name, start node, and a valid start node definition are required."
+    now = datetime.now().isoformat(timespec="seconds")
+    payload = json.dumps(nodes, ensure_ascii=False, indent=2)
+    conn = db()
     try:
-        value = str(st.secrets.get("OLLAMA_BASE_URL", "")).strip()
-    except Exception:
-        value = ""
-    return (value or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
-
-
-def get_ollama_model():
-    try:
-        value = str(st.secrets.get("OLLAMA_MODEL", "")).strip()
-    except Exception:
-        value = ""
-    return value or os.getenv("OLLAMA_MODEL", "llama3.2:3b").strip()
-
-
-def ollama_is_available():
-    try:
-        req = Request(f"{get_ollama_base_url()}/api/tags", method="GET")
-        with urlopen(req, timeout=2) as response:
-            return response.status == 200
-    except Exception:
-        return False
-
-
-def get_installed_ollama_models():
-    try:
-        req = Request(f"{get_ollama_base_url()}/api/tags", method="GET")
-        with urlopen(req, timeout=3) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        return [m.get("name", "") for m in payload.get("models", []) if m.get("name")]
-    except Exception:
-        return []
-
-
-def local_ai_generate(question, context):
-    """Generate an answer with a locally running Ollama model."""
-    system_prompt = """
-You are the AI assistant for a corporate PDF Knowledge Base.
-
-Use ONLY the retrieved PDF content supplied by the application.
-Do not use the internet, outside knowledge, memory, or assumptions.
-Do not invent policies, procedures, dates, requirements, product behavior,
-or instructions.
-If the supplied PDF content does not contain enough information, respond:
-"I couldn't find enough information in the Knowledge Base."
-
-Keep the answer concise and practical.
-Preserve important terminology from the PDF.
-If the source describes a procedure, use numbered steps.
-Every factual statement must include the supporting source number such as [1].
-Do not create citations for sources that were not supplied.
-""".strip()
-
-    prompt = f"""SYSTEM INSTRUCTIONS:
-{system_prompt}
-
-USER QUESTION:
-{question}
-
-RETRIEVED PDF CONTENT:
-{context}
-
-Answer only from the retrieved PDF content."""
-
-    payload = json.dumps({
-        "model": get_ollama_model(),
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.1},
-    }).encode("utf-8")
-
-    req = Request(
-        f"{get_ollama_base_url()}/api/generate",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    with urlopen(req, timeout=180) as response:
-        result = json.loads(response.read().decode("utf-8"))
-
-    answer = str(result.get("response", "")).strip()
-    if not answer:
-        raise RuntimeError("The local AI model returned an empty response.")
-    return answer
-
-
-def extractive_answer(question, results):
-    if not results:
-        return "I couldn't find that information in the Knowledge Base."
-
-    answer_parts = []
-    for i, item in enumerate(results[:5], start=1):
-        text = re.sub(r"\s+", " ", item["text"]).strip()
-        if len(text) > 700:
-            text = text[:700].rsplit(" ", 1)[0] + "..."
-        answer_parts.append(f"[{i}] {text}")
-    return "\n\n".join(answer_parts)
-
-
-def ai_answer(question, results):
-    """Answer strictly from local PDF retrieval using a local Ollama model."""
-    if not results:
-        return "I couldn't find that information in the Knowledge Base.", []
-
-    context_blocks = []
-    for i, item in enumerate(results[:6], start=1):
-        source_text = re.sub(r"\s+", " ", item["text"]).strip()
-        if len(source_text) > 5000:
-            source_text = source_text[:5000].rsplit(" ", 1)[0] + "..."
-        context_blocks.append(
-            f"""SOURCE [{i}]
-Document: {item['filename']}
-Page: {item['page_number']}
-Category: {item['category']}
-
-CONTENT:
-{source_text}"""
-        )
-
-    context = "\n\n".join(context_blocks)
-
-    try:
-        answer = local_ai_generate(question, context)
-        return answer, results[:6]
-    except HTTPError as e:
-        if e.code == 404:
-            message = (
-                f"Local AI model '{get_ollama_model()}' was not found in Ollama. "
-                f"Install that model in Ollama, or change OLLAMA_MODEL."
-            )
+        existing = conn.execute("SELECT id FROM decision_trees WHERE name = ?", (name,)).fetchone()
+        if existing:
+            conn.execute("UPDATE decision_trees SET category=?, description=?, start_node=?, nodes_json=?, updated_at=? WHERE id=?", (category, description, start_node, payload, now, existing["id"]))
         else:
-            message = f"The local AI service returned HTTP {e.code}."
-    except (URLError, TimeoutError):
-        message = (
-            "Local AI is not running. Start Ollama on the machine running the app "
-            f"and make sure it is available at {get_ollama_base_url()}."
-        )
-    except Exception as e:
-        message = f"Local AI could not answer this question: {e}"
-
-    return message + "\n\nShowing the most relevant PDF passages instead:\n\n" + extractive_answer(question, results), results[:6]
+            conn.execute("INSERT INTO decision_trees (name, category, description, start_node, nodes_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (name, category, description, start_node, payload, now, now))
+        conn.commit(); return True, "Decision tree saved successfully."
+    except sqlite3.IntegrityError:
+        return False, "A decision tree with that name already exists."
+    finally:
+        conn.close()
 
 
-# ============================================================
+def delete_decision_tree(tree_id):
+    conn = db(); conn.execute("DELETE FROM decision_trees WHERE id = ?", (tree_id,)); conn.commit(); conn.close()
+
+
+def parse_tree_nodes(raw_json):
+    try:
+        value = json.loads(raw_json)
+        if not isinstance(value, dict): return None, "The tree definition must be a JSON object keyed by node ID."
+        for node_id, node in value.items():
+            if not isinstance(node, dict): return None, f"Node '{node_id}' must be an object."
+            typ = str(node.get("type", "question")).lower()
+            if typ not in {"question", "action"}: return None, f"Node '{node_id}' must have type 'question' or 'action'."
+            if typ == "question":
+                if not str(node.get("question", "")).strip(): return None, f"Question node '{node_id}' needs a question."
+                answers = node.get("answers", [])
+                if not isinstance(answers, list) or not answers: return None, f"Question node '{node_id}' needs at least one answer."
+                for answer in answers:
+                    if not isinstance(answer, dict) or not str(answer.get("label", "")).strip() or not str(answer.get("next", "")).strip():
+                        return None, f"Every answer in '{node_id}' needs a label and next node."
+                    if str(answer.get("next")) not in value:
+                        return None, f"Answer '{answer.get('label')}' in '{node_id}' points to missing node '{answer.get('next')}'."
+        return value, None
+    except json.JSONDecodeError as e:
+        return None, f"Invalid JSON: {e}"
+
+
+def decision_tree_answer(label, next_node):
+    st.session_state.decision_tree_history.append({"question": st.session_state.decision_tree_current_question, "answer": label})
+    st.session_state.decision_tree_current_node = next_node
+    st.rerun()
+
+
+def render_decision_tree_page():
+    st.markdown("<div class=\"page-heading\"><div><div class=\"page-title\">Decision Tree</div><div class=\"page-description\">Answer each question and the next action is determined by your response.</div></div></div>", unsafe_allow_html=True)
+    trees = get_decision_trees()
+    if not trees:
+        st.info("No decision trees have been configured yet. An administrator can create one from the gear menu.")
+        return
+    options = {t["name"]: t["id"] for t in trees}
+    selected = st.selectbox("Select a decision tree", list(options), key="decision_tree_selector")
+    tree = get_decision_tree(options[selected])
+    if not tree:
+        st.error("The selected decision tree could not be loaded."); return
+    try:
+        nodes = json.loads(tree["nodes_json"])
+    except Exception:
+        st.error("This decision tree contains an invalid definition."); return
+    if st.session_state.get("decision_tree_id") != tree["id"]:
+        st.session_state.decision_tree_id = tree["id"]
+        st.session_state.decision_tree_current_node = tree["start_node"]
+        st.session_state.decision_tree_history = []
+    current = st.session_state.get("decision_tree_current_node", tree["start_node"])
+    node = nodes.get(current)
+    if not node:
+        st.error(f"Decision tree node '{current}' was not found."); return
+    if st.session_state.get("decision_tree_history"):
+        st.markdown("**Path:** " + " → ".join(x["answer"] for x in st.session_state.decision_tree_history))
+    if str(node.get("type", "question")).lower() == "action":
+        st.success("Next Action")
+        st.markdown(f"### {node.get('action', 'No action specified.')}")
+        if node.get("instructions"): st.markdown(node["instructions"])
+        if node.get("source_pdf"): st.caption(f"Source PDF: {node['source_pdf']}" + (f" · Page {node['source_page']}" if node.get("source_page") else ""))
+        if st.button("↻ Start Over", type="primary"):
+            st.session_state.decision_tree_current_node = tree["start_node"]; st.session_state.decision_tree_history = []; st.rerun()
+        return
+    st.markdown(f"<div class='best-match-card'><h3>{node.get('question', 'Question')}</h3><div>Choose the answer that matches the current situation.</div></div>", unsafe_allow_html=True)
+    st.session_state.decision_tree_current_question = node.get("question", "Question")
+    for i, answer in enumerate(node.get("answers", [])):
+        label = str(answer.get("label", "Answer")); nxt = str(answer.get("next", "")).strip()
+        if st.button(label, key=f"decision_answer_{tree['id']}_{current}_{i}", use_container_width=True): decision_tree_answer(label, nxt)
+    if st.button("↻ Restart", key=f"decision_restart_{tree['id']}"):
+        st.session_state.decision_tree_current_node = tree["start_node"]; st.session_state.decision_tree_history = []; st.rerun()
 
 
 # PDF VIEWER
@@ -1252,6 +1211,11 @@ if "search_query" not in st.session_state:
 
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
+
+if "decision_tree_id" not in st.session_state: st.session_state.decision_tree_id = None
+if "decision_tree_current_node" not in st.session_state: st.session_state.decision_tree_current_node = None
+if "decision_tree_current_question" not in st.session_state: st.session_state.decision_tree_current_question = ""
+if "decision_tree_history" not in st.session_state: st.session_state.decision_tree_history = []
 
 
 # ============================================================
@@ -1344,12 +1308,6 @@ if "search_results" not in st.session_state:
 
 if "search_signature" not in st.session_state:
     st.session_state.search_signature = None
-
-if "ai_answer" not in st.session_state:
-    st.session_state.ai_answer = ""
-
-if "ai_answer_signature" not in st.session_state:
-    st.session_state.ai_answer_signature = None
 
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
@@ -1547,6 +1505,10 @@ with st.container(key="gear_wrap"):
                 st.session_state.page = "Manage Documents"
                 st.rerun()
 
+            if st.button("Manage Decision Trees", use_container_width=True):
+                st.session_state.page = "Manage Decision Trees"
+                st.rerun()
+
             if st.button("Sign out admin", use_container_width=True):
                 st.session_state.admin_authenticated = False
                 st.session_state.page = "Search"
@@ -1657,8 +1619,6 @@ elif st.session_state.page == "Manage Documents":
                 clear_knowledge_caches()
                 st.session_state.search_results = []
                 st.session_state.search_signature = None
-                st.session_state.ai_answer = ""
-                st.session_state.ai_answer_signature = None
                 st.success(f"Completed. {success_count} document(s) indexed.")
 
     with library_col:
@@ -1693,8 +1653,6 @@ elif st.session_state.page == "Manage Documents":
                             clear_knowledge_caches()
                             st.session_state.search_results = []
                             st.session_state.search_signature = None
-                            st.session_state.ai_answer = ""
-                            st.session_state.ai_answer_signature = None
                             st.rerun()
 
     if st.button("← Back to Search"):
@@ -1703,8 +1661,53 @@ elif st.session_state.page == "Manage Documents":
 
 
 # ============================================================
+# ADMIN: MANAGE DECISION TREES
+# ============================================================
+
+elif st.session_state.page == "Manage Decision Trees":
+    if not st.session_state.admin_authenticated:
+        st.session_state.page = "Admin Login"; st.rerun()
+    st.markdown("<div class=\"page-heading\"><div><div class=\"page-title\">Manage Decision Trees</div><div class=\"page-description\">Build guided workflows where each answer determines the next question or action.</div></div><div class=\"admin-badge\">ADMIN ONLY</div></div>", unsafe_allow_html=True)
+    trees = get_decision_trees(); names = [t["name"] for t in trees]
+    choice = st.selectbox("Tree", ["+ Create New"] + names, key="dt_edit_choice")
+    selected = None if choice == "+ Create New" else next((t for t in trees if t["name"] == choice), None)
+    if selected:
+        name0, cat0, desc0, start0, json0 = selected["name"], selected["category"], selected["description"], selected["start_node"], selected["nodes_json"]
+    else:
+        name0, cat0, desc0, start0 = "", "General", "", "start"
+        json0 = json.dumps({"start":{"type":"question","question":"Is the issue related to account access?","answers":[{"label":"Yes","next":"account_access"},{"label":"No","next":"not_account_access"}]},"account_access":{"type":"action","action":"Verify the user's account and follow the Account Access procedure."},"not_account_access":{"type":"action","action":"Continue with the applicable troubleshooting workflow."}}, indent=2)
+    cats = ["General", "Policies", "Procedures", "Technical Support", "Licensing", "Training", "Product", "Account Management", "Other"]
+    with st.form("decision_tree_form"):
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            name = st.text_input("Tree Name", value=name0, placeholder="Example: Licensing Troubleshooting")
+            desc = st.text_input("Description", value=desc0, placeholder="When should this tree be used?")
+        with c2:
+            cat = st.selectbox("Category", cats, index=(cats.index(cat0) if cat0 in cats else 0))
+            start_node = st.text_input("Start Node ID", value=start0)
+        raw = st.text_area("Decision Tree Definition (JSON)", value=json0, height=480, help="Question nodes contain answers with next node IDs. Action nodes contain the next action.")
+        submitted = st.form_submit_button("Save Decision Tree", type="primary", use_container_width=True)
+    if submitted:
+        nodes, error = parse_tree_nodes(raw)
+        if error: st.error(error)
+        else:
+            ok, msg = save_decision_tree(name, cat, desc, start_node, nodes)
+            if ok: st.success(msg); st.session_state.decision_tree_id = None; st.rerun()
+            else: st.error(msg)
+    if selected and st.button("Delete This Decision Tree"):
+        delete_decision_tree(selected["id"]); st.session_state.decision_tree_id = None; st.rerun()
+    with st.expander("Decision Tree Format Example"):
+        st.code(json0, language="json")
+        st.caption("Question nodes display answer buttons. Each answer points to another node. Action nodes end the path and display the next action. No AI model is used.")
+    if st.button("← Back to Search"):
+        st.session_state.page = "Search"; st.rerun()
+
+
 # SEARCH KNOWLEDGE BASE
 # ============================================================
+
+elif st.session_state.page == "Decision Tree":
+    render_decision_tree_page()
 
 else:
     st.session_state.page = "Search"
@@ -1729,8 +1732,6 @@ else:
         st.session_state.search_query = query
         st.session_state.force_result_id = None
         st.session_state.search_signature = None
-        st.session_state.ai_answer = ""
-        st.session_state.ai_answer_signature = None
 
     active_query = st.session_state.search_query.strip()
     category = st.session_state.get("search_category", "All Categories")
@@ -1757,35 +1758,6 @@ else:
         if not results:
             st.warning("No matching PDF was found. Try different keywords or upload another document.")
         else:
-            ai_signature = (
-                active_query,
-                category,
-                top_k,
-                tuple((r["id"], r["page_number"], round(r["score"], 6)) for r in results[:6]),
-            )
-            if st.session_state.get("ai_answer_signature") != ai_signature:
-                with st.spinner("Local AI is reviewing the most relevant PDF content..."):
-                    ai_text, _ = ai_answer(active_query, results)
-                st.session_state.ai_answer = ai_text
-                st.session_state.ai_answer_signature = ai_signature
-
-            st.markdown(
-                f"""
-                <div class="ai-answer-card">
-                    <div class="ai-answer-head">
-                        <div class="ai-answer-title">AI Answer</div>
-                        <div class="ai-answer-badge">LOCAL AI · PDF SOURCES ONLY</div>
-                    </div>
-                    <div class="ai-answer-body">{st.session_state.ai_answer}</div>
-                    <div class="ai-source-note">
-                        Generated by your local AI model from the highest-ranked uploaded PDF matches.
-                        Verify the source using the PDF viewer and page references below.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
             best = results[0]
             best_doc = get_document_by_id(best["document_id"])
             total_pages = int(best_doc["page_count"] or 0) if best_doc else 0
@@ -1916,8 +1888,12 @@ else:
 st.markdown('<div class="bottom-nav-spacer"></div>', unsafe_allow_html=True)
 nav_left, nav_center, nav_right = st.columns([1, 2, 1])
 with nav_center:
-    if st.button("⌕  Search Knowledge Base", use_container_width=True):
-        st.session_state.page = "Search"
-        st.rerun()
+    nav1, nav2 = st.columns(2, gap="small")
+    with nav1:
+        if st.button("⌕  Search Knowledge Base", use_container_width=True):
+            st.session_state.page = "Search"; st.rerun()
+    with nav2:
+        if st.button("⑂  Decision Tree", use_container_width=True):
+            st.session_state.page = "Decision Tree"; st.rerun()
 
-st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search</div>', unsafe_allow_html=True)
+st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search · Guided Decision Trees</div>', unsafe_allow_html=True)
