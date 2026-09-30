@@ -1162,11 +1162,23 @@ def validate_browser_token(token):
 
 
 def browser_is_authorized():
+    """Restore authorization after a browser refresh/reconnect."""
     if st.session_state.access_authorized:
         return True
 
-    controller = get_cookie_controller()
+    # First read cookies from the browser request itself. This is reliable
+    # after F5/refresh because Streamlit receives these cookies on the
+    # initial WebSocket handshake.
+    try:
+        token = st.context.cookies.get("kb_access_token")
+        if validate_browser_token(token):
+            st.session_state.access_authorized = True
+            return True
+    except Exception:
+        pass
 
+    # Fallback for the cookie-controller component during normal reruns.
+    controller = get_cookie_controller()
     if controller is not None:
         try:
             token = controller.get("kb_access_token")
@@ -1190,6 +1202,12 @@ def authorize_browser():
             controller.set(
                 "kb_access_token",
                 token,
+                path="/",
+                # Keep the browser authorization persistent. The signed token
+                # itself has no expiry; this cookie is retained for 10 years
+                # unless the user clears browser access or browser cookies.
+                max_age=10 * 365 * 24 * 60 * 60,
+                same_site="lax",
             )
         except Exception:
             pass
