@@ -131,6 +131,28 @@ button[kind="header"],
 .title-block { flex: 1; }
 .top-tagline { text-align: right; color: #18394e; font-size: 12px; line-height: 1.3; margin-right: 12px; }
 .top-actions { width: 36px; }
+/* The admin gear is rendered by Streamlit immediately after the header.
+   Position it beside Authorized User so there is only one gear control. */
+div[data-testid="stPopover"] {
+    position: absolute !important;
+    top: 18px !important;
+    right: 8px !important;
+    z-index: 1000 !important;
+}
+div[data-testid="stPopover"] > button {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #173d53 !important;
+    padding: 2px 4px !important;
+    min-height: 28px !important;
+    font-size: 15px !important;
+}
+div[data-testid="stPopover"] > button:hover {
+    background: rgba(0,169,130,.08) !important;
+    color: #087c63 !important;
+}
+
 .bell { font-size: 22px; color: var(--navy); }
 
 .exact-answer-card {
@@ -196,7 +218,7 @@ button[kind="header"],
 .auth-subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
 .auth-card-title { font-size: 24px; font-weight: 700; color: var(--text); margin-top: 20px; }
 .auth-switch { text-align:center; color:var(--muted); font-size:12px; margin:12px 0 6px; }
-.top-user { color:#315468; font-size:12px; margin-right:12px; white-space:nowrap; }
+.top-user { color:#315468; font-size:12px; margin-right:34px; white-space:nowrap; }
 .best-match-card { background:linear-gradient(110deg,#f1fcf8,#fff 70%); border:1px solid #7ad8bd; border-radius:10px; padding:16px 18px; margin-top:8px; box-shadow:0 3px 12px rgba(12,54,70,.05); }
 .best-match-head { display:flex; justify-content:space-between; align-items:center; }
 .pdf-badge { display:inline-flex; background:#e94b3c; color:white; font-weight:800; font-size:10px; border-radius:4px; padding:4px 6px; margin-right:7px; }
@@ -480,7 +502,8 @@ def get_document_by_id(document_id):
     conn = db()
     row = conn.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
     conn.close()
-    return row
+    # Return plain Python data so Streamlit's cache can serialize the result.
+    return dict(row) if row is not None else None
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -634,7 +657,8 @@ def get_documents():
         """
     ).fetchall()
     conn.close()
-    return rows
+    # sqlite3.Row is not safely serializable by Streamlit's cache.
+    return [dict(row) for row in rows]
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -670,7 +694,8 @@ def get_all_chunks():
         """
     ).fetchall()
     conn.close()
-    return rows
+    # Keep database rows as plain dictionaries for reliable caching/indexing.
+    return [dict(row) for row in rows]
 
 
 def delete_document(document_id):
@@ -1269,7 +1294,6 @@ st.markdown(
             <div class="app-subtitle">Find exact information from your organization's documents</div>
         </div>
         <div class="top-user">{user_name}</div>
-        <div class="top-actions">⚙</div>
     </div>
     """,
     unsafe_allow_html=True,
