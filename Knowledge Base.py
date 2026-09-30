@@ -1197,8 +1197,8 @@ if "admin_authenticated" not in st.session_state:
 # ============================================================
 
 @st.cache_data(ttl=600, show_spinner=False)
-def render_pdf_page_highlighted(document_path, page_number, query=""):
-    """Render a PDF page with matching query terms highlighted."""
+def render_pdf_page_highlighted(document_path, page_number, query="", scale=1.75):
+    """Render a PDF page with matching query terms highlighted at the requested scale."""
     try:
         with fitz.open(document_path) as pdf:
             if page_number < 1 or page_number > len(pdf):
@@ -1217,7 +1217,7 @@ def render_pdf_page_highlighted(document_path, page_number, query=""):
                         annot.update()
                 except Exception:
                     continue
-            pix = page.get_pixmap(matrix=fitz.Matrix(1.25, 1.25), alpha=False)
+            pix = page.get_pixmap(matrix=fitz.Matrix(float(scale), float(scale)), alpha=False)
             return pix.tobytes("png")
     except Exception:
         return None
