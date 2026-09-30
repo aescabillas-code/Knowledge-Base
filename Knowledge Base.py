@@ -20,14 +20,8 @@ except Exception:
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Optional AI fallback:
-try:
-    from openai import OpenAI
-except Exception:
-    OpenAI = None
-
 # ============================================================
-# CONFIGURATION & PATHS
+# CONFIGURATION & STORAGE
 # ============================================================
 
 APP_NAME = "Knowledge Base"
@@ -46,7 +40,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# DESIGN SYSTEM (CSS)
+# UI STYLING & SYSTEM CSS
 # ============================================================
 
 st.markdown(
@@ -93,72 +87,79 @@ button[kind="header"],
     visibility: hidden !important;
 }
 
-.kb-topbar {
-    display: flex;
-    align-items: center;
-    min-height: 72px;
-    padding: 10px 16px;
+/* Unified Topbar Container */
+.st-key-topbar_container {
     border-bottom: 1px solid #dfe7eb;
     background: linear-gradient(105deg, #ffffff 0%, #f7fbfc 70%, #e8f7f7 100%);
     border-radius: 8px;
-    margin-bottom: 14px;
+    padding: 10px 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
 }
 
-.brand-block { width: 145px; }
 .brand-mark {
-    width: 44px;
+    width: 42px;
     height: 6px;
     background-color: var(--teal);
     margin-bottom: 6px;
     border-radius: 2px;
 }
-.brand-name { font-size: 13px; font-weight: 700; line-height: 1.1; color: #111; }
-.brand-divider { height: 42px; width: 1px; background: #b8c7cf; margin: 0 20px 0 10px; }
-.title-block { flex: 1; }
-.app-title { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
-.app-subtitle { margin-top: 4px; font-size: 13px; color: #304a5c; }
-.top-user {
+
+.top-user-pill {
+    background: #e8f7f7;
     color: #315468;
     font-size: 12px;
-    margin-right: 50px;
-    white-space: nowrap;
-    background: #e8f7f7;
-    padding: 6px 12px;
+    padding: 6px 14px;
     border-radius: 20px;
     font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid #cce5df;
+    display: inline-flex;
+    align-items: center;
+    height: 34px;
 }
 
-/* Gear floating anchor */
-.st-key-gear_wrap {
-    position: absolute !important;
-    top: 24px !important;
-    right: 28px !important;
-    z-index: 1000 !important;
+/* Gear Button Restyling in Header */
+.st-key-topbar_container div[data-testid="stPopover"] > button {
+    border-radius: 6px !important;
+    border: 1px solid #cce5df !important;
+    background: #ffffff !important;
+    color: #315468 !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 10px !important;
+    font-size: 15px !important;
 }
 
-/* Hero Extracted Answer Card */
+.st-key-topbar_container div[data-testid="stPopover"] > button:hover {
+    background: #e8f7f7 !important;
+    border-color: var(--teal) !important;
+    color: var(--teal) !important;
+}
+
+/* Direct Extracted Answer Card */
 .exact-answer-card {
     background: linear-gradient(110deg, #f0fdf4 0%, #ffffff 85%);
     border: 1px solid #86efac;
     border-left: 5px solid var(--teal);
     border-radius: 8px;
-    padding: 14px 16px;
-    margin-bottom: 14px;
-    box-shadow: 0 2px 8px rgba(0, 169, 130, 0.06);
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0, 169, 130, 0.05);
 }
 .exact-answer-head { display: flex; justify-content: space-between; align-items: center; }
-.exact-answer-title { color: #047857; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.exact-answer-title { color: #047857; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 .match-pill { background: #dcfce7; color: #15803d; font-weight: 700; padding: 3px 10px; border-radius: 12px; font-size: 11px; }
 .exact-answer-text {
     margin: 8px 0;
     color: #0f172a;
-    font-size: 14.5px;
+    font-size: 15px;
     line-height: 1.5;
     font-weight: 500;
 }
 .answer-meta { font-size: 11px; color: #64748b; }
 
-/* Interactive Document Reader Frame */
+/* Document Reader Frame */
 .reader-toolbar {
     background: #ffffff;
     border: 1px solid var(--border);
@@ -176,26 +177,10 @@ button[kind="header"],
     border-radius: 7px;
     padding: 10px 12px;
     margin-bottom: 8px;
-    transition: all 0.15s ease-in-out;
 }
-.result-label {
-    font-weight: 700;
-    font-size: 11px;
-    text-transform: uppercase;
-}
-.result-filename {
-    color: #0369a1;
-    font-weight: 700;
-    font-size: 12.5px;
-    margin-top: 2px;
-    word-break: break-word;
-}
-.result-snippet {
-    color: #475569;
-    font-size: 11.5px;
-    line-height: 1.45;
-    margin: 6px 0;
-}
+.result-label { font-weight: 700; font-size: 11px; text-transform: uppercase; }
+.result-filename { color: #0369a1; font-weight: 700; font-size: 12.5px; margin-top: 2px; word-break: break-word; }
+.result-snippet { color: #475569; font-size: 11.5px; line-height: 1.45; margin: 6px 0; }
 
 /* Authentication Gate */
 .auth-shell { max-width: 520px; margin: 80px auto 20px; text-align: center; }
@@ -204,7 +189,7 @@ button[kind="header"],
 .auth-title { margin-top: 18px; font-size: 28px; font-weight: 700; color: var(--text); }
 .auth-subtitle { margin-top: 6px; color: var(--muted); font-size: 13px; margin-bottom: 24px; }
 
-/* Welcome Card */
+/* Welcome Screen Card */
 .welcome-card {
     margin: 40px auto; max-width: 680px; text-align: center; background: white;
     border: 1px solid var(--border); border-radius: 12px; padding: 36px;
@@ -223,7 +208,7 @@ button[kind="primary"]:hover { background: var(--teal-dark) !important; }
 )
 
 # ============================================================
-# DATABASE ENGINE
+# DATABASE INITIALIZATION
 # ============================================================
 
 def db():
@@ -280,7 +265,7 @@ def init_db():
 init_db()
 
 # ============================================================
-# AUTHENTICATION & ACCESS GATE
+# PERSISTENT BROWSER ACCESS GATE
 # ============================================================
 
 ACCESS_CODE = str(st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))).strip()
@@ -393,7 +378,7 @@ for key, default in [
         st.session_state[key] = default
 
 # ============================================================
-# PDF INGESTION & SEARCH HELPERS
+# UTILITIES & REPOSITORY
 # ============================================================
 
 def clean_text(text: str) -> str:
@@ -550,7 +535,7 @@ def make_snippet(text: str, query: str, radius=180) -> str:
     return ("..." if start > 0 else "") + clean[start:end] + ("..." if end < len(clean) else "")
 
 # ============================================================
-# INDEXING & SEARCH
+# SEARCH & HIGHLIGHT RENDERING ENGINE
 # ============================================================
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -598,10 +583,6 @@ def search_documents(query: str, category="All Categories", top_k=10):
     results.sort(key=lambda x: x["raw_score"], reverse=True)
     return results[:top_k]
 
-# ============================================================
-# RENDERING ENGINE WITH BOUNDING HIGHLIGHTS
-# ============================================================
-
 @st.cache_data(ttl=300, show_spinner=False)
 def render_pdf_page_highlighted(doc_path: str, page_num: int, target_text: str = "", zoom_level: int = 150):
     try:
@@ -610,10 +591,9 @@ def render_pdf_page_highlighted(doc_path: str, page_num: int, target_text: str =
             page = doc[page_idx]
 
             if target_text:
-                clean_target = " ".join(target_text.split()[:12])  # Anchor search to first clause
+                clean_target = " ".join(target_text.split()[:12])
                 rects = page.search_for(clean_target)
 
-                # Fallback: line wrap resiliency
                 if not rects and len(target_text.split()) > 3:
                     for part in target_text.split(". "):
                         if len(part.strip()) > 10:
@@ -621,7 +601,7 @@ def render_pdf_page_highlighted(doc_path: str, page_num: int, target_text: str =
 
                 for r in rects:
                     annot = page.add_highlight_annot(r)
-                    annot.set_colors(stroke=[0.0, 0.66, 0.51])  # HPE Emerald Accent
+                    annot.set_colors(stroke=[0.0, 0.66, 0.51])
                     annot.update()
 
             scale = (zoom_level / 100.0) * 1.3
@@ -638,49 +618,62 @@ def clear_all_caches():
     render_pdf_page_highlighted.clear()
 
 # ============================================================
-# HEADER BAR & GEAR FLYOUT
+# TOPBAR WITH SIDE-BY-SIDE ADMIN POPUP
 # ============================================================
 
-st.markdown(
-    """
-    <div class="kb-topbar">
-        <div class="brand-block">
-            <div class="brand-mark"></div>
-            <div class="brand-name">HEWLETT PACKARD<br>ENTERPRISE</div>
-        </div>
-        <div class="brand-divider"></div>
-        <div class="title-block">
-            <div class="app-title">Knowledge Base</div>
-            <div class="app-subtitle">Precision document retrieval and verification platform</div>
-        </div>
-        <div class="top-user">Authorized Workspace</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+with st.container(key="topbar_container"):
+    head_left, head_right = st.columns([3.5, 1.5], vertical_alignment="center")
 
-with st.container(key="gear_wrap"):
-    with st.popover("⚙", use_container_width=False):
-        st.markdown("**Workspace Options**")
-        st.caption("Active Session: Authenticated")
-        st.divider()
-        if st.session_state.admin_authenticated:
-            if st.button("📁 Document Center", use_container_width=True):
-                st.session_state.page = "Manage Documents"
-                st.rerun()
-            if st.button("Lock Admin Mode", use_container_width=True):
-                st.session_state.admin_authenticated = False
-                st.session_state.page = "Search"
-                st.rerun()
-        else:
-            if st.button("🔒 Admin Control Panel", use_container_width=True):
-                st.session_state.page = "Admin Login"
-                st.rerun()
+    with head_left:
+        st.markdown(
+            """
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div style="width: 140px;">
+                    <div class="brand-mark"></div>
+                    <div style="font-size: 13px; font-weight: 700; line-height: 1.1; color: #111;">HEWLETT PACKARD<br>ENTERPRISE</div>
+                </div>
+                <div style="height: 40px; width: 1px; background: #b8c7cf;"></div>
+                <div>
+                    <div style="font-size: 24px; font-weight: 700; color: #102d42; line-height: 1.1;">Knowledge Base</div>
+                    <div style="font-size: 12.5px; color: #304a5c; margin-top: 3px;">Find exact information from your organization's documents</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        if st.button("Revoke Browser Access", use_container_width=True):
-            clear_browser_access()
-            st.session_state.admin_authenticated = False
-            st.rerun()
+    with head_right:
+        user_col, gear_col = st.columns([2.5, 1], vertical_alignment="center")
+
+        with user_col:
+            st.markdown(
+                '<div style="text-align: right;"><span class="top-user-pill">👤 Authorized User</span></div>',
+                unsafe_allow_html=True,
+            )
+
+        with gear_col:
+            with st.popover("⚙", use_container_width=True):
+                st.markdown("**Workspace Options**")
+                st.caption("Active Session: Authenticated")
+                st.divider()
+
+                if st.session_state.admin_authenticated:
+                    if st.button("📁 Document Center", use_container_width=True):
+                        st.session_state.page = "Manage Documents"
+                        st.rerun()
+                    if st.button("Lock Admin Mode", use_container_width=True):
+                        st.session_state.admin_authenticated = False
+                        st.session_state.page = "Search"
+                        st.rerun()
+                else:
+                    if st.button("🔒 Admin Control Panel", use_container_width=True):
+                        st.session_state.page = "Admin Login"
+                        st.rerun()
+
+                if st.button("Revoke Browser Access", use_container_width=True):
+                    clear_browser_access()
+                    st.session_state.admin_authenticated = False
+                    st.rerun()
 
 # ============================================================
 # ADMIN LOGIN VIEW
@@ -811,13 +804,24 @@ else:
             unforced = [r for r in results if r["id"] != st.session_state.force_result_id]
             if forced:
                 results = forced + unforced
-                st.session_state.viewer_page = forced[0]["page_number"]
-                st.session_state.highlight_target = forced[0]["direct_sentence"]
+                st.session_state.viewer_page = forced[0].get("page_number", 1)
+                st.session_state.highlight_target = (
+                    forced[0].get("direct_sentence")
+                    or forced[0].get("exact_passage")
+                    or extract_direct_sentence(forced[0].get("text", ""), active_q)
+                )
 
         if not results:
             st.warning("No matching references found across the knowledge base. Try refining your keywords.")
         else:
             best_match = results[0]
+
+            # Defensive fallback to avoid any KeyError across older sessions or caches
+            direct_answer = (
+                best_match.get("direct_sentence")
+                or best_match.get("exact_passage")
+                or extract_direct_sentence(best_match.get("text", ""), active_q)
+            )
 
             # ----------------- HERO CARD: EXACT EXTRACTED ANSWER -----------------
             st.markdown(
@@ -827,9 +831,9 @@ else:
                         <div class="exact-answer-title">Direct Extracted Answer</div>
                         <span class="match-pill">Top Confidence Match</span>
                     </div>
-                    <div class="exact-answer-text">"{best_match['direct_sentence']}"</div>
+                    <div class="exact-answer-text">"{direct_answer}"</div>
                     <div class="answer-meta">
-                        Source Document: <b>{best_match['filename']}</b> &nbsp;•&nbsp; Page {best_match['page_number']}
+                        Source Document: <b>{best_match.get('filename', 'Document')}</b> &nbsp;•&nbsp; Page {best_match.get('page_number', 1)}
                     </div>
                 </div>
                 """,
@@ -853,30 +857,36 @@ else:
                             f"""
                             <div class="result-card">
                                 <span class="result-label" style="color:{label_color};">{label_text}</span>
-                                <div class="result-filename">{res['filename']}</div>
-                                <div style="font-size:11px;color:#64748b;margin-top:2px;">Page {res['page_number']}</div>
-                                <div class="result-snippet">{res['snippet']}</div>
+                                <div class="result-filename">{res.get('filename', 'Document')}</div>
+                                <div style="font-size:11px;color:#64748b;margin-top:2px;">Page {res.get('page_number', 1)}</div>
+                                <div class="result-snippet">{res.get('snippet', '')}</div>
                             </div>
                             """,
                             unsafe_allow_html=True,
                         )
                         btn_c1, btn_c2 = st.columns([1.2, 2.5])
                         with btn_c1:
-                            if st.button("Inspect Page", key=f"btn_res_{res['id']}_{i}", use_container_width=True):
-                                st.session_state.viewer_page = res["page_number"]
-                                st.session_state.highlight_target = res["direct_sentence"]
+                            if st.button("Inspect Page", key=f"btn_res_{res.get('id', i)}_{i}", use_container_width=True):
+                                st.session_state.viewer_page = res.get("page_number", 1)
+                                st.session_state.highlight_target = (
+                                    res.get("direct_sentence")
+                                    or res.get("exact_passage")
+                                    or extract_direct_sentence(res.get("text", ""), active_q)
+                                )
                                 st.rerun()
                         st.write("")
 
             # ======================== RIGHT: PDF VIEWER ========================
             with right_col:
-                current_page = st.session_state.viewer_page or best_match["page_number"]
-                highlight_phrase = st.session_state.highlight_target or best_match["direct_sentence"]
-                doc_path = best_match["stored_path"]
+                current_page = st.session_state.viewer_page or best_match.get("page_number", 1)
+                highlight_phrase = st.session_state.highlight_target or direct_answer
+                doc_path = best_match.get("stored_path")
 
-                # Get page boundaries
-                with fitz.open(doc_path) as d_meta:
-                    max_pages = len(d_meta)
+                # Get page boundaries safely
+                max_pages = 1
+                if doc_path and os.path.exists(doc_path):
+                    with fitz.open(doc_path) as d_meta:
+                        max_pages = len(d_meta)
 
                 current_page = max(1, min(current_page, max_pages))
 
@@ -884,7 +894,7 @@ else:
                 st.markdown(
                     f"""
                     <div class="reader-toolbar">
-                        <div class="reader-title">📄 {best_match['filename']}</div>
+                        <div class="reader-title">📄 {best_match.get('filename', 'Document')}</div>
                         <div class="reader-meta">Page {current_page} of {max_pages} &nbsp;•&nbsp; Active Highlight Anchor Active</div>
                     </div>
                     """,
@@ -908,18 +918,20 @@ else:
                     zoom_val = st.selectbox("Zoom", [125, 150, 175, 200], index=1, format_func=lambda x: f"{x}%", label_visibility="collapsed")
 
                 # High-DPI Highlight Rendering
-                img_data = render_pdf_page_highlighted(
-                    doc_path=doc_path,
-                    page_num=current_page,
-                    target_text=highlight_phrase,
-                    zoom_level=zoom_val,
-                )
-
-                if img_data:
-                    st.image(img_data, use_container_width=True)
-                    st.caption("🟢 Exact matching sentence automatically targeted in emerald highlight.")
+                if doc_path and os.path.exists(doc_path):
+                    img_data = render_pdf_page_highlighted(
+                        doc_path=doc_path,
+                        page_num=current_page,
+                        target_text=highlight_phrase,
+                        zoom_level=zoom_val,
+                    )
+                    if img_data:
+                        st.image(img_data, use_container_width=True)
+                        st.caption("🟢 Exact matching sentence automatically targeted in emerald highlight.")
+                    else:
+                        st.error("Failed to render PDF page canvas.")
                 else:
-                    st.error("Failed to render PDF page canvas.")
+                    st.error("Document file not found on disk.")
     else:
         docs = get_documents()
         tot_pages = sum(d["page_count"] for d in docs)
