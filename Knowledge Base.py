@@ -64,7 +64,7 @@ html,body,[class*="css"]{font-family:Arial,Helvetica,sans-serif}.stApp{backgroun
 .sidebar-logo{font-size:36px;font-weight:900;letter-spacing:-3px;color:#fff;line-height:1;margin:0 0 4px 8px}.sidebar-logo span{color:#00a982}.sidebar-kicker{color:#a9c6ce;font-size:10px;margin-left:9px;margin-bottom:22px}.sidebar-section{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#6f9ba4;margin:18px 8px 5px}.sidebar-footer{position:fixed;bottom:18px;color:#cfe1e6;margin-left:8px;font-size:12px}.sidebar-footer b{font-size:15px;color:white}
 [data-testid="stSidebar"] button{border:0!important;background:transparent!important;color:#f2f8fa!important;text-align:left!important;border-radius:8px!important;min-height:42px!important;font-size:14px!important;padding:7px 10px!important;margin:2px 0!important}[data-testid="stSidebar"] button:hover{background:rgba(0,169,130,.18)!important}.sidebar-active button{background:linear-gradient(90deg,#00a982,#009777)!important;color:#fff!important}
 .top-title{font-size:27px;font-weight:800;color:#0a2034;padding-top:6px}.top-user-wrap{display:flex;justify-content:flex-end;align-items:center;gap:8px}.avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#efc19e,#cf8b66);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px}.user-name{font-size:12px;font-weight:700;color:#0b2538}.user-role{font-size:11px;color:#6d7f8b}
-.admin-user-bar{display:flex;justify-content:flex-end;align-items:center;background:#eaf7f5;border-radius:6px;padding:4px 6px 4px 10px;min-height:38px}.admin-user-bar [data-testid="column"]{padding:0!important}.admin-user-bar .top-user-wrap{justify-content:flex-end;min-height:30px}.admin-user-bar .user-name{font-size:12px;white-space:nowrap}.admin-gear-anchor{display:block;width:1px;height:1px}.admin-user-bar button{margin:0!important;min-height:30px!important;height:30px!important;width:30px!important;padding:0!important;border:0!important;border-radius:6px!important;background:#eaf7f5!important;color:#0b5260!important;box-shadow:none!important;font-size:16px!important}.admin-user-bar button:hover{background:#d8efeb!important}.admin-user-bar [data-testid="stPopover"]{display:flex;justify-content:flex-end}
+.st-key-admin_user_bar{background:#eaf7f5;border-radius:6px;padding:4px 5px 4px 10px;min-height:38px;display:flex;align-items:center}.st-key-admin_user_bar [data-testid="column"]{padding:0!important}.st-key-admin_user_bar .top-user-wrap{display:flex;align-items:center;justify-content:flex-start;min-height:30px}.st-key-admin_user_bar .user-name{font-size:12px;white-space:nowrap;color:#315468}.st-key-admin_user_bar [data-testid="stPopover"]{display:flex;align-items:center;justify-content:flex-start;margin:0!important;padding:0!important}.st-key-admin_user_bar [data-testid="stPopover"] > button{margin:0!important;min-height:30px!important;height:30px!important;width:30px!important;min-width:30px!important;padding:0!important;border:0!important;border-radius:6px!important;background:#eaf7f5!important;color:#0b5260!important;box-shadow:none!important;font-size:16px!important;line-height:30px!important}.st-key-admin_user_bar [data-testid="stPopover"] > button:hover,.st-key-admin_user_bar [data-testid="stPopover"] > button:focus{background:#d8efeb!important;color:#087c63!important;box-shadow:none!important}.st-key-admin_user_bar .admin-gear-anchor{display:none!important}
 .hero{background:linear-gradient(115deg,#082b35 0%,#0b5560 48%,#0c7778 100%);border-radius:10px;padding:28px 36px 20px;color:#fff;position:relative;overflow:hidden;min-height:185px;box-shadow:0 5px 20px rgba(0,40,50,.10)}.hero:after{content:"";position:absolute;right:-20px;bottom:-80px;width:470px;height:240px;background:linear-gradient(160deg,transparent 20%,rgba(0,206,190,.35) 21%,transparent 23%,rgba(0,206,190,.2) 40%,transparent 42%),linear-gradient(90deg,transparent 35%,rgba(0,206,190,.22) 36%,transparent 38%);transform:skewX(-20deg)}.hero h1{font-size:36px;line-height:1.05;margin:0 0 6px;font-weight:800;position:relative;z-index:1}.hero p{font-size:16px;margin:0;color:#e4f5f6;position:relative;z-index:1}.popular{margin:9px 0 0;font-size:11px;color:#e2f2f3}.chip{display:inline-block;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);padding:6px 11px;border-radius:18px;margin:4px 4px 0 0;color:#fff}
 .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}.metric{border:1px solid var(--line);border-radius:11px;padding:15px 18px;background:#fff;min-height:84px;display:flex;align-items:center;justify-content:space-between}.metric.green{background:linear-gradient(110deg,#e8faf5,#fff)}.metric.blue{background:linear-gradient(110deg,#eaf4ff,#fff)}.metric.gold{background:linear-gradient(110deg,#fff7df,#fff)}.metric.purple{background:linear-gradient(110deg,#f4efff,#fff)}.metric-icon{width:48px;height:48px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:23px;background:#d7f5ec}.metric-value{font-size:25px;font-weight:800;color:#0a2438}.metric-label{font-size:12px;color:#526877}.metric-arrow{font-size:22px;color:#132f42}.blue .metric-icon{background:#dcecff}.gold .metric-icon{background:#ffebbb}.purple .metric-icon{background:#e9ddff}
 .section-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(10,40,55,.03)}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.section-title{font-size:17px;font-weight:800;color:#0b2438}.section-link{font-size:12px;color:#0b2438}.cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.cat{border:1px solid #e5ebef;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;min-height:66px}.cat-icon{width:40px;height:40px;border-radius:50%;background:#e6f8f2;display:flex;align-items:center;justify-content:center;font-size:19px;color:#008c76}.cat-name{font-size:12px;font-weight:700;color:#122b3d}.cat-count{font-size:10px;color:#6d7f8b;margin-top:3px}.recent-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #edf1f3}.recent-row:last-child{border-bottom:0}.pdf-icon{width:34px;height:34px;border-radius:9px;background:#fff0f0;color:#e5483f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}.recent-title{font-size:12px;font-weight:700;color:#0e2a3c}.recent-meta,.recent-date{font-size:10px;color:#70818d}.recent-date{margin-left:auto;white-space:nowrap}.featured-title{font-size:16px;font-weight:800;color:#0b2438;margin-top:8px}.featured-meta{font-size:11px;color:#6c7e8a;margin-top:3px}
@@ -1152,30 +1152,31 @@ with st.sidebar:
         if st.button(f"{icon}   {label}",key=f"nav_{target}",use_container_width=True): go(target)
     st.markdown('<div class="sidebar-footer"><b>HPE</b><br>Knowledge Base<br><span style="color:#6f9ba4">v1.0.0</span></div>',unsafe_allow_html=True)
 
-left,search,user=st.columns([3.0,4.7,2.1],gap="small")
+left,search,user=st.columns([3.0,4.7,2.25],gap="small")
 with left:
     st.markdown('<div class="top-title">Knowledge Base</div>',unsafe_allow_html=True)
 with search:
     top_query=st.text_input("Header search",value=st.session_state.search_query,placeholder="Search for topics, keywords, or questions...",label_visibility="collapsed",key="header_search_box")
 with user:
-    st.markdown('<div class="admin-user-bar">',unsafe_allow_html=True)
-    user_name_col, gear_col = st.columns([4.4,1], gap="small")
-    with user_name_col:
-        st.markdown('<div class="top-user-wrap"><div class="user-name">Authorized User</div></div>',unsafe_allow_html=True)
-    with gear_col:
-        st.markdown('<div class="admin-gear-anchor"></div>',unsafe_allow_html=True)
-        with st.popover("⚙",use_container_width=True):
-            st.markdown("**Knowledge Base Access**")
-            st.caption("Browser authorization: persistent until manually cleared")
-            if st.session_state.admin_authenticated:
-                if st.button("Manage Documents",use_container_width=True,key="gear_manage"): go("Manage Documents")
-                if st.button("Sign out admin",use_container_width=True,key="gear_signout"):
-                    st.session_state.admin_authenticated=False; go("Search")
-            else:
-                if st.button("🔒 Manage Documents",use_container_width=True,key="gear_login"): go("Admin Login")
-            if st.button("Clear Browser Access",use_container_width=True,key="gear_clear"):
-                clear_browser_access(); st.session_state.admin_authenticated=False; st.stop()
-    st.markdown('</div>',unsafe_allow_html=True)
+    # User identity and admin gear intentionally live in the same compact container.
+    # The gear is directly beside Authorized User and does not consume header space
+    # belonging to the title/logo.
+    with st.container(key="admin_user_bar"):
+        user_name_col, gear_col = st.columns([4.0,0.85], gap="small", vertical_alignment="center")
+        with user_name_col:
+            st.markdown('<div class="top-user-wrap"><div class="user-name">Authorized User</div></div>',unsafe_allow_html=True)
+        with gear_col:
+            with st.popover("⚙",use_container_width=False):
+                st.markdown("**Knowledge Base Access**")
+                st.caption("Browser authorization: persistent until manually cleared")
+                if st.session_state.admin_authenticated:
+                    if st.button("Manage Documents",use_container_width=True,key="gear_manage"): go("Manage Documents")
+                    if st.button("Sign out admin",use_container_width=True,key="gear_signout"):
+                        st.session_state.admin_authenticated=False; go("Search")
+                else:
+                    if st.button("🔒 Manage Documents",use_container_width=True,key="gear_login"): go("Admin Login")
+                if st.button("Clear Browser Access",use_container_width=True,key="gear_clear"):
+                    clear_browser_access(); st.session_state.admin_authenticated=False; st.rerun()
 if top_query.strip()!=st.session_state.search_query.strip():
     st.session_state.search_query=top_query.strip(); st.session_state.page="Search"; st.session_state.search_signature=None
     if top_query.strip(): st.rerun()
@@ -1422,7 +1423,8 @@ else:
             if st.session_state.get("viewer_page") is None: st.session_state.viewer_page=int(best["page_number"])
             viewer_page=max(1,min(int(st.session_state.viewer_page),max(total_pages,1)))
             st.markdown(f'<div class="search-count">{len(results)} search result(s) · Highest match shown first</div>',unsafe_allow_html=True)
-            search_results_col, source_col = st.columns([.82, 1.8], gap="large")
+            # Search Results stay on the LEFT; the readable PDF viewer stays on the RIGHT.
+            search_results_col, source_col = st.columns([1.0, 1.75], gap="large")
             with search_results_col:
                 st.markdown('<div class="panel-title">Search Results</div>',unsafe_allow_html=True)
                 for i,result in enumerate(results):
