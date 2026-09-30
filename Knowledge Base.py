@@ -57,21 +57,319 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-:root{--navy:#082536;--teal:#00a982;--teal2:#008c76;--bg:#f4f7f9;--line:#dfe7eb;--text:#0b2438;--muted:#6b7e8b}
-html,body,[class*="css"]{font-family:Arial,Helvetica,sans-serif}.stApp{background:var(--bg);color:var(--text)}
-[data-testid="stHeader"]{background:transparent;height:0;min-height:0}[data-testid="stToolbar"],[data-testid="stDecoration"],[data-testid="stStatusWidget"],[data-testid="stAppDeployButton"],[data-testid="stMainMenu"],[data-testid="stHeaderActionElements"]{display:none!important}
-[data-testid="stSidebar"]{display:block!important;background:linear-gradient(180deg,#082b35,#06252e);border-right:1px solid #0c4a55}[data-testid="stSidebar"]>div{background:transparent}[data-testid="stSidebarContent"]{padding:18px 12px 20px}
-.sidebar-logo{font-size:36px;font-weight:900;letter-spacing:-3px;color:#fff;line-height:1;margin:0 0 4px 8px}.sidebar-logo span{color:#00a982}.sidebar-kicker{color:#a9c6ce;font-size:10px;margin-left:9px;margin-bottom:22px}.sidebar-section{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#6f9ba4;margin:18px 8px 5px}.sidebar-footer{position:fixed;bottom:18px;color:#cfe1e6;margin-left:8px;font-size:12px}.sidebar-footer b{font-size:15px;color:white}
-[data-testid="stSidebar"] button{border:0!important;background:transparent!important;color:#f2f8fa!important;text-align:left!important;border-radius:8px!important;min-height:42px!important;font-size:14px!important;padding:7px 10px!important;margin:2px 0!important}[data-testid="stSidebar"] button:hover{background:rgba(0,169,130,.18)!important}.sidebar-active button{background:linear-gradient(90deg,#00a982,#009777)!important;color:#fff!important}
-.top-title{font-size:27px;font-weight:800;color:#0a2034;padding-top:6px}.top-user-wrap{display:flex;justify-content:flex-end;align-items:center;gap:8px}.avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#efc19e,#cf8b66);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px}.user-name{font-size:12px;font-weight:700;color:#0b2538}.user-role{font-size:11px;color:#6d7f8b}
-.hero{background:linear-gradient(115deg,#082b35 0%,#0b5560 48%,#0c7778 100%);border-radius:10px;padding:28px 36px 20px;color:#fff;position:relative;overflow:hidden;min-height:185px;box-shadow:0 5px 20px rgba(0,40,50,.10)}.hero:after{content:"";position:absolute;right:-20px;bottom:-80px;width:470px;height:240px;background:linear-gradient(160deg,transparent 20%,rgba(0,206,190,.35) 21%,transparent 23%,rgba(0,206,190,.2) 40%,transparent 42%),linear-gradient(90deg,transparent 35%,rgba(0,206,190,.22) 36%,transparent 38%);transform:skewX(-20deg)}.hero h1{font-size:36px;line-height:1.05;margin:0 0 6px;font-weight:800;position:relative;z-index:1}.hero p{font-size:16px;margin:0;color:#e4f5f6;position:relative;z-index:1}.popular{margin:9px 0 0;font-size:11px;color:#e2f2f3}.chip{display:inline-block;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);padding:6px 11px;border-radius:18px;margin:4px 4px 0 0;color:#fff}
-.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}.metric{border:1px solid var(--line);border-radius:11px;padding:15px 18px;background:#fff;min-height:84px;display:flex;align-items:center;justify-content:space-between}.metric.green{background:linear-gradient(110deg,#e8faf5,#fff)}.metric.blue{background:linear-gradient(110deg,#eaf4ff,#fff)}.metric.gold{background:linear-gradient(110deg,#fff7df,#fff)}.metric.purple{background:linear-gradient(110deg,#f4efff,#fff)}.metric-icon{width:48px;height:48px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:23px;background:#d7f5ec}.metric-value{font-size:25px;font-weight:800;color:#0a2438}.metric-label{font-size:12px;color:#526877}.metric-arrow{font-size:22px;color:#132f42}.blue .metric-icon{background:#dcecff}.gold .metric-icon{background:#ffebbb}.purple .metric-icon{background:#e9ddff}
-.section-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(10,40,55,.03)}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.section-title{font-size:17px;font-weight:800;color:#0b2438}.section-link{font-size:12px;color:#0b2438}.cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.cat{border:1px solid #e5ebef;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;min-height:66px}.cat-icon{width:40px;height:40px;border-radius:50%;background:#e6f8f2;display:flex;align-items:center;justify-content:center;font-size:19px;color:#008c76}.cat-name{font-size:12px;font-weight:700;color:#122b3d}.cat-count{font-size:10px;color:#6d7f8b;margin-top:3px}.recent-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #edf1f3}.recent-row:last-child{border-bottom:0}.pdf-icon{width:34px;height:34px;border-radius:9px;background:#fff0f0;color:#e5483f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}.recent-title{font-size:12px;font-weight:700;color:#0e2a3c}.recent-meta,.recent-date{font-size:10px;color:#70818d}.recent-date{margin-left:auto;white-space:nowrap}.featured-title{font-size:16px;font-weight:800;color:#0b2438;margin-top:8px}.featured-meta{font-size:11px;color:#6c7e8a;margin-top:3px}
-.search-count{color:#687b87;font-size:11px;margin:5px 0 8px}.reader-toolbar{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}.reader-title{font-size:15px;font-weight:700}.reader-meta{font-size:11px;color:var(--muted);margin-top:2px}.reader-match{background:#e7f8f1;border:1px solid #9bdcc8;color:#087c63;border-radius:5px;padding:5px 8px;font-size:10px;font-weight:700;display:inline-block;margin-top:5px}.match-panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px}.match-panel-title{font-size:13px;font-weight:700;margin-bottom:7px}.match-item{background:#f7fafb;border:1px solid #e1e8ec;border-radius:6px;padding:7px 8px;margin-bottom:6px}.match-item-page{color:#0561a0;font-size:10px;font-weight:700}.match-item-text{color:#385362;font-size:10px;line-height:1.35;margin-top:2px}.result-snippet{color:#536b78;font-size:10px;line-height:1.4;margin-top:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.result-page{color:#687b87;font-size:10px;margin-top:3px}.result-score-pill{float:right;background:#e7f8f1;color:#087c63;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700}.panel-title{font-size:17px;font-weight:800;color:#0b2438;margin:3px 0 8px}
-[data-testid="stVerticalBlockBorderWrapper"]{border-color:var(--line)!important;border-radius:9px!important}.st-key-search_result_best [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_1 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_2 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_3 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_4 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_5 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_6 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_7 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_8 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_9 [data-testid="stVerticalBlockBorderWrapper"]{padding:8px 10px!important}.result-label{color:#0561a0;font-weight:700;font-size:11px}.result-filename{margin-top:3px;color:#0561a0;font-weight:700;font-size:12px;line-height:1.35;word-break:break-word}.st-key-search_result_best button,.st-key-search_result_1 button,.st-key-search_result_2 button,.st-key-search_result_3 button,.st-key-search_result_4 button,.st-key-search_result_5 button,.st-key-search_result_6 button,.st-key-search_result_7 button,.st-key-search_result_8 button,.st-key-search_result_9 button{min-height:28px!important;height:28px!important;padding:2px 8px!important;font-size:11px!important;margin-top:4px!important}
-.page-heading{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.page-title{font-size:26px;font-weight:700}.page-description{color:var(--muted);font-size:13px;margin-top:4px}.admin-badge{background:#e4f6f0;color:#087c63;font-size:11px;font-weight:700;border-radius:20px;padding:6px 12px}.admin-card{max-width:420px;margin:80px auto 20px;text-align:center}.admin-icon{font-size:40px;color:var(--teal)}.admin-title{font-size:24px;font-weight:700}.admin-subtitle{color:var(--muted);margin-top:5px;font-size:13px}
-[data-testid="stFileUploader"]{background:#fff;border-radius:10px;border:1px dashed #9ab1bc}button[kind="primary"]{background:var(--teal)!important;border-color:var(--teal)!important}button[kind="primary"]:hover{background:var(--teal2)!important}.stDownloadButton button{border-color:#00a982!important;color:#087b64!important}
-@media(max-width:1100px){.metric-grid,.cat-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.metric-grid,.cat-grid{grid-template-columns:1fr}.hero{padding:22px}.hero h1{font-size:26px}.top-title{font-size:21px}}
+:root {
+    --navy: #0b2538;
+    --navy-2: #123b50;
+    --teal: #00a982;
+    --teal-dark: #007f72;
+    --green-soft: #e7f8f1;
+    --bg: #f5f8fa;
+    --white: #ffffff;
+    --border: #d9e3e8;
+    --text: #102d42;
+    --muted: #687b87;
+}
+
+html, body, [class*="css"] {
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.stApp {
+    background: linear-gradient(180deg, #f8fbfc 0%, #f2f6f8 100%);
+    color: var(--text);
+}
+
+[data-testid="stHeader"] { background: transparent; }
+
+/* Hide Streamlit's default upper-right toolbar/menu icons.
+   The app's own gear control remains visible because it is rendered in the page body. */
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"],
+[data-testid="stAppDeployButton"],
+[data-testid="stMainMenu"],
+button[kind="header"],
+[data-testid="stHeaderActionElements"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Keep the header area clean after removing the native controls. */
+[data-testid="stHeader"] {
+    height: 0 !important;
+    min-height: 0 !important;
+}
+
+/* Hide the default sidebar container; this app uses its own page navigation. */
+[data-testid="stSidebar"],
+[data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
+
+
+.kb-topbar {
+    display: flex;
+    align-items: center;
+    min-height: 76px;
+    padding: 8px 10px 12px 8px;
+    border-bottom: 1px solid #dfe7eb;
+    background: linear-gradient(105deg, #ffffff 0%, #f7fbfc 70%, #e8f7f7 100%);
+    margin-bottom: 8px;
+}
+
+.brand-block { width: 145px; }
+.brand-mark {
+    width: 46px;
+    height: 7px;
+    border: 3px solid #00a982;
+    margin-bottom: 7px;
+}
+.brand-name { font-size: 14px; font-weight: 700; line-height: 1.05; color: #111; }
+.brand-divider { height: 45px; width: 1px; background: #b8c7cf; margin: 0 22px 0 8px; }
+.app-title { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1; }
+.app-subtitle { margin-top: 5px; font-size: 14px; color: #304a5c; }
+.title-block { flex: 1; }
+.top-tagline { text-align: right; color: #18394e; font-size: 12px; line-height: 1.3; margin-right: 12px; }
+.top-actions { width: 36px; }
+/* Admin gear: anchored to the header instead of taking space in the layout. */
+.st-key-gear_wrap {
+    position:absolute !important;
+    top:92px !important;
+    right:30px !important;
+    width:30px !important;
+    height:30px !important;
+    margin:0 !important;
+    padding:0 !important;
+    z-index:10000 !important;
+    pointer-events:none !important;
+}
+.st-key-gear_wrap > div,
+.st-key-gear_wrap div[data-testid="stPopover"] {
+    width:30px !important;
+    margin:0 !important;
+    padding:0 !important;
+    pointer-events:auto !important;
+}
+.st-key-gear_wrap div[data-testid="stPopover"] > button {
+    width:30px !important;
+    min-width:30px !important;
+    height:30px !important;
+    min-height:30px !important;
+    padding:0 !important;
+    border:0 !important;
+    border-radius:4px !important;
+    background:#e8f7f7 !important;
+    box-shadow:none !important;
+    color:#315468 !important;
+    font-size:14px !important;
+    line-height:30px !important;
+}
+.st-key-gear_wrap div[data-testid="stPopover"] > button:hover,
+.st-key-gear_wrap div[data-testid="stPopover"] > button:focus {
+    background:#e8f7f7 !important;
+    color:#087c63 !important;
+    box-shadow:none !important;
+}
+
+
+.bell { font-size: 22px; color: var(--navy); }
+
+.exact-answer-card {
+    background: linear-gradient(110deg, #f1fcf8, #ffffff 65%);
+    border: 1px solid #7ad8bd;
+    border-radius: 10px;
+    padding: 18px 20px 16px;
+    box-shadow: 0 3px 12px rgba(12, 54, 70, .05);
+    margin-top: 8px;
+}
+.exact-answer-head { display: flex; justify-content: space-between; align-items: center; }
+.exact-answer-title { color: #07866b; font-size: 19px; font-weight: 700; vertical-align: middle; }
+.check-circle {
+    display: inline-flex; width: 31px; height: 31px; border-radius: 50%;
+    align-items: center; justify-content: center; background: #00a982; color: white;
+    font-weight: 800; margin-right: 8px;
+}
+.match-pill { background: #d9f5ea; color: #087b64; font-weight: 700; padding: 5px 12px; border-radius: 20px; font-size: 12px; }
+.exact-answer-note { margin: 5px 0 10px 39px; color: var(--muted); font-size: 12px; }
+.exact-answer-text {
+    margin: 0 0 12px 0; padding: 14px 18px; border-left: 4px solid var(--teal);
+    background: rgba(255,255,255,.78); color: #172f42; font-size: 16px; line-height: 1.55;
+}
+.answer-meta { display: flex; flex-wrap: wrap; gap: 22px; color: #506672; font-size: 12px; padding-left: 2px; }
+
+.source-header { background: white; border: 1px solid var(--border); border-bottom: 0; border-radius: 10px 10px 0 0; padding: 14px 16px; }
+.source-title { font-size: 18px; font-weight: 700; color: var(--text); }
+.source-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+.panel-title { font-size: 17px; font-weight: 700; color: var(--text); margin: 3px 0 8px; }
+.related-title { color: #0561a0; font-weight: 700; font-size: 14px; }
+.related-number { float: left; width: 23px; height: 23px; background: #dfe9ed; border-radius: 4px; text-align: center; line-height: 23px; font-weight: 700; color: #294a5c; }
+
+.welcome-card {
+    margin: 42px auto; max-width: 720px; text-align: center; background: white;
+    border: 1px solid var(--border); border-radius: 14px; padding: 42px;
+    box-shadow: 0 5px 18px rgba(12,54,70,.05);
+}
+.welcome-icon { font-size: 42px; color: var(--teal); }
+.welcome-title { font-size: 25px; font-weight: 700; color: var(--text); margin-top: 8px; }
+.welcome-text { color: var(--muted); max-width: 560px; margin: 10px auto; line-height: 1.6; font-size: 14px; }
+.welcome-stats { display: flex; justify-content: center; gap: 35px; color: #57707e; margin-top: 18px; font-size: 12px; }
+
+.page-heading { display:flex; justify-content:space-between; align-items:center; margin: 18px 0; }
+.page-title { font-size: 26px; font-weight: 700; color: var(--text); }
+.page-description { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.admin-badge { background:#e4f6f0; color:#087c63; font-size:11px; font-weight:700; border-radius:20px; padding:6px 12px; }
+.admin-card { max-width:420px; margin:80px auto 20px; text-align:center; }
+.admin-icon { font-size:40px; color:var(--teal); }
+.admin-title { font-size:24px; font-weight:700; color:var(--text); }
+.admin-subtitle { color:var(--muted); margin-top:5px; font-size:13px; }
+.content-gap { height: 10px; }
+.bottom-nav-spacer { height: 46px; }
+.bottom-nav-label { text-align:center; color:#6c808b; font-size:10px; padding:4px 0 8px; }
+
+
+.auth-shell { max-width: 620px; margin: 70px auto 22px; text-align: center; }
+.auth-brand-mark { width: 55px; height: 8px; border: 3px solid #00a982; margin: 0 auto 10px; }
+.auth-brand { font-size: 14px; font-weight: 700; color: #111; line-height: 1.05; }
+.auth-title { margin-top: 26px; font-size: 31px; font-weight: 700; color: var(--text); }
+.auth-subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
+.auth-card-title { font-size: 24px; font-weight: 700; color: var(--text); margin-top: 20px; }
+.auth-switch { text-align:center; color:var(--muted); font-size:12px; margin:12px 0 6px; }
+.top-user {
+    color:#315468;
+    font-size:12px;
+    margin-right:52px;
+    white-space:nowrap;
+    background:#e8f7f7;
+    padding:7px 10px;
+    border-radius:4px;
+    position:relative;
+    z-index:2;
+}
+
+/* Compact search-result cards */
+.st-key-search_result_best,
+.st-key-search_result_1,
+.st-key-search_result_2,
+.st-key-search_result_3,
+.st-key-search_result_4,
+.st-key-search_result_5,
+.st-key-search_result_6,
+.st-key-search_result_7,
+.st-key-search_result_8,
+.st-key-search_result_9 {
+    margin-bottom: 7px !important;
+}
+
+.st-key-search_result_best [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_1 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_2 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_3 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_4 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_5 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_6 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_7 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_8 [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-search_result_9 [data-testid="stVerticalBlockBorderWrapper"] {
+    padding: 8px 10px !important;
+    border-radius: 7px !important;
+}
+
+.result-label {
+    color:#0561a0;
+    font-weight:700;
+    font-size:11px;
+    line-height:1.2;
+}
+.result-filename {
+    margin-top:3px;
+    color:#0561a0;
+    font-weight:700;
+    font-size:12px;
+    line-height:1.35;
+    word-break:break-word;
+}
+.result-score {
+    margin-top:3px;
+    color:#687b87;
+    font-size:10px;
+}
+
+.st-key-search_result_best button,
+.st-key-search_result_1 button,
+.st-key-search_result_2 button,
+.st-key-search_result_3 button,
+.st-key-search_result_4 button,
+.st-key-search_result_5 button,
+.st-key-search_result_6 button,
+.st-key-search_result_7 button,
+.st-key-search_result_8 button,
+.st-key-search_result_9 button {
+    min-height: 28px !important;
+    height: 28px !important;
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+    margin-top: 4px !important;
+}
+
+.best-match-card { background:linear-gradient(110deg,#f1fcf8,#fff 70%); border:1px solid #7ad8bd; border-radius:10px; padding:16px 18px; margin-top:8px; box-shadow:0 3px 12px rgba(12,54,70,.05); }
+.best-match-head { display:flex; justify-content:space-between; align-items:center; }
+.pdf-badge { display:inline-flex; background:#e94b3c; color:white; font-weight:800; font-size:10px; border-radius:4px; padding:4px 6px; margin-right:7px; }
+.best-match-title { color:#07866b; font-size:18px; font-weight:700; }
+.best-match-file { color:#102d42; font-size:20px; font-weight:700; margin-top:8px; }
+.best-match-meta { color:#687b87; font-size:12px; margin-top:4px; }
+.source-page-label { font-size:12px; font-weight:700; color:#315468; margin:14px 0 6px; padding:6px 10px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
+
+
+/* Search / document reader redesign */
+.search-count { color:#687b87; font-size:11px; margin:2px 0 8px; }
+.reader-toolbar {
+    background:#ffffff; border:1px solid var(--border); border-radius:8px;
+    padding:7px 10px; margin-bottom:8px;
+}
+.reader-title { font-size:15px; font-weight:700; color:var(--text); line-height:1.3; word-break:break-word; }
+.reader-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+.reader-match {
+    background:#e7f8f1; border:1px solid #9bdcc8; color:#087c63;
+    border-radius:5px; padding:5px 8px; font-size:10px; font-weight:700;
+    display:inline-block; margin-top:5px;
+}
+.match-panel {
+    background:#ffffff; border:1px solid var(--border); border-radius:8px;
+    padding:10px; margin-top:10px;
+}
+.match-panel-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:7px; }
+.match-item {
+    background:#f7fafb; border:1px solid #e1e8ec; border-radius:6px;
+    padding:7px 8px; margin-bottom:6px;
+}
+.match-item-page { color:#0561a0; font-size:10px; font-weight:700; }
+.match-item-text { color:#385362; font-size:10px; line-height:1.35; margin-top:2px; }
+.result-snippet {
+    color:#536b78; font-size:10px; line-height:1.4; margin-top:5px;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+}
+.result-page { color:#687b87; font-size:10px; margin-top:3px; }
+.result-score-pill {
+    float:right; background:#e7f8f1; color:#087c63; border-radius:10px;
+    padding:2px 6px; font-size:9px; font-weight:700;
+}
+.source-page-label { font-size:11px; font-weight:700; color:#315468; margin:8px 0 5px; padding:5px 8px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
+
+/* Streamlit controls */
+button[kind="primary"] { background: var(--teal) !important; border-color: var(--teal) !important; }
+button[kind="primary"]:hover { background: var(--teal-dark) !important; }
+[data-testid="stFileUploader"] { background: white; border-radius: 10px; border: 1px dashed #9ab1bc; }
+[data-testid="stVerticalBlockBorderWrapper"] { border-color: var(--border) !important; border-radius: 9px !important; }
+.stDownloadButton button { border-color: #00a982 !important; color: #087b64 !important; }
+
+@media (max-width: 900px) {
+    .brand-block { width: 110px; }
+    .brand-divider, .top-tagline { display: none; }
+    .app-title { font-size: 22px; }
+    .app-subtitle { font-size: 12px; }
+    .exact-answer-title { font-size: 16px; }
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -825,6 +1123,33 @@ def render_pdf_page(document_path, page_number, scale=1.75):
         return None
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def render_pdf_page_highlighted(document_path, page_number, query="", scale=1.75):
+    """Render one readable PDF page with matching query terms highlighted."""
+    try:
+        with fitz.open(document_path) as pdf:
+            if page_number < 1 or page_number > len(pdf):
+                return None
+            page = pdf[page_number - 1]
+            terms = [t for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
+            highlighted = set()
+            for term in terms[:12]:
+                try:
+                    for rect in page.search_for(term):
+                        key = (round(rect.x0, 1), round(rect.y0, 1), round(rect.x1, 1), round(rect.y1, 1))
+                        if key in highlighted:
+                            continue
+                        highlighted.add(key)
+                        annot = page.add_highlight_annot(rect)
+                        annot.update()
+                except Exception:
+                    continue
+            pix = page.get_pixmap(matrix=fitz.Matrix(float(scale), float(scale)), alpha=False)
+            return pix.tobytes("png")
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=120, show_spinner=False)
 def find_document_matches(document_path, query, limit=8):
     """Find pages containing the user's actual search terms and return verbatim context."""
@@ -1122,58 +1447,60 @@ if not browser_is_authorized():
     st.stop()
 
 
+# HEADER
 # ============================================================
-# APP SHELL
-# ============================================================
 
-def go(page_name):
-    st.session_state.page = page_name
-    if page_name != "Search":
-        st.session_state.search_query = ""
-    st.rerun()
+user_name = "Authorized User"
 
-with st.sidebar:
-    st.markdown('<div class="sidebar-logo">HP<span>E</span></div><div class="sidebar-kicker">KNOWLEDGE BASE</div>', unsafe_allow_html=True)
-    nav_items=[("Home","⌂","Home"),("Browse All","▤","Browse All"),("Categories","▦","Categories"),("Favorites","☆","Favorites"),("Recent","◷","Recent")]
-    for label,icon,target in nav_items:
-        active=(st.session_state.page==target) or (target=="Home" and st.session_state.page=="Search" and not st.session_state.search_query)
-        if active: st.markdown('<div class="sidebar-active">',unsafe_allow_html=True)
-        if st.button(f"{icon}   {label}",key=f"nav_{target}",use_container_width=True): go(target)
-        if active: st.markdown('</div>',unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-section">Workspace</div>',unsafe_allow_html=True)
-    for label,icon,target in [("Upload PDF","⇧","Upload PDF"),("Manage Content","▤","Manage Documents"),("Analytics","⌁","Analytics")]:
-        if st.button(f"{icon}   {label}",key=f"nav_{target}",use_container_width=True):
-            if target in ("Upload PDF","Manage Documents") and not st.session_state.admin_authenticated:
-                st.session_state.page="Admin Login"; st.rerun()
-            else: go(target)
-    st.markdown('<div class="sidebar-section">Support</div>',unsafe_allow_html=True)
-    for label,icon,target in [("Feedback","▢","Feedback"),("Help","?","Help")]:
-        if st.button(f"{icon}   {label}",key=f"nav_{target}",use_container_width=True): go(target)
-    st.markdown('<div class="sidebar-footer"><b>HPE</b><br>Knowledge Base<br><span style="color:#6f9ba4">v1.0.0</span></div>',unsafe_allow_html=True)
+st.markdown(
+    f"""
+    <div class="kb-topbar">
+        <div class="brand-block">
+            <div class="brand-mark"></div>
+            <div class="brand-name">Hewlett Packard<br>Enterprise</div>
+        </div>
+        <div class="brand-divider"></div>
+        <div class="title-block">
+            <div class="app-title">Knowledge Base</div>
+            <div class="app-subtitle">Find exact information from your organization's documents</div>
+        </div>
+        <div class="top-user">{user_name}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-left,search,user=st.columns([3.0,4.7,2.1],gap="small")
-with left:
-    st.markdown('<div class="top-title">Knowledge Base</div>',unsafe_allow_html=True)
-with search:
-    top_query=st.text_input("Header search",value=st.session_state.search_query,placeholder="Search for topics, keywords, or questions...",label_visibility="collapsed",key="header_search_box")
-with user:
-    u1,u2=st.columns([3.2,1])
-    with u1: st.markdown('<div class="top-user-wrap"><div class="avatar">AU</div><div><div class="user-name">Authorized User</div><div class="user-role">Knowledge Base</div></div></div>',unsafe_allow_html=True)
-    with u2:
-        with st.popover("⚙",use_container_width=True):
-            st.markdown("**Knowledge Base Access**")
-            st.caption("Browser authorization: persistent until manually cleared")
-            if st.session_state.admin_authenticated:
-                if st.button("Manage Documents",use_container_width=True,key="gear_manage"): go("Manage Documents")
-                if st.button("Sign out admin",use_container_width=True,key="gear_signout"):
-                    st.session_state.admin_authenticated=False; go("Search")
-            else:
-                if st.button("🔒 Manage Documents",use_container_width=True,key="gear_login"): go("Admin Login")
-            if st.button("Clear Browser Access",use_container_width=True,key="gear_clear"):
-                clear_browser_access(); st.session_state.admin_authenticated=False; st.stop()
-if top_query.strip()!=st.session_state.search_query.strip():
-    st.session_state.search_query=top_query.strip(); st.session_state.page="Search"; st.session_state.search_signature=None
-    if top_query.strip(): st.rerun()
+# Gear/admin menu.
+# Keep the gear in a dedicated keyed wrapper so the Filters popover is never repositioned.
+with st.container(key="gear_wrap"):
+    with st.popover("⚙", use_container_width=False):
+        st.markdown("**Knowledge Base Access**")
+        st.caption(
+            "Browser authorization: Persistent until manually cleared"
+        )
+        st.divider()
+
+        if st.session_state.admin_authenticated:
+            if st.button("Manage Documents", use_container_width=True):
+                st.session_state.page = "Manage Documents"
+                st.rerun()
+
+            if st.button("Sign out admin", use_container_width=True):
+                st.session_state.admin_authenticated = False
+                st.session_state.page = "Search"
+                st.rerun()
+        else:
+            if st.button("🔒 Manage Documents", use_container_width=True):
+                st.session_state.page = "Admin Login"
+                st.rerun()
+
+        if st.button("Clear Browser Access", use_container_width=True):
+            clear_browser_access()
+            st.session_state.admin_authenticated = False
+            st.session_state.page = "Search"
+            st.rerun()
+
+
 # ============================================================
 # ADMIN LOGIN
 # ============================================================
@@ -1308,146 +1635,189 @@ elif st.session_state.page == "Manage Documents":
 
 
 # ============================================================
-# HOME / SEARCH
+# SEARCH KNOWLEDGE BASE
 # ============================================================
-if st.session_state.page in {"Browse All","Categories","Favorites","Recent","Analytics","Feedback","Help","Upload PDF"}:
-    docs=get_documents()
-    if st.session_state.page=="Upload PDF":
-        if not st.session_state.admin_authenticated: st.session_state.page="Admin Login"; st.rerun()
-        else: st.session_state.page="Manage Documents"; st.rerun()
-    elif st.session_state.page=="Browse All":
-        st.markdown('<div class="page-heading"><div><div class="page-title">Browse All Documents</div><div class="page-description">Search and open any indexed PDF.</div></div></div>',unsafe_allow_html=True)
-        q=st.text_input("Browse",placeholder="Filter documents by title...",label_visibility="collapsed",key="browse_filter")
-        for doc in docs:
-            if q and q.lower() not in doc["filename"].lower(): continue
-            a,b=st.columns([5,1])
-            with a: st.markdown(f"**📄 {doc['filename']}**"); st.caption(f"{doc['category']} · {doc['page_count']} pages · {format_bytes(doc['file_size'])}")
-            with b:
-                if st.button("Open",key=f"browse_{doc['id']}"):
-                    st.session_state.search_query=doc["filename"].replace(".pdf",""); st.session_state.force_result_id=None; st.session_state.page="Search"; st.session_state.search_signature=None; st.rerun()
-                if st.button("☆",key=f"fav_{doc['id']}"):
-                    favs=st.session_state.setdefault("favorites",set())
-                    if doc["id"] in favs: favs.remove(doc["id"])
-                    else: favs.add(doc["id"])
-                    st.rerun()
-            st.divider()
-    elif st.session_state.page=="Categories":
-        st.markdown('<div class="page-heading"><div><div class="page-title">Categories</div><div class="page-description">Browse documents by category.</div></div></div>',unsafe_allow_html=True)
-        counts={}
-        for d in docs: counts[d["category"]]=counts.get(d["category"],0)+1
-        cols=st.columns(4)
-        for i,(cat,count) in enumerate(sorted(counts.items())):
-            with cols[i%4]:
-                with st.container(border=True):
-                    st.markdown(f"### {cat}"); st.caption(f"{count} document(s)")
-                    if st.button("Browse",key=f"cat_{cat}"):
-                        st.session_state.search_query=cat; st.session_state.page="Search"; st.session_state.search_signature=None; st.rerun()
-    elif st.session_state.page=="Recent":
-        st.markdown('<div class="page-heading"><div><div class="page-title">Recent Documents</div><div class="page-description">Latest documents added to the knowledge base.</div></div></div>',unsafe_allow_html=True)
-        for d in docs[:20]: st.markdown(f"**📄 {d['filename']}** — {d['category']} · {d['page_count']} pages"); st.divider()
-    elif st.session_state.page=="Favorites":
-        st.markdown('<div class="page-heading"><div><div class="page-title">Favorites</div><div class="page-description">Documents marked for quick access in this browser session.</div></div></div>',unsafe_allow_html=True)
-        favs=st.session_state.get("favorites",set()); favorite_docs=[d for d in docs if d["id"] in favs]
-        if not favorite_docs: st.info("No favorites yet.")
-        for d in favorite_docs: st.markdown(f"⭐ **{d['filename']}**")
-    elif st.session_state.page=="Analytics":
-        st.markdown('<div class="page-heading"><div><div class="page-title">Analytics</div><div class="page-description">Current knowledge-base inventory.</div></div></div>',unsafe_allow_html=True)
-        a,b,c,d=st.columns(4); a.metric("Documents",len(docs)); b.metric("Categories",len(get_categories())); c.metric("Pages",sum(int(x["page_count"] or 0) for x in docs)); d.metric("Storage",format_bytes(sum(int(x["file_size"] or 0) for x in docs)))
-    elif st.session_state.page=="Feedback":
-        st.markdown('<div class="page-heading"><div><div class="page-title">Feedback</div><div class="page-description">Tell us what would make search easier.</div></div></div>',unsafe_allow_html=True)
-        with st.form("feedback_form"):
-            feedback=st.text_area("Feedback",placeholder="What should we improve?")
-            if st.form_submit_button("Submit Feedback",type="primary"): st.success("Thank you for your feedback.")
-    elif st.session_state.page=="Help":
-        st.markdown('<div class="page-heading"><div><div class="page-title">Help</div><div class="page-description">Quick guide to using the knowledge base.</div></div></div>',unsafe_allow_html=True)
-        st.markdown("**Search:** enter a topic, keyword, phrase, or question.  \n**Open Result:** opens the matching PDF page with highlighted terms.  \n**Filters:** narrow results by category and result count.  \n**Admin:** use the gear beside Authorized User, then enter the Admin PIN to manage PDFs.")
+
 else:
-    docs=get_documents(); cats=get_categories(); active_query=st.session_state.search_query.strip()
-    if not active_query:
-        st.markdown('<div class="hero"><h1>Find the answers you need</h1><p>Search our knowledge base, explore topics, or browse by category.</p></div>',unsafe_allow_html=True)
-        hq,hb=st.columns([5.4,1],gap="small")
-        with hq: hero_query=st.text_input("Hero search",placeholder="Search for solutions, guides, or keywords...",label_visibility="collapsed",key="hero_search_box")
-        with hb:
-            if st.button("Search",type="primary",use_container_width=True,key="hero_search_btn"):
-                st.session_state.search_query=hero_query.strip(); st.session_state.page="Search"; st.session_state.search_signature=None; st.rerun()
-        st.markdown('<div class="popular">Popular searches: <span class="chip">Licensing</span><span class="chip">Portal Access</span><span class="chip">Account Setup</span><span class="chip">Troubleshooting</span><span class="chip">HPE GreenLake</span><span class="chip">Software Support</span></div>',unsafe_allow_html=True)
-        total_pages=sum(int(d["page_count"] or 0) for d in docs); recent_count=min(24,len(docs))
-        st.markdown(f'<div class="metric-grid"><div class="metric green"><div class="metric-icon">▤</div><div><div class="metric-value">{len(docs)}</div><div class="metric-label">Total Documents</div></div><div class="metric-arrow">›</div></div><div class="metric blue"><div class="metric-icon">▱</div><div><div class="metric-value">{len(cats)}</div><div class="metric-label">Categories</div></div><div class="metric-arrow">›</div></div><div class="metric gold"><div class="metric-icon">★</div><div><div class="metric-value">{total_pages:,}</div><div class="metric-label">Indexed Pages</div></div><div class="metric-arrow">›</div></div><div class="metric purple"><div class="metric-icon">⇧</div><div><div class="metric-value">{recent_count}</div><div class="metric-label">Recently Added</div></div><div class="metric-arrow">›</div></div></div>',unsafe_allow_html=True)
-        counts={}
-        for d in docs: counts[d["category"]]=counts.get(d["category"],0)+1
-        items=sorted(counts.items(),key=lambda x:(-x[1],x[0]))[:8]
-        cat_html=''.join([f'<div class="cat"><div class="cat-icon">{["●","⌕","▣","⚙","☁","▤","◈","◇"][i]}</div><div><div class="cat-name">{cat}</div><div class="cat-count">{count} documents</div></div></div>' for i,(cat,count) in enumerate(items)])
-        st.markdown(f'<div class="section-card"><div class="section-head"><div class="section-title">▦ &nbsp;Browse by Category</div><div class="section-link">{len(cats)} categories</div></div><div class="cat-grid">{cat_html}</div></div>',unsafe_allow_html=True)
-        recent=sorted(docs,key=lambda x:x.get("uploaded_at","") or "",reverse=True)[:5]
-        left,right=st.columns([1.05,.95],gap="large")
-        with left:
-            st.markdown('<div class="section-card"><div class="section-head"><div class="section-title">▤ &nbsp;Recent Documents</div><div class="section-link">View All →</div></div>',unsafe_allow_html=True)
-            if recent:
-                for d in recent: st.markdown(f'<div class="recent-row"><div class="pdf-icon">PDF</div><div><div class="recent-title">{d["filename"]}</div><div class="recent-meta">{d["category"]} · {d["page_count"]} pages</div></div><div class="recent-date">{str(d.get("uploaded_at", ""))[:10]}</div></div>',unsafe_allow_html=True)
-            else: st.caption("No documents have been indexed yet.")
-            st.markdown('</div>',unsafe_allow_html=True)
-        with right:
-            st.markdown('<div class="section-card"><div class="section-head"><div class="section-title">★ &nbsp;Featured Document</div></div>',unsafe_allow_html=True)
-            if docs:
-                featured=recent[0] if recent else docs[0]; preview=render_pdf_page(featured["stored_path"],1,scale=1.0)
-                if preview: st.image(preview,use_container_width=True)
-                st.markdown(f'<div class="featured-title">{featured["filename"]}</div><div class="featured-meta">{featured["category"]} · {featured["page_count"]} pages</div>',unsafe_allow_html=True)
-                if st.button("Open Document →",type="primary",use_container_width=True,key="featured_open"):
-                    st.session_state.search_query=featured["filename"].replace(".pdf",""); st.session_state.page="Search"; st.session_state.search_signature=None; st.rerun()
-            else: st.info("Upload a PDF to feature it here.")
-            st.markdown('</div>',unsafe_allow_html=True)
-    else:
-        search_col,button_col,filter_col=st.columns([6.4,1,1],gap="small")
-        with search_col: query=st.text_input("Search",value=active_query,placeholder="Search for solutions, guides, or keywords...",label_visibility="collapsed",key="main_search_box")
-        with button_col: search_clicked=st.button("Search",type="primary",use_container_width=True,key="result_search_btn")
-        with filter_col:
-            with st.popover("☷ Filters",use_container_width=True):
-                category=st.selectbox("Category",["All Categories"]+get_categories(),key="search_category"); top_k=st.selectbox("Results",[5,10,20],index=1,key="search_top_k")
-        if search_clicked: st.session_state.search_query=query.strip(); st.session_state.search_signature=None; st.rerun()
-        active_query=st.session_state.search_query.strip(); category=st.session_state.get("search_category","All Categories"); top_k=st.session_state.get("search_top_k",10); sig=(active_query,category,top_k)
-        if st.session_state.get("search_signature")!=sig: st.session_state.search_results=search_documents(active_query,category=category,top_k=top_k); st.session_state.search_signature=sig; st.session_state.viewer_page=None
-        results=st.session_state.get("search_results",[])
+    st.session_state.page = "Search"
+
+    search_col, button_col, filter_col = st.columns([6.4, 1.0, 1.0], gap="small")
+    with search_col:
+        query = st.text_input(
+            "Search",
+            value=st.session_state.search_query,
+            placeholder="What should I check or find in the knowledge base?",
+            label_visibility="collapsed",
+            key="main_search_box",
+        )
+    with button_col:
+        search_clicked = st.button("Search", type="primary", use_container_width=True)
+    with filter_col:
+        with st.popover("☷ Filters", use_container_width=True):
+            category = st.selectbox("Category", ["All Categories"] + get_categories(), key="search_category")
+            top_k = st.selectbox("Results", [5, 10, 20], index=1, key="search_top_k")
+
+    if search_clicked:
+        st.session_state.search_query = query
+        st.session_state.force_result_id = None
+        st.session_state.search_signature = None
+
+    active_query = st.session_state.search_query.strip()
+    category = st.session_state.get("search_category", "All Categories")
+    top_k = st.session_state.get("search_top_k", 10)
+
+    if active_query:
+        search_signature = (active_query, category, top_k)
+        if st.session_state.get("search_signature") != search_signature:
+            st.session_state.search_results = search_documents(active_query, category=category, top_k=top_k)
+            st.session_state.search_signature = search_signature
+            st.session_state.viewer_page = None
+
+        results = st.session_state.get("search_results", [])
+
         if st.session_state.force_result_id is not None:
-            fid=st.session_state.force_result_id; forced=[r for r in results if r["id"]==fid]; others=[r for r in results if r["id"]!=fid]
-            if forced: results=forced+others; st.session_state.viewer_page=forced[0]["page_number"]
-            st.session_state.force_result_id=None
-        if not results: st.warning("No matching PDF was found. Try different keywords or upload another document.")
+            forced_id = st.session_state.force_result_id
+            forced = [r for r in results if r["id"] == forced_id]
+            others = [r for r in results if r["id"] != forced_id]
+            if forced:
+                results = forced + others
+                st.session_state.viewer_page = forced[0]["page_number"]
+            st.session_state.force_result_id = None
+
+        if not results:
+            st.warning("No matching PDF was found. Try different keywords or upload another document.")
         else:
-            best=results[0]; best_doc=get_document_by_id(best["document_id"]); total_pages=int(best_doc["page_count"] or 0) if best_doc else 0
-            if st.session_state.get("viewer_page") is None: st.session_state.viewer_page=int(best["page_number"])
-            viewer_page=max(1,min(int(st.session_state.viewer_page),max(total_pages,1)))
-            st.markdown(f'<div class="search-count">{len(results)} search result(s) · Highest match shown first</div>',unsafe_allow_html=True)
-            source_col,related_col=st.columns([1.8,.82],gap="large")
+            best = results[0]
+            best_doc = get_document_by_id(best["document_id"])
+            total_pages = int(best_doc["page_count"] or 0) if best_doc else 0
+
+            if st.session_state.get("viewer_page") is None:
+                st.session_state.viewer_page = int(best["page_number"])
+
+            viewer_page = max(1, min(int(st.session_state.viewer_page), max(total_pages, 1)))
+
+            st.markdown(
+                f'<div class="search-count">{len(results)} search result(s) · Showing the highest match first</div>',
+                unsafe_allow_html=True,
+            )
+
+            source_col, related_col = st.columns([1.8, 0.82], gap="large")
+
             with source_col:
-                st.markdown(f'<div class="reader-toolbar"><div class="reader-title">▣ {best["filename"]}</div><div class="reader-meta">Page {viewer_page} of {total_pages} · Search: “{active_query}”</div><div class="reader-match">Highest match · source text shown exactly as it appears in the PDF</div></div>',unsafe_allow_html=True)
-                n1,n2,n3,n4=st.columns([1,1.1,1,1.1],gap="small")
-                with n1:
-                    if st.button("‹ Previous",disabled=viewer_page<=1,use_container_width=True,key="pdf_prev"): st.session_state.viewer_page=max(1,viewer_page-1); st.rerun()
-                with n2: st.markdown(f"<div style='text-align:center;padding-top:8px;font-size:11px;color:#687b87'>Page <b>{viewer_page}</b> / {total_pages}</div>",unsafe_allow_html=True)
-                with n3:
-                    if st.button("Next ›",disabled=viewer_page>=total_pages,use_container_width=True,key="pdf_next"): st.session_state.viewer_page=min(total_pages,viewer_page+1); st.rerun()
-                with n4: zoom=st.selectbox("Zoom",[100,125,150,175,200],index=1,format_func=lambda x:f"{x}%",label_visibility="collapsed",key="pdf_zoom")
-                image=render_pdf_page_highlighted(best["stored_path"],viewer_page,active_query,scale=zoom/100*1.25)
-                if image: st.image(image,width={100:720,125:820,150:980,175:1140,200:1300}.get(int(zoom),820))
-                else: st.error("Unable to render this PDF page.")
+                st.markdown(
+                    f"""
+                    <div class='reader-toolbar'>
+                        <div class='reader-title'>▣ {best['filename']}</div>
+                        <div class='reader-meta'>Page {viewer_page} of {total_pages} · Search: “{active_query}”</div>
+                        <div class='reader-match'>Highest match · source text shown exactly as it appears in the PDF</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                nav1, nav2, nav3, nav4 = st.columns([1, 1.1, 1, 1.1], gap="small")
+                with nav1:
+                    if st.button("‹ Previous", disabled=(viewer_page <= 1), use_container_width=True, key="pdf_prev"):
+                        st.session_state.viewer_page = max(1, viewer_page - 1)
+                        st.rerun()
+                with nav2:
+                    st.markdown(f"<div style='text-align:center;padding-top:8px;font-size:11px;color:#687b87;'>Page <b>{viewer_page}</b> / {total_pages}</div>", unsafe_allow_html=True)
+                with nav3:
+                    if st.button("Next ›", disabled=(viewer_page >= total_pages), use_container_width=True, key="pdf_next"):
+                        st.session_state.viewer_page = min(total_pages, viewer_page + 1)
+                        st.rerun()
+                with nav4:
+                    zoom = st.selectbox("Zoom", [125, 150, 175, 200], index=1, format_func=lambda x: f"{x}%", label_visibility="collapsed", key="pdf_zoom")
+
+                image = render_pdf_page_highlighted(best["stored_path"], viewer_page, active_query, scale=zoom / 100 * 1.25)
+                if image:
+                    # Do not force the image to the column width: that makes every zoom
+                    # level look identical.  A fixed display width lets the selected zoom
+                    # visibly enlarge the rendered PDF page.
+                    display_width = {125: 780, 150: 930, 175: 1080, 200: 1230}.get(int(zoom), 930)
+                    st.image(image, width=display_width)
+                else:
+                    st.error("Unable to render this PDF page.")
+
+                current_text = ""
                 try:
-                    with fitz.open(best["stored_path"]) as pdf: current_text=clean_text(pdf[viewer_page-1].get_text("text"))
-                except Exception: current_text=""
-                if current_text: st.markdown(f'<div class="match-panel"><div class="match-panel-title">Match context · Page {viewer_page}</div><div class="result-snippet" style="font-size:12px;line-height:1.55;color:#294a5c">{make_snippet(current_text,active_query,radius=520)}</div></div>',unsafe_allow_html=True)
+                    with fitz.open(best["stored_path"]) as pdf:
+                        current_text = clean_text(pdf[viewer_page - 1].get_text("text"))
+                except Exception:
+                    current_text = ""
+
+                if current_text:
+                    st.markdown(
+                        f"""
+                        <div class='match-panel'>
+                            <div class='match-panel-title'>Match context · Page {viewer_page}</div>
+                            <div class='result-snippet' style='font-size:12px;line-height:1.55;color:#294a5c;'>{make_snippet(current_text, active_query, radius=520)}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
             with related_col:
-                st.markdown('<div class="panel-title">Search Results</div>',unsafe_allow_html=True)
-                for i,result in enumerate(results):
-                    with st.container(key=f"search_result_{'best' if i==0 else i}",border=True):
-                        score_pct=min(99,max(1,round(result["score"]*100))); label="Highest Match" if i==0 else "Search Result"
-                        st.markdown(f'<div class="result-label">{label}<span class="result-score-pill">{score_pct}%</span></div><div class="result-filename">{result["filename"]}</div><div class="result-page">Page {result["page_number"]}</div><div class="result-snippet">{result["snippet"]}</div>',unsafe_allow_html=True)
-                        if st.button("Open Result",key=f"open_result_{result['id']}",use_container_width=True): st.session_state.force_result_id=result["id"]; st.session_state.viewer_page=result["page_number"]; st.rerun()
-                matches=find_document_matches(best["stored_path"],active_query,limit=8)
-                st.markdown('<div class="match-panel"><div class="match-panel-title">Matches in this PDF</div>',unsafe_allow_html=True)
+                st.markdown('<div class="panel-title">Search Results</div>', unsafe_allow_html=True)
+
+                for i, result in enumerate(results):
+                    is_best = i == 0
+                    key_prefix = "best" if is_best else str(i)
+                    with st.container(key=f"search_result_{key_prefix}", border=True):
+                        score_pct = min(99, max(1, round(result["score"] * 100)))
+                        label = "Highest Match" if is_best else "Search Result"
+                        st.markdown(
+                            f"""
+                            <div class='result-label'>{label}<span class='result-score-pill'>{score_pct}%</span></div>
+                            <div class='result-filename'>{result['filename']}</div>
+                            <div class='result-page'>Page {result['page_number']}</div>
+                            <div class='result-snippet'>{result['snippet']}</div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                        if st.button("Open Result", key=f"open_result_{result['id']}", use_container_width=True):
+                            st.session_state.force_result_id = result["id"]
+                            st.session_state.viewer_page = result["page_number"]
+                            st.rerun()
+
+                matches = find_document_matches(best["stored_path"], active_query, limit=8)
+                st.markdown('<div class="match-panel"><div class="match-panel-title">Matches in this PDF</div></div>', unsafe_allow_html=True)
                 if matches:
                     for match in matches:
-                        if st.button(f"Page {match['page']}",key=f"jump_match_{best['id']}_{match['page']}",use_container_width=True): st.session_state.viewer_page=match["page"]; st.rerun()
-                        st.markdown(f'<div class="match-item"><div class="match-item-page">Page {match["page"]} · {match["score"]} term match(es)</div><div class="match-item-text">{match["snippet"]}</div></div>',unsafe_allow_html=True)
-                else: st.caption("No exact text occurrence was detected on the other pages.")
-                st.markdown('</div>',unsafe_allow_html=True)
+                        if st.button(f"Page {match['page']}", key=f"jump_match_{best['id']}_{match['page']}", use_container_width=True):
+                            st.session_state.viewer_page = match["page"]
+                            st.rerun()
+                        st.markdown(
+                            f"<div class='match-item'><div class='match-item-page'>Page {match['page']} · {match['score']} term match(es)</div><div class='match-item-text'>{match['snippet']}</div></div>",
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.caption("No exact text occurrence was detected on the other pages.")
 
-st.markdown('<div style="height:22px"></div><div style="text-align:center;color:#78909c;font-size:10px">HPE Knowledge Base · PDF Search</div>',unsafe_allow_html=True)
+    else:
+        docs = get_documents()
+        total_pages = sum(int(d["page_count"] or 0) for d in docs)
+        st.markdown(
+            f"""
+            <div class="welcome-card">
+                <div class="welcome-icon">⌕</div>
+                <div class="welcome-title">Search your knowledge base</div>
+                <div class="welcome-text">Search for a process, checklist, policy, troubleshooting step, or any information contained in your uploaded PDFs.</div>
+                <div class="welcome-stats"><span><b>{len(docs)}</b> documents</span><span><b>{total_pages:,}</b> indexed pages</span></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+# ============================================================
+# BOTTOM NAVIGATION
+# ============================================================
+
+st.markdown('<div class="bottom-nav-spacer"></div>', unsafe_allow_html=True)
+nav_left, nav_center, nav_right = st.columns([1, 2, 1])
+with nav_center:
+    if st.button("⌕  Search Knowledge Base", use_container_width=True):
+        st.session_state.page = "Search"
+        st.rerun()
+
+st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search</div>', unsafe_allow_html=True)
