@@ -1623,17 +1623,24 @@ elif st.session_state.page == "Manage Documents":
 else:
     st.session_state.page = "Search"
 
-    search_col, button_col, filter_col = st.columns([6.4, 1.0, 1.0], gap="small")
-    with search_col:
-        query = st.text_input(
-            "Search",
-            value=st.session_state.search_query,
-            placeholder="What should I check or find in the knowledge base?",
-            label_visibility="collapsed",
-            key="main_search_box",
-        )
-    with button_col:
-        search_clicked = st.button("Search", type="primary", use_container_width=True)
+    # Put the search box and Search button inside a Streamlit form so pressing
+    # Enter in the text field submits the search exactly like clicking Search.
+    # The filter popover remains outside the form so changing filters does not
+    # require a separate form submission.
+    search_form_col, filter_col = st.columns([7.4, 1.0], gap="small")
+    with search_form_col:
+        with st.form("main_search_form", clear_on_submit=False):
+            search_col, button_col = st.columns([6.4, 1.0], gap="small")
+            with search_col:
+                query = st.text_input(
+                    "Search",
+                    value=st.session_state.search_query,
+                    placeholder="What should I check or find in the knowledge base?",
+                    label_visibility="collapsed",
+                    key="main_search_box",
+                )
+            with button_col:
+                search_clicked = st.form_submit_button("Search", type="primary", use_container_width=True)
     with filter_col:
         with st.popover("☷ Filters", use_container_width=True):
             category = st.selectbox("Category", ["All Categories"] + get_categories(), key="search_category")
