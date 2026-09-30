@@ -1,4 +1,3 @@
-
 """
 HPE Knowledge Base — Streamlit single-file application
 
