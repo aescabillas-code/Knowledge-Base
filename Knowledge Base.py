@@ -1,7 +1,6 @@
 import os
 import re
 import io
-import json
 import math
 import time
 import hashlib
@@ -124,12 +123,13 @@ button[kind="header"],
 .title-block { flex: 1; }
 .top-tagline { text-align: right; color: #18394e; font-size: 12px; line-height: 1.3; margin-right: 12px; }
 .top-actions { width: 36px; }
-/* Admin gear: fixed beside Authorized User without taking layout space. */
+/* Admin gear: visually docked directly beside Authorized User.
+   It is fixed so it never consumes space in the header or moves filters/search controls. */
 .kb-topbar { position: relative; }
 .st-key-gear_wrap {
     position:fixed !important;
-    top:92px !important;
-    right:24px !important;
+    top:23px !important;
+    right:12px !important;
     width:30px !important;
     height:30px !important;
     margin:0 !important;
@@ -155,7 +155,7 @@ button[kind="header"],
     background:#e8f7f7 !important;
     box-shadow:none !important;
     color:#315468 !important;
-    font-size:14px !important;
+    font-size:13px !important;
     line-height:30px !important;
 }
 .st-key-gear_wrap div[data-testid="stPopover"] > button:hover,
@@ -232,12 +232,14 @@ button[kind="header"],
 .top-user {
     color:#315468;
     font-size:12px;
-    margin-right:42px;
     white-space:nowrap;
     background:#e8f7f7;
     padding:7px 10px;
     border-radius:4px;
-    position:relative;
+    position:absolute;
+    right:50px;
+    top:50%;
+    transform:translateY(-50%);
     z-index:2;
 }
 
@@ -460,16 +462,6 @@ def init_db():
             FOREIGN KEY(document_id) REFERENCES documents(id)
         );
 
-        CREATE TABLE IF NOT EXISTS decision_trees (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            category TEXT DEFAULT 'General',
-            description TEXT DEFAULT '',
-            start_node TEXT NOT NULL,
-            nodes_json TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document_page ON chunks(document_id, page_number)")
@@ -1037,118 +1029,6 @@ def search_documents(query, category="All Categories", top_k=10):
     return results[:top_k]
 
 
-# ============================================================
-# DECISION TREE ENGINE
-# ============================================================
-
-def get_decision_trees():
-    conn = db()
-    rows = conn.execute("SELECT * FROM decision_trees ORDER BY name").fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
-
-
-def get_decision_tree(tree_id):
-    conn = db()
-    row = conn.execute("SELECT * FROM decision_trees WHERE id = ?", (tree_id,)).fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def save_decision_tree(name, category, description, start_node, nodes):
-    name = name.strip(); category = category.strip() or "General"; description = description.strip(); start_node = start_node.strip()
-    if not name or not start_node or not isinstance(nodes, dict) or start_node not in nodes:
-        return False, "Tree name, start node, and a valid start node definition are required."
-    now = datetime.now().isoformat(timespec="seconds")
-    payload = json.dumps(nodes, ensure_ascii=False, indent=2)
-    conn = db()
-    try:
-        existing = conn.execute("SELECT id FROM decision_trees WHERE name = ?", (name,)).fetchone()
-        if existing:
-            conn.execute("UPDATE decision_trees SET category=?, description=?, start_node=?, nodes_json=?, updated_at=? WHERE id=?", (category, description, start_node, payload, now, existing["id"]))
-        else:
-            conn.execute("INSERT INTO decision_trees (name, category, description, start_node, nodes_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (name, category, description, start_node, payload, now, now))
-        conn.commit(); return True, "Decision tree saved successfully."
-    except sqlite3.IntegrityError:
-        return False, "A decision tree with that name already exists."
-    finally:
-        conn.close()
-
-
-def delete_decision_tree(tree_id):
-    conn = db(); conn.execute("DELETE FROM decision_trees WHERE id = ?", (tree_id,)); conn.commit(); conn.close()
-
-
-def parse_tree_nodes(raw_json):
-    try:
-        value = json.loads(raw_json)
-        if not isinstance(value, dict): return None, "The tree definition must be a JSON object keyed by node ID."
-        for node_id, node in value.items():
-            if not isinstance(node, dict): return None, f"Node '{node_id}' must be an object."
-            typ = str(node.get("type", "question")).lower()
-            if typ not in {"question", "action"}: return None, f"Node '{node_id}' must have type 'question' or 'action'."
-            if typ == "question":
-                if not str(node.get("question", "")).strip(): return None, f"Question node '{node_id}' needs a question."
-                answers = node.get("answers", [])
-                if not isinstance(answers, list) or not answers: return None, f"Question node '{node_id}' needs at least one answer."
-                for answer in answers:
-                    if not isinstance(answer, dict) or not str(answer.get("label", "")).strip() or not str(answer.get("next", "")).strip():
-                        return None, f"Every answer in '{node_id}' needs a label and next node."
-                    if str(answer.get("next")) not in value:
-                        return None, f"Answer '{answer.get('label')}' in '{node_id}' points to missing node '{answer.get('next')}'."
-        return value, None
-    except json.JSONDecodeError as e:
-        return None, f"Invalid JSON: {e}"
-
-
-def decision_tree_answer(label, next_node):
-    st.session_state.decision_tree_history.append({"question": st.session_state.decision_tree_current_question, "answer": label})
-    st.session_state.decision_tree_current_node = next_node
-    st.rerun()
-
-
-def render_decision_tree_page():
-    st.markdown("<div class=\"page-heading\"><div><div class=\"page-title\">Decision Tree</div><div class=\"page-description\">Answer each question and the next action is determined by your response.</div></div></div>", unsafe_allow_html=True)
-    trees = get_decision_trees()
-    if not trees:
-        st.info("No decision trees have been configured yet. An administrator can create one from the gear menu.")
-        return
-    options = {t["name"]: t["id"] for t in trees}
-    selected = st.selectbox("Select a decision tree", list(options), key="decision_tree_selector")
-    tree = get_decision_tree(options[selected])
-    if not tree:
-        st.error("The selected decision tree could not be loaded."); return
-    try:
-        nodes = json.loads(tree["nodes_json"])
-    except Exception:
-        st.error("This decision tree contains an invalid definition."); return
-    if st.session_state.get("decision_tree_id") != tree["id"]:
-        st.session_state.decision_tree_id = tree["id"]
-        st.session_state.decision_tree_current_node = tree["start_node"]
-        st.session_state.decision_tree_history = []
-    current = st.session_state.get("decision_tree_current_node", tree["start_node"])
-    node = nodes.get(current)
-    if not node:
-        st.error(f"Decision tree node '{current}' was not found."); return
-    if st.session_state.get("decision_tree_history"):
-        st.markdown("**Path:** " + " → ".join(x["answer"] for x in st.session_state.decision_tree_history))
-    if str(node.get("type", "question")).lower() == "action":
-        st.success("Next Action")
-        st.markdown(f"### {node.get('action', 'No action specified.')}")
-        if node.get("instructions"): st.markdown(node["instructions"])
-        if node.get("source_pdf"): st.caption(f"Source PDF: {node['source_pdf']}" + (f" · Page {node['source_page']}" if node.get("source_page") else ""))
-        if st.button("↻ Start Over", type="primary"):
-            st.session_state.decision_tree_current_node = tree["start_node"]; st.session_state.decision_tree_history = []; st.rerun()
-        return
-    st.markdown(f"<div class='best-match-card'><h3>{node.get('question', 'Question')}</h3><div>Choose the answer that matches the current situation.</div></div>", unsafe_allow_html=True)
-    st.session_state.decision_tree_current_question = node.get("question", "Question")
-    for i, answer in enumerate(node.get("answers", [])):
-        label = str(answer.get("label", "Answer")); nxt = str(answer.get("next", "")).strip()
-        if st.button(label, key=f"decision_answer_{tree['id']}_{current}_{i}", use_container_width=True): decision_tree_answer(label, nxt)
-    if st.button("↻ Restart", key=f"decision_restart_{tree['id']}"):
-        st.session_state.decision_tree_current_node = tree["start_node"]; st.session_state.decision_tree_history = []; st.rerun()
-
-
 # PDF VIEWER
 # ============================================================
 
@@ -1212,10 +1092,6 @@ if "search_query" not in st.session_state:
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
 
-if "decision_tree_id" not in st.session_state: st.session_state.decision_tree_id = None
-if "decision_tree_current_node" not in st.session_state: st.session_state.decision_tree_current_node = None
-if "decision_tree_current_question" not in st.session_state: st.session_state.decision_tree_current_question = ""
-if "decision_tree_history" not in st.session_state: st.session_state.decision_tree_history = []
 
 
 # ============================================================
@@ -1505,10 +1381,6 @@ with st.container(key="gear_wrap"):
                 st.session_state.page = "Manage Documents"
                 st.rerun()
 
-            if st.button("Manage Decision Trees", use_container_width=True):
-                st.session_state.page = "Manage Decision Trees"
-                st.rerun()
-
             if st.button("Sign out admin", use_container_width=True):
                 st.session_state.admin_authenticated = False
                 st.session_state.page = "Search"
@@ -1661,53 +1533,8 @@ elif st.session_state.page == "Manage Documents":
 
 
 # ============================================================
-# ADMIN: MANAGE DECISION TREES
-# ============================================================
-
-elif st.session_state.page == "Manage Decision Trees":
-    if not st.session_state.admin_authenticated:
-        st.session_state.page = "Admin Login"; st.rerun()
-    st.markdown("<div class=\"page-heading\"><div><div class=\"page-title\">Manage Decision Trees</div><div class=\"page-description\">Build guided workflows where each answer determines the next question or action.</div></div><div class=\"admin-badge\">ADMIN ONLY</div></div>", unsafe_allow_html=True)
-    trees = get_decision_trees(); names = [t["name"] for t in trees]
-    choice = st.selectbox("Tree", ["+ Create New"] + names, key="dt_edit_choice")
-    selected = None if choice == "+ Create New" else next((t for t in trees if t["name"] == choice), None)
-    if selected:
-        name0, cat0, desc0, start0, json0 = selected["name"], selected["category"], selected["description"], selected["start_node"], selected["nodes_json"]
-    else:
-        name0, cat0, desc0, start0 = "", "General", "", "start"
-        json0 = json.dumps({"start":{"type":"question","question":"Is the issue related to account access?","answers":[{"label":"Yes","next":"account_access"},{"label":"No","next":"not_account_access"}]},"account_access":{"type":"action","action":"Verify the user's account and follow the Account Access procedure."},"not_account_access":{"type":"action","action":"Continue with the applicable troubleshooting workflow."}}, indent=2)
-    cats = ["General", "Policies", "Procedures", "Technical Support", "Licensing", "Training", "Product", "Account Management", "Other"]
-    with st.form("decision_tree_form"):
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            name = st.text_input("Tree Name", value=name0, placeholder="Example: Licensing Troubleshooting")
-            desc = st.text_input("Description", value=desc0, placeholder="When should this tree be used?")
-        with c2:
-            cat = st.selectbox("Category", cats, index=(cats.index(cat0) if cat0 in cats else 0))
-            start_node = st.text_input("Start Node ID", value=start0)
-        raw = st.text_area("Decision Tree Definition (JSON)", value=json0, height=480, help="Question nodes contain answers with next node IDs. Action nodes contain the next action.")
-        submitted = st.form_submit_button("Save Decision Tree", type="primary", use_container_width=True)
-    if submitted:
-        nodes, error = parse_tree_nodes(raw)
-        if error: st.error(error)
-        else:
-            ok, msg = save_decision_tree(name, cat, desc, start_node, nodes)
-            if ok: st.success(msg); st.session_state.decision_tree_id = None; st.rerun()
-            else: st.error(msg)
-    if selected and st.button("Delete This Decision Tree"):
-        delete_decision_tree(selected["id"]); st.session_state.decision_tree_id = None; st.rerun()
-    with st.expander("Decision Tree Format Example"):
-        st.code(json0, language="json")
-        st.caption("Question nodes display answer buttons. Each answer points to another node. Action nodes end the path and display the next action. No AI model is used.")
-    if st.button("← Back to Search"):
-        st.session_state.page = "Search"; st.rerun()
-
-
 # SEARCH KNOWLEDGE BASE
 # ============================================================
-
-elif st.session_state.page == "Decision Tree":
-    render_decision_tree_page()
 
 else:
     st.session_state.page = "Search"
@@ -1888,12 +1715,7 @@ else:
 st.markdown('<div class="bottom-nav-spacer"></div>', unsafe_allow_html=True)
 nav_left, nav_center, nav_right = st.columns([1, 2, 1])
 with nav_center:
-    nav1, nav2 = st.columns(2, gap="small")
-    with nav1:
-        if st.button("⌕  Search Knowledge Base", use_container_width=True):
-            st.session_state.page = "Search"; st.rerun()
-    with nav2:
-        if st.button("⑂  Decision Tree", use_container_width=True):
-            st.session_state.page = "Decision Tree"; st.rerun()
+    if st.button("⌕  Search Knowledge Base", use_container_width=True):
+        st.session_state.page = "Search"; st.rerun()
 
-st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search · Guided Decision Trees</div>', unsafe_allow_html=True)
+st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search</div>', unsafe_allow_html=True)
