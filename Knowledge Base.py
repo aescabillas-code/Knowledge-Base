@@ -228,17 +228,18 @@ button[kind="primary"]:hover { background: var(--teal-dark) !important; }
 # ============================================================
 
 def db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA temp_store=MEMORY")
-    conn.execute("PRAGMA cache_size=-16000")
     return conn
 
 
 def init_db():
     conn = db()
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA cache_size=-16000")
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -379,118 +380,98 @@ def authenticate_user(email, password):
 
 
 @st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def get_relevant_section(document_path, page_number, query, max_pages=4):
-    """
-    Extract the original PDF text belonging to the section most related to
-    the search. It favors numbered headings, short headings, Steps, Checklist,
-    Procedure, Requirements, Troubleshooting, etc., and continues onto
-    subsequent pages when the section appears to continue.
-    """
+    """Extract the original PDF section related to the search query."""
     try:
-        pdf = fitz.open(document_path)
-        start_page = max(1, page_number)
-        pages = []
-        for pno in range(start_page, min(len(pdf), start_page + max_pages - 1) + 1):
-            raw = pdf[pno - 1].get_text("text")
-            if raw.strip():
-                pages.append((pno, raw))
+        with fitz.open(document_path) as pdf:
+            start_page = max(1, page_number)
+            pages = []
+            for pno in range(start_page, min(len(pdf), start_page + max_pages - 1) + 1):
+                raw = pdf[pno - 1].get_text("text")
+                if raw.strip():
+                    pages.append((pno, raw))
 
-        if not pages:
-            return []
+            if not pages:
+                return []
 
-        terms = [
-            t.lower() for t in re.findall(r"[A-Za-z0-9]+", query)
-            if len(t) > 2
-        ]
+            terms = [t.lower() for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
 
-        def is_heading(line):
-            x = re.sub(r"\s+", " ", line).strip()
-            if not x or len(x) > 120:
-                return False
-            if re.match(r"^\d+(?:\.\d+)+\s", x):
-                return True
-            if re.search(r"\b(steps?|checklist|procedure|process|requirements?|troubleshooting|instructions?|overview|guidelines?)\b", x, re.I):
-                return True
-            letters = re.sub(r"[^A-Za-z]", "", x)
-            return bool(letters) and letters.isupper() and len(letters) >= 4
+            def is_heading(line):
+                x = re.sub(r"\s+", " ", line).strip()
+                if not x or len(x) > 120:
+                    return False
+                if re.match(r"^\d+(?:\.\d+)+\s", x):
+                    return True
+                if re.search(r"\b(steps?|checklist|procedure|process|requirements?|troubleshooting|instructions?|overview|guidelines?)\b", x, re.I):
+                    return True
+                letters = re.sub(r"[^A-Za-z]", "", x)
+                return bool(letters) and letters.isupper() and len(letters) >= 4
 
-        # Locate the strongest matching line across the first page(s).
-        best_page = start_page
-        best_line_index = 0
-        best_score = -1
-        for pno, raw in pages:
-            lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
-            for i, line in enumerate(lines):
-                low = line.lower()
-                score = sum(low.count(t) for t in terms)
-                if score > best_score:
-                    best_score = score
-                    best_page = pno
-                    best_line_index = i
+            best_page = start_page
+            best_line_index = 0
+            best_score = -1
+            for pno, raw in pages:
+                lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
+                for i, line in enumerate(lines):
+                    low = line.lower()
+                    score = sum(low.count(t) for t in terms)
+                    if score > best_score:
+                        best_score = score
+                        best_page = pno
+                        best_line_index = i
 
-        # Re-read from the best page forward so we can identify the section.
-        relevant = []
-        started = False
-        found_heading = False
-        empty_after = 0
+            relevant = []
+            found_heading = False
+            for pno in range(best_page, min(len(pdf), best_page + max_pages - 1) + 1):
+                raw = pdf[pno - 1].get_text("text")
+                lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
+                if not lines:
+                    continue
 
-        for pno in range(best_page, min(len(pdf), best_page + max_pages - 1) + 1):
-            raw = pdf[pno - 1].get_text("text")
-            lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
+                if pno == best_page:
+                    heading_idx = None
+                    for i in range(min(best_line_index, len(lines) - 1), -1, -1):
+                        if is_heading(lines[i]):
+                            heading_idx = i
+                            break
+                    start_idx = heading_idx if heading_idx is not None else max(0, best_line_index)
+                    found_heading = heading_idx is not None
+                else:
+                    start_idx = 0
 
-            if pno == best_page:
-                # Find a heading at or before the matching line.
-                heading_idx = None
-                for i in range(min(best_line_index, len(lines) - 1), -1, -1):
-                    if is_heading(lines[i]):
-                        heading_idx = i
-                        break
-                start_idx = heading_idx if heading_idx is not None else max(0, best_line_index)
-                found_heading = heading_idx is not None
-            else:
-                start_idx = 0
+                for i in range(start_idx, len(lines)):
+                    line = lines[i]
+                    if found_heading and i > start_idx and is_heading(line):
+                        return _group_section_lines(relevant)
+                    relevant.append((pno, line))
 
-            if not started:
-                started = True
-
-            for i in range(start_idx, len(lines)):
-                line = lines[i]
-                if found_heading and i > start_idx and is_heading(line):
-                    # A new heading ends the requested section.
-                    return relevant
-                relevant.append((pno, line))
-
-            # If the section appears to continue without a new heading, include next page.
-            if found_heading:
-                empty_after += 1
-                if empty_after >= max_pages:
+                if not found_heading:
                     break
-            else:
-                break
 
-        # If section extraction was too broad or empty, return the best page text.
-        if len(relevant) < 2:
-            raw = pdf[best_page - 1].get_text("text")
-            return [(best_page, re.sub(r"\s+", " ", raw).strip())]
-
-        # Group lines by page for clean display.
-        grouped = []
-        current_page = None
-        current_lines = []
-        for pno, line in relevant:
-            if current_page is None:
-                current_page = pno
-            if pno != current_page:
-                grouped.append((current_page, " ".join(current_lines)))
-                current_page = pno
-                current_lines = []
-            current_lines.append(line)
-        if current_page is not None and current_lines:
-            grouped.append((current_page, " ".join(current_lines)))
-
-        return grouped
+            if len(relevant) < 2:
+                raw = pdf[best_page - 1].get_text("text")
+                return [(best_page, re.sub(r"\s+", " ", raw).strip())]
+            return _group_section_lines(relevant)
     except Exception:
         return []
+
+
+def _group_section_lines(relevant):
+    grouped = []
+    current_page = None
+    current_lines = []
+    for pno, line in relevant:
+        if current_page is None:
+            current_page = pno
+        if pno != current_page:
+            grouped.append((current_page, " ".join(current_lines)))
+            current_page = pno
+            current_lines = []
+        current_lines.append(line)
+    if current_page is not None and current_lines:
+        grouped.append((current_page, " ".join(current_lines)))
+    return grouped
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -553,14 +534,13 @@ def split_text(text: str, chunk_size=1100, overlap=180):
 
 
 def extract_pdf(pdf_bytes: bytes):
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     pages = []
-
-    for page_number, page in enumerate(doc, start=1):
-        text = clean_text(page.get_text("text"))
-        pages.append((page_number, text))
-
-    return pages, len(doc)
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        for page_number, page in enumerate(doc, start=1):
+            text = clean_text(page.get_text("text"))
+            pages.append((page_number, text))
+        page_count = len(doc)
+    return pages, page_count
 
 
 def save_pdf(file_name: str, pdf_bytes: bytes, file_hash: str):
@@ -988,20 +968,12 @@ Answer the question using only the document context.
 @st.cache_data(ttl=600, show_spinner=False)
 def render_pdf_page(document_path, page_number):
     try:
-        pdf = fitz.open(document_path)
-
-        if page_number < 1 or page_number > len(pdf):
-            return None
-
-        page = pdf[page_number - 1]
-
-        pix = page.get_pixmap(
-            matrix=fitz.Matrix(1.25, 1.25),
-            alpha=False,
-        )
-
-        return pix.tobytes("png")
-
+        with fitz.open(document_path) as pdf:
+            if page_number < 1 or page_number > len(pdf):
+                return None
+            page = pdf[page_number - 1]
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.25, 1.25), alpha=False)
+            return pix.tobytes("png")
     except Exception:
         return None
 
@@ -1032,45 +1004,38 @@ if "admin_authenticated" not in st.session_state:
 
 @st.cache_data(ttl=600, show_spinner=False)
 def render_pdf_page_highlighted(document_path, page_number, query=""):
-    """Render a PDF page and highlight matching terms in the query."""
+    """Render a PDF page with matching query terms highlighted."""
     try:
-        pdf = fitz.open(document_path)
-
-        if page_number < 1 or page_number > len(pdf):
-            return None
-
-        page = pdf[page_number - 1]
-
-        terms = [
-            t for t in re.findall(r"[A-Za-z0-9]+", query)
-            if len(t) > 2
-        ]
-
-        # Highlight the most useful query terms directly on the source page.
-        # We use temporary annotations only in the in-memory PDF object.
-        highlighted = set()
-        for term in terms[:12]:
-            try:
-                for rect in page.search_for(term):
-                    key = (round(rect.x0, 1), round(rect.y0, 1),
-                           round(rect.x1, 1), round(rect.y1, 1))
-                    if key in highlighted:
-                        continue
-                    highlighted.add(key)
-                    annot = page.add_highlight_annot(rect)
-                    annot.update()
-            except Exception:
-                continue
-
-        pix = page.get_pixmap(
-            matrix=fitz.Matrix(1.25, 1.25),
-            alpha=False,
-        )
-
-        return pix.tobytes("png")
-
+        with fitz.open(document_path) as pdf:
+            if page_number < 1 or page_number > len(pdf):
+                return None
+            page = pdf[page_number - 1]
+            terms = [t for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
+            highlighted = set()
+            for term in terms[:12]:
+                try:
+                    for rect in page.search_for(term):
+                        key = (round(rect.x0, 1), round(rect.y0, 1), round(rect.x1, 1), round(rect.y1, 1))
+                        if key in highlighted:
+                            continue
+                        highlighted.add(key)
+                        annot = page.add_highlight_annot(rect)
+                        annot.update()
+                except Exception:
+                    continue
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.25, 1.25), alpha=False)
+            return pix.tobytes("png")
     except Exception:
         return None
+
+
+def clear_knowledge_caches():
+    """Invalidate cached database/search/PDF-derived data after document changes."""
+    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, pdf_data_uri, render_pdf_page, render_pdf_page_highlighted):
+        try:
+            fn.clear()
+        except Exception:
+            pass
 
 
 # ============================================================
@@ -1291,8 +1256,7 @@ def render_access_gate():
             if entered_code.strip() == ACCESS_CODE:
                 authorize_browser()
                 st.success(
-                    f"Access granted. This browser will remain authorized "
-                    f"for up to {PERSISTENT_BROWSER_ACCESS} days."
+                    "Access granted. This browser will remain authorized until you manually clear browser access."
                 )
                 st.rerun()
             else:
@@ -1453,11 +1417,7 @@ elif st.session_state.page == "Manage Documents":
                     else:
                         st.warning(message)
                     progress.progress((i + 1) / len(uploaded_files))
-                build_search_index.clear()
-                search_documents.clear()
-                get_documents.clear()
-                get_categories.clear()
-                get_document_by_id.clear()
+                clear_knowledge_caches()
                 st.session_state.search_results = []
                 st.session_state.search_signature = None
                 st.success(f"Completed. {success_count} document(s) indexed.")
@@ -1491,11 +1451,7 @@ elif st.session_state.page == "Manage Documents":
                     with b:
                         if st.button("Delete", key=f"admin_delete_{doc['id']}"):
                             delete_document(doc["id"])
-                            build_search_index.clear()
-                            search_documents.clear()
-                            get_documents.clear()
-                            get_categories.clear()
-                            get_document_by_id.clear()
+                            clear_knowledge_caches()
                             st.rerun()
 
     if st.button("← Back to Search"):
