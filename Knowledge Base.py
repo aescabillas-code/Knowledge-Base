@@ -1035,6 +1035,19 @@ def search_documents(query, category="All Categories", top_k=10):
             }
         )
 
+    # Each uploaded PDF can contain many indexed chunks/pages.
+    # The search UI should show one result per PDF, not one result per chunk.
+    # Keep the highest-scoring chunk from each PDF as that PDF's representative
+    # result; the PDF viewer's "Matches in this PDF" section can still expose
+    # the other matching pages from the selected document.
+    best_by_document = {}
+    for item in results:
+        document_id = item["document_id"]
+        current = best_by_document.get(document_id)
+        if current is None or item["score"] > current["score"]:
+            best_by_document[document_id] = item
+
+    results = list(best_by_document.values())
     results.sort(key=lambda x: x["score"], reverse=True)
 
     return results[:top_k]
