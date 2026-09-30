@@ -1,2062 +1,1453 @@
-from __future__ import annotations
-
-import base64
-import hashlib
-import html
 import os
-import secrets
-import sqlite3
+import re
+import io
+import json
+import math
 import time
-from datetime import datetime, timedelta, timezone
+import hashlib
+import sqlite3
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
 
-import bcrypt
 import fitz  # PyMuPDF
-import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
+try:
+    from itsdangerous import URLSafeTimedSerializer
+except Exception:
+    URLSafeTimedSerializer = None
+
+try:
+    from streamlit_cookies_controller import CookieController
+except Exception:
+    CookieController = None
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Optional AI support:
+# pip install openai
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
 
 # ============================================================
-# APP CONFIG
+# CONFIG
 # ============================================================
+
+APP_NAME = "Knowledge Base"
+DATA_DIR = Path("knowledge_base_data")
+PDF_DIR = DATA_DIR / "pdfs"
+DB_PATH = DATA_DIR / "knowledge_base.db"
+
+DATA_DIR.mkdir(exist_ok=True)
+PDF_DIR.mkdir(exist_ok=True)
 
 st.set_page_config(
-    page_title="HPE Knowledge Base",
+    page_title="Knowledge Base",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-APP_NAME = "Knowledge Base"
-DATA_DIR = Path(os.getenv("KB_DATA_DIR", "kb_data"))
-PDF_DIR = DATA_DIR / "pdfs"
-DB_PATH = DATA_DIR / "knowledge_base.db"
-
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-PDF_DIR.mkdir(parents=True, exist_ok=True)
-
-DEFAULT_CATEGORIES = [
-    "Account Management",
-    "Licensing",
-    "Portal & Access",
-    "Technical Support",
-    "HPE GreenLake",
-    "Product Guides",
-    "Policies & Procedures",
-    "Troubleshooting",
-    "Other",
-]
-
-CATEGORY_ICONS = {
-    "Account Management": "👤",
-    "Licensing": "🔑",
-    "Portal & Access": "🖥️",
-    "Technical Support": "🛠️",
-    "HPE GreenLake": "☁️",
-    "Product Guides": "📖",
-    "Policies & Procedures": "🛡️",
-    "Troubleshooting": "⚙️",
-    "Other": "📄",
-}
-
-
 # ============================================================
-# SECRETS / ADMIN CONFIG
+# CSS
 # ============================================================
 
-def get_secret(path: tuple[str, ...], default: str = "") -> str:
-    try:
-        value: Any = st.secrets
-        for key in path:
-            value = value[key]
-        return str(value)
-    except Exception:
-        return default
-
-
-ADMIN_EMAIL = get_secret(
-    ("admin", "email"),
-    os.getenv("KB_ADMIN_EMAIL", "admin@example.com"),
+st.markdown(
+    """
+<style>
+:root{--navy:#082536;--teal:#00a982;--teal2:#008c76;--bg:#f4f7f9;--line:#dfe7eb;--text:#0b2438;--muted:#6b7e8b}
+html,body,[class*="css"]{font-family:Arial,Helvetica,sans-serif}.stApp{background:var(--bg);color:var(--text)}
+[data-testid="stHeader"]{background:transparent;height:0;min-height:0}[data-testid="stToolbar"],[data-testid="stDecoration"],[data-testid="stStatusWidget"],[data-testid="stAppDeployButton"],[data-testid="stMainMenu"],[data-testid="stHeaderActionElements"]{display:none!important}
+[data-testid="stSidebar"]{display:block!important;background:linear-gradient(180deg,#082b35,#06252e);border-right:1px solid #0c4a55}[data-testid="stSidebar"]>div{background:transparent}[data-testid="stSidebarContent"]{padding:18px 12px 20px}
+.sidebar-logo{font-size:36px;font-weight:900;letter-spacing:-3px;color:#fff;line-height:1;margin:0 0 4px 8px}.sidebar-logo span{color:#00a982}.sidebar-kicker{color:#a9c6ce;font-size:10px;margin-left:9px;margin-bottom:22px}.sidebar-section{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#6f9ba4;margin:18px 8px 5px}.sidebar-footer{position:fixed;bottom:18px;color:#cfe1e6;margin-left:8px;font-size:12px}.sidebar-footer b{font-size:15px;color:white}
+[data-testid="stSidebar"] button{border:0!important;background:transparent!important;color:#f2f8fa!important;text-align:left!important;border-radius:8px!important;min-height:42px!important;font-size:14px!important;padding:7px 10px!important;margin:2px 0!important}[data-testid="stSidebar"] button:hover{background:rgba(0,169,130,.18)!important}.sidebar-active button{background:linear-gradient(90deg,#00a982,#009777)!important;color:#fff!important}
+.top-title{font-size:27px;font-weight:800;color:#0a2034;padding-top:6px}.top-user-wrap{display:flex;justify-content:flex-end;align-items:center;gap:8px}.avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#efc19e,#cf8b66);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px}.user-name{font-size:12px;font-weight:700;color:#0b2538}.user-role{font-size:11px;color:#6d7f8b}
+.hero{background:linear-gradient(115deg,#082b35 0%,#0b5560 48%,#0c7778 100%);border-radius:10px;padding:28px 36px 20px;color:#fff;position:relative;overflow:hidden;min-height:185px;box-shadow:0 5px 20px rgba(0,40,50,.10)}.hero:after{content:"";position:absolute;right:-20px;bottom:-80px;width:470px;height:240px;background:linear-gradient(160deg,transparent 20%,rgba(0,206,190,.35) 21%,transparent 23%,rgba(0,206,190,.2) 40%,transparent 42%),linear-gradient(90deg,transparent 35%,rgba(0,206,190,.22) 36%,transparent 38%);transform:skewX(-20deg)}.hero h1{font-size:36px;line-height:1.05;margin:0 0 6px;font-weight:800;position:relative;z-index:1}.hero p{font-size:16px;margin:0;color:#e4f5f6;position:relative;z-index:1}.popular{margin:9px 0 0;font-size:11px;color:#e2f2f3}.chip{display:inline-block;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);padding:6px 11px;border-radius:18px;margin:4px 4px 0 0;color:#fff}
+.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}.metric{border:1px solid var(--line);border-radius:11px;padding:15px 18px;background:#fff;min-height:84px;display:flex;align-items:center;justify-content:space-between}.metric.green{background:linear-gradient(110deg,#e8faf5,#fff)}.metric.blue{background:linear-gradient(110deg,#eaf4ff,#fff)}.metric.gold{background:linear-gradient(110deg,#fff7df,#fff)}.metric.purple{background:linear-gradient(110deg,#f4efff,#fff)}.metric-icon{width:48px;height:48px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:23px;background:#d7f5ec}.metric-value{font-size:25px;font-weight:800;color:#0a2438}.metric-label{font-size:12px;color:#526877}.metric-arrow{font-size:22px;color:#132f42}.blue .metric-icon{background:#dcecff}.gold .metric-icon{background:#ffebbb}.purple .metric-icon{background:#e9ddff}
+.section-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(10,40,55,.03)}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.section-title{font-size:17px;font-weight:800;color:#0b2438}.section-link{font-size:12px;color:#0b2438}.cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.cat{border:1px solid #e5ebef;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;min-height:66px}.cat-icon{width:40px;height:40px;border-radius:50%;background:#e6f8f2;display:flex;align-items:center;justify-content:center;font-size:19px;color:#008c76}.cat-name{font-size:12px;font-weight:700;color:#122b3d}.cat-count{font-size:10px;color:#6d7f8b;margin-top:3px}.recent-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #edf1f3}.recent-row:last-child{border-bottom:0}.pdf-icon{width:34px;height:34px;border-radius:9px;background:#fff0f0;color:#e5483f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}.recent-title{font-size:12px;font-weight:700;color:#0e2a3c}.recent-meta,.recent-date{font-size:10px;color:#70818d}.recent-date{margin-left:auto;white-space:nowrap}.featured-title{font-size:16px;font-weight:800;color:#0b2438;margin-top:8px}.featured-meta{font-size:11px;color:#6c7e8a;margin-top:3px}
+.search-count{color:#687b87;font-size:11px;margin:5px 0 8px}.reader-toolbar{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}.reader-title{font-size:15px;font-weight:700}.reader-meta{font-size:11px;color:var(--muted);margin-top:2px}.reader-match{background:#e7f8f1;border:1px solid #9bdcc8;color:#087c63;border-radius:5px;padding:5px 8px;font-size:10px;font-weight:700;display:inline-block;margin-top:5px}.match-panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px}.match-panel-title{font-size:13px;font-weight:700;margin-bottom:7px}.match-item{background:#f7fafb;border:1px solid #e1e8ec;border-radius:6px;padding:7px 8px;margin-bottom:6px}.match-item-page{color:#0561a0;font-size:10px;font-weight:700}.match-item-text{color:#385362;font-size:10px;line-height:1.35;margin-top:2px}.result-snippet{color:#536b78;font-size:10px;line-height:1.4;margin-top:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.result-page{color:#687b87;font-size:10px;margin-top:3px}.result-score-pill{float:right;background:#e7f8f1;color:#087c63;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:700}.panel-title{font-size:17px;font-weight:800;color:#0b2438;margin:3px 0 8px}
+[data-testid="stVerticalBlockBorderWrapper"]{border-color:var(--line)!important;border-radius:9px!important}.st-key-search_result_best [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_1 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_2 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_3 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_4 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_5 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_6 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_7 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_8 [data-testid="stVerticalBlockBorderWrapper"],.st-key-search_result_9 [data-testid="stVerticalBlockBorderWrapper"]{padding:8px 10px!important}.result-label{color:#0561a0;font-weight:700;font-size:11px}.result-filename{margin-top:3px;color:#0561a0;font-weight:700;font-size:12px;line-height:1.35;word-break:break-word}.st-key-search_result_best button,.st-key-search_result_1 button,.st-key-search_result_2 button,.st-key-search_result_3 button,.st-key-search_result_4 button,.st-key-search_result_5 button,.st-key-search_result_6 button,.st-key-search_result_7 button,.st-key-search_result_8 button,.st-key-search_result_9 button{min-height:28px!important;height:28px!important;padding:2px 8px!important;font-size:11px!important;margin-top:4px!important}
+.page-heading{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.page-title{font-size:26px;font-weight:700}.page-description{color:var(--muted);font-size:13px;margin-top:4px}.admin-badge{background:#e4f6f0;color:#087c63;font-size:11px;font-weight:700;border-radius:20px;padding:6px 12px}.admin-card{max-width:420px;margin:80px auto 20px;text-align:center}.admin-icon{font-size:40px;color:var(--teal)}.admin-title{font-size:24px;font-weight:700}.admin-subtitle{color:var(--muted);margin-top:5px;font-size:13px}
+[data-testid="stFileUploader"]{background:#fff;border-radius:10px;border:1px dashed #9ab1bc}button[kind="primary"]{background:var(--teal)!important;border-color:var(--teal)!important}button[kind="primary"]:hover{background:var(--teal2)!important}.stDownloadButton button{border-color:#00a982!important;color:#087b64!important}
+@media(max-width:1100px){.metric-grid,.cat-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.metric-grid,.cat-grid{grid-template-columns:1fr}.hero{padding:22px}.hero h1{font-size:26px}.top-title{font-size:21px}}
+</style>
+""",
+    unsafe_allow_html=True,
 )
-
-ADMIN_PASSWORD = get_secret(
-    ("admin", "password"),
-    os.getenv("KB_ADMIN_PASSWORD", "ChangeThisPassword"),
-)
-
-ACCESS_CODE_TTL_HOURS = int(
-    get_secret(
-        ("app", "access_code_ttl_hours"),
-        os.getenv("KB_ACCESS_CODE_TTL_HOURS", "24"),
-    )
-)
-
-MAX_UPLOAD_MB = int(
-    get_secret(
-        ("app", "max_upload_mb"),
-        os.getenv("KB_MAX_UPLOAD_MB", "50"),
-    )
-)
-
 
 # ============================================================
 # DATABASE
 # ============================================================
 
-def db() -> sqlite3.Connection:
-    connection = sqlite3.connect(DB_PATH, check_same_thread=False)
-    connection.row_factory = sqlite3.Row
-    return connection
+def db():
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
-def init_db() -> None:
-    connection = db()
-    cursor = connection.cursor()
-
-    cursor.execute(
+def init_db():
+    conn = db()
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA cache_size=-16000")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.executescript(
         """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            employee_id TEXT NOT NULL UNIQUE,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
             filename TEXT NOT NULL,
-            stored_filename TEXT NOT NULL UNIQUE,
-            category TEXT NOT NULL,
-            description TEXT DEFAULT '',
-            tags TEXT DEFAULT '',
-            extracted_text TEXT DEFAULT '',
-            file_size INTEGER DEFAULT 0,
+            stored_path TEXT NOT NULL,
+            file_hash TEXT UNIQUE NOT NULL,
+            category TEXT DEFAULT 'General',
             page_count INTEGER DEFAULT 0,
-            version TEXT DEFAULT '1.0',
-            uploaded_by TEXT DEFAULT '',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            view_count INTEGER DEFAULT 0,
-            is_active INTEGER DEFAULT 1
-        )
-        """
-    )
+            file_size INTEGER DEFAULT 0,
+            uploaded_at TEXT NOT NULL,
+            indexed_at TEXT,
+            status TEXT DEFAULT 'Indexed'
+        );
 
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS access_codes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code_hash TEXT NOT NULL,
-            created_by TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            used_at TEXT,
-            revoked INTEGER DEFAULT 0
-        )
-        """
-    )
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS document_views (
+        CREATE TABLE IF NOT EXISTS chunks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             document_id INTEGER NOT NULL,
-            viewed_at TEXT NOT NULL
-        )
+            page_number INTEGER NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            FOREIGN KEY(document_id) REFERENCES documents(id)
+        );
         """
     )
-
-    connection.commit()
-    connection.close()
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document_page ON chunks(document_id, page_number)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category)")
+    conn.commit()
+    conn.close()
 
 
 init_db()
 
-
 # ============================================================
-# SECURITY HELPERS
+# AUTHENTICATION
 # ============================================================
 
-def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+def normalize_email(email):
+    return email.strip().lower()
 
 
-def iso_now() -> str:
-    return now_utc().isoformat()
-
-
-def hash_access_code(code: str) -> str:
-    return hashlib.sha256(code.strip().encode("utf-8")).hexdigest()
-
-
-def verify_access_code(code: str, stored_hash: str) -> bool:
-    return secrets.compare_digest(hash_access_code(code), stored_hash)
-
-
-def password_matches(password: str) -> bool:
-    return secrets.compare_digest(
-        password,
-        ADMIN_PASSWORD,
+def hash_password(password, salt=None):
+    if salt is None:
+        salt = os.urandom(16)
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        210_000,
     )
+    return salt.hex() + ":" + derived.hex()
 
 
-def generate_access_code() -> str:
-    # Easy-to-type format: KB-XXXX-XXXX
-    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    a = "".join(secrets.choice(alphabet) for _ in range(4))
-    b = "".join(secrets.choice(alphabet) for _ in range(4))
-    return f"KB-{a}-{b}"
-
-
-def create_access_code(admin_email: str) -> str:
-    code = generate_access_code()
-    expires = now_utc() + timedelta(hours=ACCESS_CODE_TTL_HOURS)
-
-    connection = db()
-    connection.execute(
-        """
-        INSERT INTO access_codes
-        (code_hash, created_by, created_at, expires_at)
-        VALUES (?, ?, ?, ?)
-        """,
-        (
-            hash_access_code(code),
-            admin_email,
-            iso_now(),
-            expires.isoformat(),
-        ),
-    )
-    connection.commit()
-    connection.close()
-    return code
-
-
-def consume_access_code(code: str) -> bool:
-    code = code.strip()
-    if not code:
+def verify_password(password, stored):
+    try:
+        salt_hex, digest_hex = stored.split(":", 1)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(digest_hex)
+        actual = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            210_000,
+        )
+        return __import__("hmac").compare_digest(actual, expected)
+    except Exception:
         return False
 
-    connection = db()
-    rows = connection.execute(
-        """
-        SELECT id, code_hash, expires_at, used_at, revoked
-        FROM access_codes
-        WHERE used_at IS NULL
-          AND revoked = 0
-        ORDER BY id DESC
-        """
-    ).fetchall()
 
-    matched_id: Optional[int] = None
+def create_user(first_name, last_name, employee_id, email, password):
+    first_name = first_name.strip()
+    last_name = last_name.strip()
+    employee_id = employee_id.strip()
+    email = normalize_email(email)
 
-    for row in rows:
-        if verify_access_code(code, row["code_hash"]):
-            try:
-                expires_at = datetime.fromisoformat(row["expires_at"])
-                if expires_at.tzinfo is None:
-                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if not all([first_name, last_name, employee_id, email, password]):
+        return False, "All fields are required."
 
-                if expires_at <= now_utc():
-                    connection.close()
+    if "@" not in email:
+        return False, "Enter a valid email address."
+
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters."
+
+    conn = db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO users
+            (first_name, last_name, employee_id, email, password_hash, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                first_name,
+                last_name,
+                employee_id,
+                email,
+                hash_password(password),
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+        conn.commit()
+        return True, "Account created successfully. You can now sign in."
+    except sqlite3.IntegrityError as e:
+        message = str(e).lower()
+        if "employee_id" in message:
+            return False, "That Employee ID is already registered."
+        if "email" in message:
+            return False, "That email address is already registered."
+        return False, "An account with those details already exists."
+    finally:
+        conn.close()
+
+
+def authenticate_user(email, password):
+    conn = db()
+    row = conn.execute(
+        "SELECT * FROM users WHERE email = ?",
+        (normalize_email(email),),
+    ).fetchone()
+    conn.close()
+
+    if not row or not verify_password(password, row["password_hash"]):
+        return None
+
+    return dict(row)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
+def get_relevant_section(document_path, page_number, query, max_pages=4):
+    """Extract the original PDF section related to the search query."""
+    try:
+        with fitz.open(document_path) as pdf:
+            start_page = max(1, page_number)
+            pages = []
+            for pno in range(start_page, min(len(pdf), start_page + max_pages - 1) + 1):
+                raw = pdf[pno - 1].get_text("text")
+                if raw.strip():
+                    pages.append((pno, raw))
+
+            if not pages:
+                return []
+
+            terms = [t.lower() for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
+
+            def is_heading(line):
+                x = re.sub(r"\s+", " ", line).strip()
+                if not x or len(x) > 120:
                     return False
-            except Exception:
-                connection.close()
-                return False
+                if re.match(r"^\d+(?:\.\d+)+\s", x):
+                    return True
+                if re.search(r"\b(steps?|checklist|procedure|process|requirements?|troubleshooting|instructions?|overview|guidelines?)\b", x, re.I):
+                    return True
+                letters = re.sub(r"[^A-Za-z]", "", x)
+                return bool(letters) and letters.isupper() and len(letters) >= 4
 
-            matched_id = row["id"]
-            break
+            best_page = start_page
+            best_line_index = 0
+            best_score = -1
+            for pno, raw in pages:
+                lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
+                for i, line in enumerate(lines):
+                    low = line.lower()
+                    score = sum(low.count(t) for t in terms)
+                    if score > best_score:
+                        best_score = score
+                        best_page = pno
+                        best_line_index = i
 
-    if matched_id is None:
-        connection.close()
-        return False
+            relevant = []
+            found_heading = False
+            for pno in range(best_page, min(len(pdf), best_page + max_pages - 1) + 1):
+                raw = pdf[pno - 1].get_text("text")
+                lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
+                if not lines:
+                    continue
 
-    # Atomic-ish single-use consumption inside one write.
-    result = connection.execute(
-        """
-        UPDATE access_codes
-        SET used_at = ?
-        WHERE id = ?
-          AND used_at IS NULL
-          AND revoked = 0
-        """,
-        (iso_now(), matched_id),
-    )
+                if pno == best_page:
+                    heading_idx = None
+                    for i in range(min(best_line_index, len(lines) - 1), -1, -1):
+                        if is_heading(lines[i]):
+                            heading_idx = i
+                            break
+                    start_idx = heading_idx if heading_idx is not None else max(0, best_line_index)
+                    found_heading = heading_idx is not None
+                else:
+                    start_idx = 0
 
-    connection.commit()
-    connection.close()
+                for i in range(start_idx, len(lines)):
+                    line = lines[i]
+                    if found_heading and i > start_idx and is_heading(line):
+                        return _group_section_lines(relevant)
+                    relevant.append((pno, line))
 
-    return result.rowcount == 1
+                if not found_heading:
+                    break
 
-
-def cleanup_expired_codes() -> None:
-    connection = db()
-    connection.execute(
-        """
-        UPDATE access_codes
-        SET revoked = 1
-        WHERE used_at IS NULL
-          AND revoked = 0
-          AND expires_at <= ?
-        """,
-        (iso_now(),),
-    )
-    connection.commit()
-    connection.close()
+            if len(relevant) < 2:
+                raw = pdf[best_page - 1].get_text("text")
+                return [(best_page, re.sub(r"\s+", " ", raw).strip())]
+            return _group_section_lines(relevant)
+    except Exception:
+        return []
 
 
-cleanup_expired_codes()
+def _group_section_lines(relevant):
+    grouped = []
+    current_page = None
+    current_lines = []
+    for pno, line in relevant:
+        if current_page is None:
+            current_page = pno
+        if pno != current_page:
+            grouped.append((current_page, " ".join(current_lines)))
+            current_page = pno
+            current_lines = []
+        current_lines.append(line)
+    if current_page is not None and current_lines:
+        grouped.append((current_page, " ".join(current_lines)))
+    return grouped
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_document_by_id(document_id):
+    conn = db()
+    row = conn.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+    conn.close()
+    # Return plain Python data so Streamlit's cache can serialize the result.
+    return dict(row) if row is not None else None
 
 
 # ============================================================
-# PDF HELPERS
+# HELPERS
 # ============================================================
 
-def safe_filename(name: str) -> str:
-    name = Path(name).name
-    cleaned = "".join(
-        c if c.isalnum() or c in "._- " else "_"
-        for c in name
-    )
-    return cleaned.strip() or "document.pdf"
+def clean_text(text: str) -> str:
+    text = text.replace("\x00", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
-def extract_pdf(pdf_bytes: bytes) -> tuple[str, int]:
-    document = fitz.open(stream=pdf_bytes, filetype="pdf")
-    pages = len(document)
+def make_hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def split_text(text: str, chunk_size=1100, overlap=180):
+    """
+    Splits text approximately by words while preserving overlap.
+    """
+    words = text.split()
+    if not words:
+        return []
 
     chunks = []
-    for page in document:
-        text = page.get_text("text")
-        if text:
-            chunks.append(text)
+    start = 0
 
-    text = "\n".join(chunks)
-    document.close()
+    while start < len(words):
+        end = min(len(words), start + chunk_size)
+        chunk = " ".join(words[start:end]).strip()
 
-    return text, pages
+        if chunk:
+            chunks.append(chunk)
 
+        if end >= len(words):
+            break
 
-def save_pdf(pdf_bytes: bytes, stored_filename: str) -> Path:
-    path = PDF_DIR / stored_filename
-    path.write_bytes(pdf_bytes)
-    return path
+        start = max(0, end - overlap)
 
-
-def load_pdf(stored_filename: str) -> Optional[bytes]:
-    path = PDF_DIR / stored_filename
-    if not path.exists():
-        return None
-    return path.read_bytes()
+    return chunks
 
 
-def make_storage_name(original_filename: str) -> str:
-    stem = Path(original_filename).stem
-    ext = Path(original_filename).suffix.lower() or ".pdf"
-    unique = secrets.token_hex(8)
-    return f"{safe_filename(stem)}_{unique}{ext}"
+def extract_pdf(pdf_bytes: bytes):
+    pages = []
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        for page_number, page in enumerate(doc, start=1):
+            text = clean_text(page.get_text("text"))
+            pages.append((page_number, text))
+        page_count = len(doc)
+    return pages, page_count
 
 
-def document_preview(pdf_bytes: bytes) -> None:
-    """
-    Render a browser PDF viewer where supported.
-    Falls back to first-page image if the embedded PDF viewer is blocked.
-    """
-    if hasattr(st, "pdf"):
-        try:
-            st.pdf(pdf_bytes, height=680)
-            return
-        except Exception:
-            pass
+def save_pdf(file_name: str, pdf_bytes: bytes, file_hash: str):
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", file_name)
+    destination = PDF_DIR / f"{file_hash[:12]}_{safe_name}"
+    destination.write_bytes(pdf_bytes)
+    return str(destination)
+
+
+def document_exists(file_hash):
+    conn = db()
+    row = conn.execute(
+        "SELECT id FROM documents WHERE file_hash = ?",
+        (file_hash,),
+    ).fetchone()
+    conn.close()
+    return row
+
+
+def add_document(file_name, pdf_bytes, category="General"):
+    file_hash = make_hash(pdf_bytes)
+
+    if document_exists(file_hash):
+        return False, "This PDF has already been uploaded."
 
     try:
-        document = fitz.open(stream=pdf_bytes, filetype="pdf")
-        page = document[0]
-        pix = page.get_pixmap(matrix=fitz.Matrix(1.4, 1.4), alpha=False)
-        image_bytes = pix.tobytes("png")
-        document.close()
-        st.image(image_bytes, use_container_width=True)
-        st.caption("PDF preview fallback — use Download PDF to view the full document.")
-    except Exception as exc:
-        st.warning(f"Unable to render preview: {exc}")
+        pages, page_count = extract_pdf(pdf_bytes)
+    except Exception as e:
+        return False, f"Could not read PDF: {e}"
 
+    stored_path = save_pdf(file_name, pdf_bytes, file_hash)
 
-# ============================================================
-# DOCUMENT DATABASE OPERATIONS
-# ============================================================
+    conn = db()
+    now = datetime.now().isoformat(timespec="seconds")
 
-def add_document(
-    *,
-    title: str,
-    filename: str,
-    stored_filename: str,
-    category: str,
-    description: str,
-    tags: str,
-    extracted_text: str,
-    file_size: int,
-    page_count: int,
-    version: str,
-    uploaded_by: str,
-) -> int:
-    timestamp = iso_now()
-
-    connection = db()
-    cursor = connection.execute(
+    cursor = conn.execute(
         """
-        INSERT INTO documents (
-            title, filename, stored_filename, category, description,
-            tags, extracted_text, file_size, page_count, version,
-            uploaded_by, created_at, updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO documents
+        (filename, stored_path, file_hash, category, page_count,
+         file_size, uploaded_at, indexed_at, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            title,
-            filename,
-            stored_filename,
+            file_name,
+            stored_path,
+            file_hash,
             category,
-            description,
-            tags,
-            extracted_text,
-            file_size,
             page_count,
-            version,
-            uploaded_by,
-            timestamp,
-            timestamp,
+            len(pdf_bytes),
+            now,
+            now,
+            "Indexed",
         ),
     )
 
-    connection.commit()
     document_id = cursor.lastrowid
-    connection.close()
-    return int(document_id)
+
+    for page_number, page_text in pages:
+        page_chunks = split_text(page_text)
+
+        for chunk_index, chunk in enumerate(page_chunks):
+            conn.execute(
+                """
+                INSERT INTO chunks
+                (document_id, page_number, chunk_index, text)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    document_id,
+                    page_number,
+                    chunk_index,
+                    chunk,
+                ),
+            )
+
+    conn.commit()
+    conn.close()
+
+    return True, f"{file_name} indexed successfully."
 
 
-def update_document(
-    document_id: int,
-    *,
-    title: str,
-    category: str,
-    description: str,
-    tags: str,
-    version: str,
-    uploaded_by: str,
-    pdf_bytes: Optional[bytes] = None,
-) -> None:
-    connection = db()
-
-    if pdf_bytes is not None:
-        text, pages = extract_pdf(pdf_bytes)
-
-        row = connection.execute(
-            "SELECT stored_filename FROM documents WHERE id = ?",
-            (document_id,),
-        ).fetchone()
-
-        if not row:
-            connection.close()
-            raise ValueError("Document no longer exists.")
-
-        stored_filename = row["stored_filename"]
-        save_pdf(pdf_bytes, stored_filename)
-
-        connection.execute(
-            """
-            UPDATE documents
-            SET title = ?,
-                category = ?,
-                description = ?,
-                tags = ?,
-                version = ?,
-                extracted_text = ?,
-                file_size = ?,
-                page_count = ?,
-                uploaded_by = ?,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                title,
-                category,
-                description,
-                tags,
-                version,
-                text,
-                len(pdf_bytes),
-                pages,
-                uploaded_by,
-                iso_now(),
-                document_id,
-            ),
-        )
-    else:
-        connection.execute(
-            """
-            UPDATE documents
-            SET title = ?,
-                category = ?,
-                description = ?,
-                tags = ?,
-                version = ?,
-                uploaded_by = ?,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                title,
-                category,
-                description,
-                tags,
-                version,
-                uploaded_by,
-                iso_now(),
-                document_id,
-            ),
-        )
-
-    connection.commit()
-    connection.close()
+@st.cache_data(ttl=30, show_spinner=False)
+def get_documents():
+    conn = db()
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM documents
+        ORDER BY uploaded_at DESC
+        """
+    ).fetchall()
+    conn.close()
+    # sqlite3.Row is not safely serializable by Streamlit's cache.
+    return [dict(row) for row in rows]
 
 
-def delete_document(document_id: int) -> None:
-    connection = db()
+@st.cache_data(ttl=60, show_spinner=False)
+def get_categories():
+    conn = db()
+    rows = conn.execute(
+        """
+        SELECT DISTINCT category
+        FROM documents
+        ORDER BY category
+        """
+    ).fetchall()
+    conn.close()
+    return [r["category"] for r in rows]
 
-    row = connection.execute(
-        "SELECT stored_filename FROM documents WHERE id = ?",
+
+def get_all_chunks():
+    conn = db()
+    rows = conn.execute(
+        """
+        SELECT
+            c.id,
+            c.document_id,
+            c.page_number,
+            c.chunk_index,
+            c.text,
+            d.filename,
+            d.category,
+            d.stored_path
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        ORDER BY c.id
+        """
+    ).fetchall()
+    conn.close()
+    # Keep database rows as plain dictionaries for reliable caching/indexing.
+    return [dict(row) for row in rows]
+
+
+def delete_document(document_id):
+    conn = db()
+
+    row = conn.execute(
+        "SELECT stored_path FROM documents WHERE id = ?",
         (document_id,),
     ).fetchone()
 
     if row:
         try:
-            (PDF_DIR / row["stored_filename"]).unlink(missing_ok=True)
+            Path(row["stored_path"]).unlink(missing_ok=True)
         except Exception:
             pass
 
-    connection.execute(
-        "UPDATE documents SET is_active = 0 WHERE id = ?",
-        (document_id,),
-    )
-
-    connection.commit()
-    connection.close()
+    conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
+    conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))
+    conn.commit()
+    conn.close()
 
 
-def get_documents() -> list[dict[str, Any]]:
-    connection = db()
-    rows = connection.execute(
-        """
-        SELECT *
-        FROM documents
-        WHERE is_active = 1
-        ORDER BY updated_at DESC
-        """
-    ).fetchall()
-    connection.close()
-    return [dict(row) for row in rows]
+def format_bytes(value):
+    if value is None:
+        return "0 B"
+
+    value = float(value)
+
+    if value < 1024:
+        return f"{value:.0f} B"
+    if value < 1024**2:
+        return f"{value / 1024:.1f} KB"
+    if value < 1024**3:
+        return f"{value / 1024**2:.1f} MB"
+
+    return f"{value / 1024**3:.1f} GB"
 
 
-def get_document(document_id: int) -> Optional[dict[str, Any]]:
-    connection = db()
-    row = connection.execute(
-        """
-        SELECT *
-        FROM documents
-        WHERE id = ? AND is_active = 1
-        """,
-        (document_id,),
-    ).fetchone()
-    connection.close()
+def exact_passage(text, query, max_sentences=4, max_chars=1400):
+    """Return verbatim text from the indexed PDF; never paraphrase."""
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if not normalized:
+        return ""
 
-    return dict(row) if row else None
+    sentences = re.split(r"(?<=[.!?])\s+", normalized)
+    sentences = [s.strip() for s in sentences if s.strip()]
 
+    terms = [
+        t.lower()
+        for t in re.findall(r"[A-Za-z0-9]+", query)
+        if len(t) > 2
+    ]
 
-def increment_view(document_id: int) -> None:
-    connection = db()
-    connection.execute(
-        """
-        UPDATE documents
-        SET view_count = view_count + 1
-        WHERE id = ?
-        """,
-        (document_id,),
-    )
-    connection.execute(
-        """
-        INSERT INTO document_views(document_id, viewed_at)
-        VALUES (?, ?)
-        """,
-        (document_id, iso_now()),
-    )
-    connection.commit()
-    connection.close()
-
-
-def search_documents(query: str) -> list[dict[str, Any]]:
-    docs = get_documents()
-    if not query.strip():
-        return docs
-
-    q = query.lower().strip()
-    terms = [term for term in q.split() if term]
+    if not terms or not sentences:
+        return normalized[:max_chars]
 
     scored = []
-
-    for doc in docs:
-        haystack = " ".join(
-            [
-                doc.get("title", ""),
-                doc.get("category", ""),
-                doc.get("description", ""),
-                doc.get("tags", ""),
-                doc.get("extracted_text", ""),
-            ]
-        ).lower()
-
-        score = 0
-
-        for term in terms:
-            if term in doc.get("title", "").lower():
-                score += 20
-            if term in doc.get("category", "").lower():
-                score += 10
-            if term in doc.get("tags", "").lower():
-                score += 8
-            if term in doc.get("description", "").lower():
-                score += 5
-            if term in doc.get("extracted_text", "").lower():
-                score += 2
-
+    for i, sentence in enumerate(sentences):
+        lower = sentence.lower()
+        score = sum(lower.count(term) for term in terms)
         if score:
-            scored.append((score, doc))
+            scored.append((score, i))
 
-    scored.sort(
-        key=lambda item: (
-            -item[0],
-            item[1].get("updated_at", ""),
-        )
+    if not scored:
+        return normalized[:max_chars]
+
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    selected = set()
+
+    for _, i in scored[:max_sentences]:
+        selected.add(i)
+        if len(selected) < max_sentences and i + 1 < len(sentences):
+            selected.add(i + 1)
+
+    passage = " ".join(sentences[i] for i in sorted(selected))
+
+    if len(passage) > max_chars:
+        passage = passage[:max_chars].rsplit(" ", 1)[0] + "..."
+
+    return passage
+
+
+def make_snippet(text, query, radius=260):
+    text_clean = re.sub(r"\s+", " ", text).strip()
+    if not query:
+        return text_clean[:radius] + ("..." if len(text_clean) > radius else "")
+
+    terms = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2]
+
+    positions = []
+    lower = text_clean.lower()
+
+    for term in terms:
+        pos = lower.find(term)
+        if pos >= 0:
+            positions.append(pos)
+
+    if not positions:
+        return text_clean[:radius] + ("..." if len(text_clean) > radius else "")
+
+    center = min(positions)
+    start = max(0, center - radius // 2)
+    end = min(len(text_clean), start + radius)
+
+    prefix = "..." if start > 0 else ""
+    suffix = "..." if end < len(text_clean) else ""
+
+    return prefix + text_clean[start:end] + suffix
+
+
+# ============================================================
+# SEARCH
+# ============================================================
+
+@st.cache_data(ttl=30, show_spinner=False)
+def build_search_index():
+    rows = get_all_chunks()
+
+    if not rows:
+        return None, [], []
+
+    texts = [row["text"] for row in rows]
+
+    vectorizer = TfidfVectorizer(
+        lowercase=True,
+        stop_words="english",
+        ngram_range=(1, 2),
+        min_df=1,
+        max_df=0.98,
+        sublinear_tf=True,
+        dtype="float32",
     )
 
-    return [doc for _, doc in scored]
+    matrix = vectorizer.fit_transform(texts)
+
+    return vectorizer, matrix, [dict(r) for r in rows]
 
 
-# ============================================================
-# UI CSS
-# ============================================================
+@st.cache_data(ttl=300, show_spinner=False)
+def search_documents(query, category="All Categories", top_k=10):
+    query = query.strip()
 
-def inject_css() -> None:
-    st.markdown(
-        """
-        <style>
-        /* ---------- GLOBAL ---------- */
-        .stApp {
-            background: #f5f8fa;
-        }
+    if not query:
+        return []
 
-        header[data-testid="stHeader"] {
-            background: rgba(255,255,255,0.96);
-        }
+    vectorizer, matrix, rows = build_search_index()
 
-        [data-testid="stSidebar"] {
-            background: #06383d;
-            border-right: 0;
-        }
+    if vectorizer is None:
+        return []
 
-        [data-testid="stSidebar"] * {
-            color: #f5ffff !important;
-        }
+    query_vector = vectorizer.transform([query])
+    scores = cosine_similarity(query_vector, matrix).flatten()
 
-        [data-testid="stSidebar"] .stButton > button {
-            background: transparent;
-            border: 0;
-            text-align: left;
-            width: 100%;
-            border-radius: 10px;
-        }
+    results = []
 
-        [data-testid="stSidebar"] .stButton > button:hover {
-            background: rgba(255,255,255,0.10);
-        }
+    for idx, score in enumerate(scores):
+        row = rows[idx]
 
-        /* Hide Streamlit branding/footer. */
-        footer {
-            visibility: hidden;
-        }
+        if category != "All Categories" and row["category"] != category:
+            continue
 
-        /* ---------- TOP BRAND ---------- */
-        .kb-brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 4px 0 14px 0;
-        }
+        if score <= 0:
+            continue
 
-        .kb-logo {
-            font-weight: 900;
-            font-size: 30px;
-            letter-spacing: -2px;
-            color: white;
-        }
-
-        .kb-logo span {
-            color: #01a982;
-        }
-
-        .kb-small {
-            color: #b8d4d7;
-            font-size: 12px;
-        }
-
-        /* ---------- PAGE HEADER ---------- */
-        .page-title {
-            font-size: 34px;
-            font-weight: 800;
-            color: #102a43;
-            margin-bottom: 0;
-        }
-
-        .page-subtitle {
-            color: #627d98;
-            margin-top: 2px;
-            margin-bottom: 16px;
-        }
-
-        /* ---------- HERO ---------- */
-        .hero {
-            background:
-                radial-gradient(circle at 85% 20%, rgba(1,169,130,.30), transparent 30%),
-                linear-gradient(115deg, #073b40, #006b70 58%, #008f83);
-            border-radius: 16px;
-            padding: 32px 36px 28px 36px;
-            color: white;
-            margin-bottom: 18px;
-            box-shadow: 0 12px 35px rgba(3,63,67,.15);
-        }
-
-        .hero h1 {
-            font-size: 34px;
-            line-height: 1.15;
-            margin: 0 0 8px 0;
-            color: white;
-        }
-
-        .hero p {
-            color: #d7f1f1;
-            margin: 0 0 22px 0;
-            font-size: 16px;
-        }
-
-        .hero-chip {
-            display: inline-block;
-            padding: 6px 12px;
-            margin: 6px 5px 0 0;
-            background: rgba(255,255,255,.13);
-            border: 1px solid rgba(255,255,255,.16);
-            border-radius: 20px;
-            color: white;
-            font-size: 12px;
-        }
-
-        /* ---------- METRIC CARDS ---------- */
-        .metric-card {
-            background: white;
-            border: 1px solid #e3edf2;
-            border-radius: 14px;
-            padding: 18px;
-            min-height: 110px;
-            box-shadow: 0 4px 16px rgba(16,42,67,.05);
-        }
-
-        .metric-icon {
-            width: 42px;
-            height: 42px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 12px;
-            background: #e8f8f4;
-            font-size: 22px;
-            margin-bottom: 8px;
-        }
-
-        .metric-number {
-            font-size: 27px;
-            font-weight: 800;
-            color: #102a43;
-        }
-
-        .metric-label {
-            font-size: 13px;
-            color: #627d98;
-        }
-
-        /* ---------- CATEGORY ---------- */
-        .category-card {
-            background: white;
-            border: 1px solid #e3edf2;
-            border-radius: 13px;
-            padding: 15px 16px;
-            min-height: 86px;
-            box-shadow: 0 3px 12px rgba(16,42,67,.035);
-        }
-
-        .category-icon {
-            float: left;
-            margin-right: 12px;
-            font-size: 24px;
-        }
-
-        .category-title {
-            font-weight: 750;
-            color: #102a43;
-            margin-top: 2px;
-        }
-
-        .category-count {
-            color: #829ab1;
-            font-size: 12px;
-        }
-
-        /* ---------- DOCUMENT CARD ---------- */
-        .doc-card {
-            background: white;
-            border: 1px solid #e3edf2;
-            border-radius: 13px;
-            padding: 15px;
-            margin-bottom: 10px;
-            box-shadow: 0 3px 12px rgba(16,42,67,.035);
-        }
-
-        .pdf-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px;
-            height: 40px;
-            background: #fff0ef;
-            color: #d64545;
-            border-radius: 10px;
-            font-weight: 800;
-            font-size: 12px;
-            margin-right: 10px;
-        }
-
-        .doc-title {
-            color: #102a43;
-            font-weight: 750;
-            font-size: 15px;
-        }
-
-        .doc-meta {
-            color: #829ab1;
-            font-size: 12px;
-            margin-top: 3px;
-        }
-
-        .section-title {
-            color: #102a43;
-            font-size: 20px;
-            font-weight: 800;
-            margin: 14px 0 10px 0;
-        }
-
-        /* ---------- ADMIN ---------- */
-        .admin-banner {
-            background: linear-gradient(100deg,#062f34,#087d77);
-            color: white;
-            padding: 14px 18px;
-            border-radius: 12px;
-            margin-bottom: 15px;
-        }
-
-        .admin-banner strong {
-            color: white;
-        }
-
-        /* ---------- LOGIN ---------- */
-        .login-wrap {
-            max-width: 540px;
-            margin: 6vh auto;
-        }
-
-        .login-card {
-            background: white;
-            padding: 35px;
-            border-radius: 20px;
-            border: 1px solid #e3edf2;
-            box-shadow: 0 15px 50px rgba(16,42,67,.10);
-        }
-
-        /* ---------- BUTTONS ---------- */
-        .stButton > button,
-        .stDownloadButton > button {
-            border-radius: 9px;
-            min-height: 40px;
-        }
-
-        /* ---------- PDF ---------- */
-        iframe {
-            border-radius: 12px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-inject_css()
-
-
-# ============================================================
-# SESSION / AUTH
-# ============================================================
-
-def init_session() -> None:
-    defaults = {
-        "authenticated": False,
-        "is_admin": False,
-        "auth_method": None,
-        "user_email": None,
-        "page": "Home",
-        "selected_document_id": None,
-        "selected_category": None,
-    }
-
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
-
-
-init_session()
-
-
-def sign_out() -> None:
-    for key in [
-        "authenticated",
-        "is_admin",
-        "auth_method",
-        "user_email",
-        "page",
-        "selected_document_id",
-        "selected_category",
-    ]:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.rerun()
-
-
-# ============================================================
-# LOGIN
-# ============================================================
-
-def login_page() -> None:
-    st.markdown(
-        """
-        <div class="login-wrap">
-            <div class="login-card">
-                <div style="font-size:42px;font-weight:900;color:#102a43;">
-                    H<span style="color:#01a982;">P</span>E
-                </div>
-                <div style="font-size:30px;font-weight:800;color:#102a43;">
-                    Knowledge Base
-                </div>
-                <div style="color:#627d98;margin:5px 0 25px 0;">
-                    Search approved support documentation and guides.
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Use a centered two-column choice without exposing admin credentials.
-    left, right = st.columns(2)
-
-    with left:
-        st.markdown("### 🔐 One-Time Access")
-        st.caption(
-            f"Access codes expire after {ACCESS_CODE_TTL_HOURS} hours "
-            "and can only be used once."
+        results.append(
+            {
+                **row,
+                "score": float(score),
+                "snippet": make_snippet(row["text"], query),
+                "exact_passage": exact_passage(row["text"], query),
+            }
         )
 
-        code = st.text_input(
-            "Access code",
-            placeholder="KB-XXXX-XXXX",
-            key="user_access_code",
-        )
+    results.sort(key=lambda x: x["score"], reverse=True)
 
-        if st.button(
-            "Enter Knowledge Base",
-            type="primary",
-            use_container_width=True,
-        ):
-            if consume_access_code(code):
-                st.session_state.authenticated = True
-                st.session_state.is_admin = False
-                st.session_state.auth_method = "one_time_code"
-                st.session_state.user_email = "Knowledge Base User"
-                st.session_state.page = "Home"
-                st.success("Access granted.")
-                st.rerun()
-            else:
-                st.error(
-                    "Invalid, expired, revoked, or already-used access code."
-                )
-
-    with right:
-        st.markdown("### 🛡️ Admin Access")
-        st.caption("Administrators can manage and update PDF content.")
-
-        admin_email = st.text_input(
-            "Admin email",
-            key="admin_email_login",
-        )
-
-        admin_password = st.text_input(
-            "Admin password",
-            type="password",
-            key="admin_password_login",
-        )
-
-        if st.button(
-            "Admin Sign In",
-            use_container_width=True,
-        ):
-            if (
-                admin_email.strip().lower() == ADMIN_EMAIL.strip().lower()
-                and password_matches(admin_password)
-            ):
-                st.session_state.authenticated = True
-                st.session_state.is_admin = True
-                st.session_state.auth_method = "admin"
-                st.session_state.user_email = ADMIN_EMAIL
-                st.session_state.page = "Home"
-                st.success("Admin access granted.")
-                st.rerun()
-            else:
-                st.error("Invalid administrator credentials.")
-
-    st.divider()
-
-    st.info(
-        "Need access? Ask an administrator to generate a one-time access "
-        "code. Standard users cannot upload or modify documents."
-    )
+    return results[:top_k]
 
 
 # ============================================================
-# SIDEBAR
+# AI Q&A
 # ============================================================
 
-def sidebar() -> None:
-    with st.sidebar:
-        st.markdown(
-            """
-            <div class="kb-brand">
-                <div class="kb-logo">HP<span>E</span></div>
-                <div>
-                    <div style="font-weight:700;">Knowledge Base</div>
-                    <div class="kb-small">Document Intelligence Portal</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+def get_openai_client():
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key or OpenAI is None:
+        return None
+
+    try:
+        return OpenAI(api_key=api_key)
+    except Exception:
+        return None
+
+
+def extractive_answer(question, results):
+    if not results:
+        return (
+            "I could not find relevant information in the uploaded knowledge base."
         )
 
-        st.markdown("---")
+    selected = results[:5]
 
-        nav_items = [
-            ("🏠", "Home"),
-            ("📚", "Browse All"),
-            ("▦", "Categories"),
-            ("⭐", "Favorites"),
-            ("🕘", "Recent"),
-        ]
+    answer_parts = []
 
-        for icon, label in nav_items:
-            if st.button(
-                f"{icon}  {label}",
-                key=f"nav_{label}",
-                use_container_width=True,
-            ):
-                st.session_state.page = label
-                st.session_state.selected_document_id = None
-                st.session_state.selected_category = None
-                st.rerun()
+    for item in selected:
+        text = item["text"].strip()
 
-        if st.session_state.is_admin:
-            st.markdown("---")
-            st.caption("ADMINISTRATION")
+        # Keep answer reasonably concise.
+        if len(text) > 700:
+            text = text[:700].rsplit(" ", 1)[0] + "..."
 
-            admin_items = [
-                ("☁️", "Upload PDF"),
-                ("🗂️", "Manage Content"),
-                ("🔐", "Access Codes"),
-                ("📊", "Analytics"),
-            ]
+        answer_parts.append(text)
 
-            for icon, label in admin_items:
-                if st.button(
-                    f"{icon}  {label}",
-                    key=f"admin_nav_{label}",
-                    use_container_width=True,
-                ):
-                    st.session_state.page = label
-                    st.session_state.selected_document_id = None
-                    st.rerun()
+    return "\n\n".join(answer_parts)
 
-        st.markdown("---")
 
-        if st.button(
-            "↪  Sign Out",
-            key="sidebar_signout",
-            use_container_width=True,
-        ):
-            sign_out()
-
-        st.markdown(
-            """
-            <div style="margin-top:25vh;color:#a9c6c9;font-size:11px;">
-                HPE Knowledge Base<br>
-                PDF-powered support documentation
-            </div>
-            """,
-            unsafe_allow_html=True,
+def ai_answer(question, results):
+    if not results:
+        return (
+            "I could not find relevant information in the uploaded documents.",
+            [],
         )
+
+    client = get_openai_client()
+
+    if client is None:
+        return extractive_answer(question, results), results[:5]
+
+    context_blocks = []
+
+    for i, item in enumerate(results[:8], start=1):
+        context_blocks.append(
+            f"""
+SOURCE {i}
+Document: {item['filename']}
+Page: {item['page_number']}
+Category: {item['category']}
+
+CONTENT:
+{item['text']}
+"""
+        )
+
+    context = "\n".join(context_blocks)
+
+    system_prompt = """
+You are a company knowledge-base assistant.
+
+Answer the user's question using ONLY the provided document context.
+Do not invent policies, procedures, facts, dates, or instructions.
+If the documents do not contain enough information, explicitly say that
+the knowledge base does not provide enough information.
+
+Keep answers concise and practical.
+When appropriate, use numbered steps or bullet points.
+
+Do not cite a source that was not provided in the context.
+"""
+
+    user_prompt = f"""
+QUESTION:
+{question}
+
+DOCUMENT CONTEXT:
+{context}
+
+Answer the question using only the document context.
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.1,
+        )
+
+        answer = response.choices[0].message.content.strip()
+        return answer, results[:8]
+
+    except Exception as e:
+        # Graceful fallback if AI service is unavailable.
+        return (
+            "AI answering is temporarily unavailable. "
+            "Here are the most relevant passages from the knowledge base:\n\n"
+            + extractive_answer(question, results)
+        ), results[:5]
 
 
 # ============================================================
-# COMMON UI
+# PDF VIEWER
 # ============================================================
 
-def top_header() -> None:
-    left, middle, right = st.columns([2.2, 5, 1.4])
-
-    with left:
-        st.markdown(
-            '<div class="page-title">Knowledge Base</div>'
-            '<div class="page-subtitle">Find answers from approved documentation.</div>',
-            unsafe_allow_html=True,
-        )
-
-    with middle:
-        st.write("")
-        search = st.text_input(
-            "Search",
-            placeholder="Search for topics, keywords, or questions...",
-            label_visibility="collapsed",
-            key="global_search",
-        )
-
-        if search.strip():
-            st.session_state.search_query = search
-
-    with right:
-        st.write("")
-        if st.session_state.is_admin:
-            st.success("ADMIN")
-        else:
-            st.info("USER")
-
-    if "search_query" in st.session_state and st.session_state.search_query:
-        results = search_documents(st.session_state.search_query)
-        st.session_state.search_results = results
+@st.cache_data(ttl=600, show_spinner=False)
+def render_pdf_page(document_path, page_number, scale=1.75):
+    try:
+        with fitz.open(document_path) as pdf:
+            if page_number < 1 or page_number > len(pdf):
+                return None
+            page = pdf[page_number - 1]
+            pix = page.get_pixmap(matrix=fitz.Matrix(float(scale), float(scale)), alpha=False)
+            return pix.tobytes("png")
+    except Exception:
+        return None
 
 
-def hero() -> None:
-    st.markdown(
-        """
-        <div class="hero">
-            <h1>Find the answers you need</h1>
-            <p>
-                Search the knowledge base, explore topics, or browse by category.
-            </p>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    hero_search = st.text_input(
-        "Search knowledge base",
-        placeholder="Search for solutions, guides, keywords, or questions...",
-        label_visibility="collapsed",
-        key="hero_search",
-    )
-
-    if hero_search.strip():
-        st.session_state.search_query = hero_search
-        st.session_state.page = "Browse All"
-
-    st.markdown(
-        """
-            <div style="margin-top:10px;">
-                <span class="hero-chip">Licensing</span>
-                <span class="hero-chip">Portal Access</span>
-                <span class="hero-chip">Account Setup</span>
-                <span class="hero-chip">Troubleshooting</span>
-                <span class="hero-chip">HPE GreenLake</span>
-                <span class="hero-chip">Software Support</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+@st.cache_data(ttl=120, show_spinner=False)
+def find_document_matches(document_path, query, limit=8):
+    """Find pages containing the user's actual search terms and return verbatim context."""
+    try:
+        terms = [t.lower() for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
+        if not terms:
+            return []
+        matches = []
+        with fitz.open(document_path) as pdf:
+            for page_number, page in enumerate(pdf, start=1):
+                raw = clean_text(page.get_text("text"))
+                if not raw:
+                    continue
+                low = raw.lower()
+                score = sum(low.count(term) for term in terms)
+                if score <= 0:
+                    continue
+                matches.append({
+                    "page": page_number,
+                    "score": score,
+                    "snippet": make_snippet(raw, query, radius=190),
+                })
+        matches.sort(key=lambda x: (-x["score"], x["page"]))
+        return matches[:limit]
+    except Exception:
+        return []
 
 
-def metric_cards(docs: list[dict[str, Any]]) -> None:
-    categories = len(set(d["category"] for d in docs)) if docs else 0
-    most_viewed = max((d["view_count"] for d in docs), default=0)
+# ============================================================
+# UI STATE
+# ============================================================
 
-    recent_cutoff = now_utc() - timedelta(days=14)
-    recent = 0
+if "page" not in st.session_state:
+    st.session_state.page = "Search"
 
-    for doc in docs:
+if "selected_document" not in st.session_state:
+    st.session_state.selected_document = None
+
+if "selected_page" not in st.session_state:
+    st.session_state.selected_page = 1
+
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
+
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+
+
+# ============================================================
+# PDF HIGHLIGHTING
+# ============================================================
+
+@st.cache_data(ttl=600, show_spinner=False)
+def render_pdf_page_highlighted(document_path, page_number, query="", scale=1.75):
+    """Render a PDF page with matching query terms highlighted at the requested scale."""
+    try:
+        with fitz.open(document_path) as pdf:
+            if page_number < 1 or page_number > len(pdf):
+                return None
+            page = pdf[page_number - 1]
+            terms = [t for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
+            highlighted = set()
+            for term in terms[:12]:
+                try:
+                    for rect in page.search_for(term):
+                        key = (round(rect.x0, 1), round(rect.y0, 1), round(rect.x1, 1), round(rect.y1, 1))
+                        if key in highlighted:
+                            continue
+                        highlighted.add(key)
+                        annot = page.add_highlight_annot(rect)
+                        annot.update()
+                except Exception:
+                    continue
+            pix = page.get_pixmap(matrix=fitz.Matrix(float(scale), float(scale)), alpha=False)
+            return pix.tobytes("png")
+    except Exception:
+        return None
+
+
+def clear_knowledge_caches():
+    """Invalidate cached database/search/PDF-derived data after document changes."""
+    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, render_pdf_page, render_pdf_page_highlighted):
         try:
-            dt = datetime.fromisoformat(doc["updated_at"])
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            if dt >= recent_cutoff:
-                recent += 1
+            fn.clear()
         except Exception:
             pass
 
-    metrics = [
-        ("📚", len(docs), "Total Documents"),
-        ("📁", categories, "Categories"),
-        ("⭐", most_viewed, "Most Viewed"),
-        ("☁️", recent, "Recently Added"),
-    ]
 
-    cols = st.columns(4)
+# ============================================================
+# ADMIN AUTHENTICATION
+# ============================================================
 
-    for col, (icon, value, label) in zip(cols, metrics):
-        with col:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-icon">{icon}</div>
-                    <div class="metric-number">{value}</div>
-                    <div class="metric-label">{label}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+def get_admin_pin():
+    """Read the admin PIN from Streamlit secrets first, then environment."""
+    try:
+        pin = st.secrets.get("ADMIN_PIN")
+        if pin:
+            return str(pin)
+    except Exception:
+        pass
+
+    return os.getenv("ADMIN_PIN", "")
 
 
-def category_grid(
-    docs: list[dict[str, Any]],
-    interactive: bool = True,
-) -> None:
-    st.markdown(
-        '<div class="section-title">▦ Browse by Category</div>',
-        unsafe_allow_html=True,
+def admin_is_configured():
+    return bool(get_admin_pin())
+
+
+# ============================================================
+# AUTH STATE
+# ============================================================
+
+if "access_authorized" not in st.session_state:
+    st.session_state.access_authorized = False
+
+if "cookie_restore_checked" not in st.session_state:
+    st.session_state.cookie_restore_checked = False
+
+if "page" not in st.session_state:
+    st.session_state.page = "Search"
+
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
+
+if "selected_document" not in st.session_state:
+    st.session_state.selected_document = None
+
+if "selected_page" not in st.session_state:
+    st.session_state.selected_page = 1
+
+if "force_result_id" not in st.session_state:
+    st.session_state.force_result_id = None
+
+if "search_results" not in st.session_state:
+    st.session_state.search_results = []
+
+if "search_signature" not in st.session_state:
+    st.session_state.search_signature = None
+
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+
+
+# ============================================================
+# ============================================================
+# PERSISTENT BROWSER ACCESS
+# ============================================================
+# Streamlit Cloud can lose client-side cookies across a fresh WebSocket
+# connection. To make F5/refresh deterministic, the signed authorization
+# token is persisted in the app URL. The token contains no user information.
+# IMPORTANT: anyone who has the full authorized URL can access the app.
+
+ACCESS_CODE = str(
+    st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
+).strip()
+
+TOKEN_SECRET = str(
+    st.secrets.get("TOKEN_SECRET", os.getenv("TOKEN_SECRET", ""))
+).strip()
+
+if not TOKEN_SECRET:
+    TOKEN_SECRET = hashlib.sha256(
+        f"{os.getcwd()}::{os.getenv('HOSTNAME', 'streamlit')}".encode()
+    ).hexdigest()
+
+
+def get_token_serializer():
+    if URLSafeTimedSerializer is None or not TOKEN_SECRET:
+        return None
+    return URLSafeTimedSerializer(
+        TOKEN_SECRET,
+        salt="knowledge-base-browser-access",
     )
 
-    counts = {}
-    for doc in docs:
-        counts[doc["category"]] = counts.get(doc["category"], 0) + 1
 
-    categories = [
-        category
-        for category in DEFAULT_CATEGORIES
-        if counts.get(category, 0) > 0
-    ]
-
-    if not categories:
-        st.info("No categories are available yet. Upload a PDF to begin.")
-        return
-
-    cols = st.columns(4)
-
-    for index, category in enumerate(categories):
-        with cols[index % 4]:
-            icon = CATEGORY_ICONS.get(category, "📄")
-            count = counts.get(category, 0)
-
-            st.markdown(
-                f"""
-                <div class="category-card">
-                    <span class="category-icon">{icon}</span>
-                    <div class="category-title">{html.escape(category)}</div>
-                    <div class="category-count">{count} documents</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            if interactive and st.button(
-                f"Open {category}",
-                key=f"category_{index}_{category}",
-                use_container_width=True,
-            ):
-                st.session_state.selected_category = category
-                st.session_state.page = "Browse All"
-                st.rerun()
+def create_browser_token():
+    serializer = get_token_serializer()
+    if serializer is None:
+        return ""
+    return serializer.dumps({"authorized": True})
 
 
-def document_row(doc: dict[str, Any], key_prefix: str = "") -> None:
-    title = html.escape(doc["title"])
-    category = html.escape(doc["category"])
-    version = html.escape(doc["version"])
-    updated = doc["updated_at"][:10]
+def validate_browser_token(token):
+    if not token:
+        return False
+    serializer = get_token_serializer()
+    if serializer is None:
+        return False
+    try:
+        payload = serializer.loads(str(token))
+        return bool(payload.get("authorized"))
+    except Exception:
+        return False
 
+
+def get_url_access_token():
+    try:
+        return st.query_params.get("kb_access", "")
+    except Exception:
+        return ""
+
+
+def browser_is_authorized():
+    if st.session_state.access_authorized:
+        return True
+
+    token = get_url_access_token()
+    if validate_browser_token(token):
+        st.session_state.access_authorized = True
+        return True
+
+    return False
+
+
+def authorize_browser():
+    token = create_browser_token()
+    if not token:
+        return False
+
+    # Query parameters survive a normal browser refresh on Streamlit Cloud.
+    st.query_params["kb_access"] = token
+    st.session_state.access_authorized = True
+    return True
+
+
+def clear_browser_access():
+    st.session_state.access_authorized = False
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+
+
+def render_access_gate():
     st.markdown(
-        f"""
-        <div class="doc-card">
-            <span class="pdf-badge">PDF</span>
-            <span class="doc-title">{title}</span>
-            <div class="doc-meta">
-                {category} &nbsp;•&nbsp; v{version}
-                &nbsp;•&nbsp; Updated {updated}
+        """
+        <div class="auth-shell">
+            <div class="auth-brand-mark"></div>
+            <div class="auth-brand">Hewlett Packard Enterprise</div>
+            <div class="auth-title">Knowledge Base</div>
+            <div class="auth-subtitle">
+                Secure access to your organization's PDF knowledge base.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    cols = st.columns([1, 1, 4])
-
-    with cols[0]:
-        if st.button(
-            "Open",
-            key=f"{key_prefix}open_{doc['id']}",
-            use_container_width=True,
-        ):
-            st.session_state.selected_document_id = doc["id"]
-            st.session_state.page = "Document"
-            increment_view(doc["id"])
-            st.rerun()
-
-    with cols[1]:
-        pdf_bytes = load_pdf(doc["stored_filename"])
-        if pdf_bytes:
-            st.download_button(
-                "Download",
-                data=pdf_bytes,
-                file_name=doc["filename"],
-                mime="application/pdf",
-                key=f"{key_prefix}download_{doc['id']}",
-                use_container_width=True,
-            )
-
-
-# ============================================================
-# HOME
-# ============================================================
-
-def home_page() -> None:
-    docs = get_documents()
-
-    top_header()
-    hero()
-    metric_cards(docs)
-
-    st.markdown("")
-    category_grid(docs)
-
-    st.markdown(
-        '<div class="section-title">📄 Recent Documents</div>',
-        unsafe_allow_html=True,
-    )
-
-    recent_docs = docs[:5]
-
-    if not recent_docs:
-        st.info(
-            "No documents have been uploaded yet. "
-            + (
-                "Use Upload PDF from the admin menu."
-                if st.session_state.is_admin
-                else "Ask an administrator to add approved PDFs."
-            )
+    if not ACCESS_CODE:
+        st.error(
+            "Access control is not configured. Add ACCESS_CODE to Streamlit Secrets."
         )
-    else:
-        for doc in recent_docs:
-            document_row(doc, "recent_")
+        st.stop()
 
+    _, center, _ = st.columns([1, 2, 1])
 
-# ============================================================
-# BROWSE / SEARCH
-# ============================================================
-
-def browse_page() -> None:
-    top_header()
-
-    docs = get_documents()
-
-    selected_category = st.session_state.get("selected_category")
-
-    if selected_category:
-        docs = [
-            d for d in docs
-            if d["category"] == selected_category
-        ]
-
+    with center:
         st.markdown(
-            f"### {CATEGORY_ICONS.get(selected_category, '📄')} "
-            f"{selected_category}"
-        )
-
-        if st.button("← All Documents"):
-            st.session_state.selected_category = None
-            st.rerun()
-
-    query = st.session_state.get("search_query", "")
-
-    if query:
-        docs = search_documents(query)
-        st.markdown(f"### Search results for “{html.escape(query)}”")
-        st.caption(f"{len(docs)} matching documents")
-
-    if not docs:
-        st.info("No matching documents found.")
-        return
-
-    for doc in docs:
-        document_row(doc, "browse_")
-
-
-# ============================================================
-# CATEGORIES
-# ============================================================
-
-def categories_page() -> None:
-    top_header()
-    docs = get_documents()
-    category_grid(docs)
-
-
-# ============================================================
-# RECENT / FAVORITES
-# ============================================================
-
-def recent_page() -> None:
-    top_header()
-    docs = get_documents()
-
-    docs = sorted(
-        docs,
-        key=lambda d: d.get("updated_at", ""),
-        reverse=True,
-    )[:20]
-
-    st.markdown("### 🕘 Recently Updated")
-
-    for doc in docs:
-        document_row(doc, "recentpage_")
-
-
-def favorites_page() -> None:
-    top_header()
-    st.markdown("### ⭐ Favorites")
-    st.info(
-        "Favorites are ready for extension. "
-        "For a production version, add a per-user favorites table "
-        "or connect this to your existing employee database."
-    )
-
-
-# ============================================================
-# DOCUMENT DETAIL
-# ============================================================
-
-def document_page() -> None:
-    document_id = st.session_state.get("selected_document_id")
-
-    if not document_id:
-        st.session_state.page = "Home"
-        st.rerun()
-
-    doc = get_document(document_id)
-
-    if not doc:
-        st.error("The selected document no longer exists.")
-        if st.button("Return Home"):
-            st.session_state.page = "Home"
-            st.rerun()
-        return
-
-    if st.button("← Back to Knowledge Base"):
-        st.session_state.page = "Browse All"
-        st.session_state.selected_document_id = None
-        st.rerun()
-
-    st.markdown(
-        f"""
-        <div class="section-title">
-            📄 {html.escape(doc["title"])}
-        </div>
-        <div class="doc-meta">
-            {html.escape(doc["category"])}
-            &nbsp;•&nbsp; v{html.escape(doc["version"])}
-            &nbsp;•&nbsp; {doc["page_count"]} pages
-            &nbsp;•&nbsp; {doc["view_count"]} views
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    left, right = st.columns([1.75, 1])
-
-    pdf_bytes = load_pdf(doc["stored_filename"])
-
-    with left:
-        st.markdown("### Document Preview")
-
-        if pdf_bytes:
-            document_preview(pdf_bytes)
-
-            st.download_button(
-                "⬇ Download PDF",
-                data=pdf_bytes,
-                file_name=doc["filename"],
-                mime="application/pdf",
-                use_container_width=True,
-            )
-        else:
-            st.error("PDF file is missing from storage.")
-
-    with right:
-        st.markdown("### Document Information")
-
-        st.markdown(
-            f"""
-            <div class="doc-card">
-                <b>Category</b><br>
-                {html.escape(doc["category"])}
-                <br><br>
-                <b>Version</b><br>
-                {html.escape(doc["version"])}
-                <br><br>
-                <b>Pages</b><br>
-                {doc["page_count"]}
-                <br><br>
-                <b>Tags</b><br>
-                {html.escape(doc["tags"] or "None")}
-                <br><br>
-                <b>Description</b><br>
-                {html.escape(doc["description"] or "No description provided.")}
-            </div>
-            """,
+            '<div class="auth-card-title">Enter Access Code</div>',
             unsafe_allow_html=True,
         )
+        st.caption("You only need to enter the code once on this browser.")
 
-        if st.session_state.is_admin:
-            st.divider()
-
-            if st.button(
-                "✏️ Edit Document",
+        with st.form("access_code_form"):
+            entered_code = st.text_input(
+                "Access Code",
+                type="password",
+                placeholder="Enter access code",
+            )
+            submitted = st.form_submit_button(
+                "Access Knowledge Base",
+                type="primary",
                 use_container_width=True,
-            ):
-                st.session_state.edit_document_id = doc["id"]
-                st.session_state.page = "Manage Content"
-                st.rerun()
+            )
+
+        if submitted:
+            if entered_code.strip() == ACCESS_CODE:
+                if authorize_browser():
+                    # No Continue button. The signed token is placed in the
+                    # URL and the app immediately loads the Knowledge Base.
+                    st.rerun()
+                else:
+                    st.error("Unable to create the browser authorization token.")
+            else:
+                st.error("Invalid access code.")
+
+        st.caption(
+            "The access code is never stored in the URL. A signed authorization "
+            "token is used to keep this browser authorized."
+        )
+
+
+if not browser_is_authorized():
+    render_access_gate()
+    st.stop()
 
 
 # ============================================================
-# ADMIN — UPLOAD
+# APP SHELL
 # ============================================================
 
-def upload_page() -> None:
-    if not st.session_state.is_admin:
-        st.error("Administrator access required.")
-        return
+def go(page_name):
+    st.session_state.page = page_name
+    if page_name != "Search":
+        st.session_state.search_query = ""
+    st.rerun()
 
-    top_header()
+with st.sidebar:
+    st.markdown('<div class="sidebar-logo">HP<span>E</span></div><div class="sidebar-kicker">KNOWLEDGE BASE</div>', unsafe_allow_html=True)
+    nav_items=[("Home","⌂","Home"),("Browse All","▤","Browse All"),("Categories","▦","Categories"),("Favorites","☆","Favorites"),("Recent","◷","Recent")]
+    for label,icon,target in nav_items:
+        active=(st.session_state.page==target) or (target=="Home" and st.session_state.page=="Search" and not st.session_state.search_query)
+        if active: st.markdown('<div class="sidebar-active">',unsafe_allow_html=True)
+        if st.button(f"{icon}   {label}",key=f"nav_{target}",use_container_width=True): go(target)
+        if active: st.markdown('</div>',unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-section">Workspace</div>',unsafe_allow_html=True)
+    for label,icon,target in [("Upload PDF","⇧","Upload PDF"),("Manage Content","▤","Manage Documents"),("Analytics","⌁","Analytics")]:
+        if st.button(f"{icon}   {label}",key=f"nav_{target}",use_container_width=True):
+            if target in ("Upload PDF","Manage Documents") and not st.session_state.admin_authenticated:
+                st.session_state.page="Admin Login"; st.rerun()
+            else: go(target)
+    st.markdown('<div class="sidebar-section">Support</div>',unsafe_allow_html=True)
+    for label,icon,target in [("Feedback","▢","Feedback"),("Help","?","Help")]:
+        if st.button(f"{icon}   {label}",key=f"nav_{target}",use_container_width=True): go(target)
+    st.markdown('<div class="sidebar-footer"><b>HPE</b><br>Knowledge Base<br><span style="color:#6f9ba4">v1.0.0</span></div>',unsafe_allow_html=True)
 
+left,search,user=st.columns([3.0,4.7,2.1],gap="small")
+with left:
+    st.markdown('<div class="top-title">Knowledge Base</div>',unsafe_allow_html=True)
+with search:
+    top_query=st.text_input("Header search",value=st.session_state.search_query,placeholder="Search for topics, keywords, or questions...",label_visibility="collapsed",key="header_search_box")
+with user:
+    u1,u2=st.columns([3.2,1])
+    with u1: st.markdown('<div class="top-user-wrap"><div class="avatar">AU</div><div><div class="user-name">Authorized User</div><div class="user-role">Knowledge Base</div></div></div>',unsafe_allow_html=True)
+    with u2:
+        with st.popover("⚙",use_container_width=True):
+            st.markdown("**Knowledge Base Access**")
+            st.caption("Browser authorization: persistent until manually cleared")
+            if st.session_state.admin_authenticated:
+                if st.button("Manage Documents",use_container_width=True,key="gear_manage"): go("Manage Documents")
+                if st.button("Sign out admin",use_container_width=True,key="gear_signout"):
+                    st.session_state.admin_authenticated=False; go("Search")
+            else:
+                if st.button("🔒 Manage Documents",use_container_width=True,key="gear_login"): go("Admin Login")
+            if st.button("Clear Browser Access",use_container_width=True,key="gear_clear"):
+                clear_browser_access(); st.session_state.admin_authenticated=False; st.stop()
+if top_query.strip()!=st.session_state.search_query.strip():
+    st.session_state.search_query=top_query.strip(); st.session_state.page="Search"; st.session_state.search_signature=None
+    if top_query.strip(): st.rerun()
+# ============================================================
+# ADMIN LOGIN
+# ============================================================
+
+if st.session_state.page == "Admin Login":
     st.markdown(
         """
-        <div class="admin-banner">
-            <strong>Administrator Mode</strong><br>
-            Upload approved PDF documentation. Uploaded PDFs are indexed
-            automatically for knowledge-base search.
+        <div class="admin-card">
+            <div class="admin-icon">⚙</div>
+            <div class="admin-title">Admin Access</div>
+            <div class="admin-subtitle">Enter the administrator PIN to manage knowledge-base documents.</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("### ☁️ Upload PDF")
+    if not admin_is_configured():
+        st.error("Admin access is not configured. Set ADMIN_PIN in Streamlit Secrets or an environment variable.")
+    else:
+        with st.form("admin_login_form"):
+            pin = st.text_input("Admin PIN", type="password", placeholder="Enter admin PIN")
+            submitted = st.form_submit_button("Unlock", type="primary", use_container_width=True)
+        if submitted:
+            if pin == get_admin_pin():
+                st.session_state.admin_authenticated = True
+                st.session_state.page = "Manage Documents"
+                st.rerun()
+            else:
+                st.error("Incorrect admin PIN.")
 
-    uploaded = st.file_uploader(
-        "Select a PDF",
-        type=["pdf"],
-        accept_multiple_files=False,
+    if st.button("← Back to Search", use_container_width=True):
+        st.session_state.page = "Search"
+        st.rerun()
+
+
+# ============================================================
+# ADMIN: MANAGE DOCUMENTS
+# ============================================================
+
+elif st.session_state.page == "Manage Documents":
+    if not st.session_state.admin_authenticated:
+        st.session_state.page = "Admin Login"
+        st.rerun()
+
+    st.markdown(
+        """
+        <div class="page-heading">
+            <div>
+                <div class="page-title">Manage Documents</div>
+                <div class="page-description">Upload, manage, and index PDF documents for the knowledge base.</div>
+            </div>
+            <div class="admin-badge">ADMIN ONLY</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-    if uploaded is None:
-        st.info("Choose a PDF to begin.")
-        return
+    upload_col, library_col = st.columns([0.95, 1.35], gap="large")
 
-    if uploaded.size > MAX_UPLOAD_MB * 1024 * 1024:
-        st.error(
-            f"This PDF exceeds the configured {MAX_UPLOAD_MB} MB limit."
-        )
-        return
-
-    st.success(
-        f"Selected: {uploaded.name} "
-        f"({uploaded.size / 1024 / 1024:.2f} MB)"
-    )
-
-    default_title = Path(uploaded.name).stem.replace("_", " ").strip()
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        title = st.text_input(
-            "Document title",
-            value=default_title,
-        )
-
+    with upload_col:
+        st.markdown('<div class="panel-title">Upload Documents</div>', unsafe_allow_html=True)
         category = st.selectbox(
             "Category",
-            DEFAULT_CATEGORIES,
+            ["General", "Policies", "Procedures", "Technical Support", "Licensing", "Training", "Product", "Account Management", "Other"],
+            key="admin_category",
         )
-
-        version = st.text_input(
-            "Version",
-            value="1.0",
+        uploaded_files = st.file_uploader(
+            "Drag and drop PDF files here",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key="admin_uploader",
         )
+        if uploaded_files:
+            st.caption(f"{len(uploaded_files)} PDF file(s) selected")
+            for f in uploaded_files:
+                st.write(f"📄 {f.name} · {format_bytes(len(f.getvalue()))}")
 
-    with col2:
-        description = st.text_area(
-            "Description",
-            placeholder="Short description of what this document contains...",
-        )
+        if st.button("Upload & Index Documents", type="primary", use_container_width=True):
+            if not uploaded_files:
+                st.warning("Select at least one PDF file.")
+            else:
+                progress = st.progress(0)
+                success_count = 0
+                for i, uploaded_file in enumerate(uploaded_files):
+                    ok, message = add_document(uploaded_file.name, uploaded_file.getvalue(), category)
+                    if ok:
+                        success_count += 1
+                        st.success(message)
+                    else:
+                        st.warning(message)
+                    progress.progress((i + 1) / len(uploaded_files))
+                clear_knowledge_caches()
+                st.session_state.search_results = []
+                st.session_state.search_signature = None
+                st.success(f"Completed. {success_count} document(s) indexed.")
 
-        tags = st.text_input(
-            "Tags",
-            placeholder="licensing, portal, troubleshooting",
-        )
+    with library_col:
+        st.markdown('<div class="panel-title">Document Library</div>', unsafe_allow_html=True)
+        docs = get_documents()
+        lc1, lc2 = st.columns([1.5, 1])
+        with lc1:
+            library_search = st.text_input("Search documents", placeholder="Search documents...", label_visibility="collapsed", key="library_search")
+        with lc2:
+            library_category = st.selectbox("Library category", ["All Categories"] + get_categories(), label_visibility="collapsed", key="library_category")
 
-    if st.button(
-        "Upload & Index PDF",
-        type="primary",
-        use_container_width=True,
-    ):
-        pdf_bytes = uploaded.getvalue()
+        filtered_docs = []
+        for doc in docs:
+            if library_search and library_search.lower() not in doc["filename"].lower():
+                continue
+            if library_category != "All Categories" and doc["category"] != library_category:
+                continue
+            filtered_docs.append(doc)
 
-        try:
-            with st.spinner("Extracting PDF text and indexing document..."):
-                extracted_text, page_count = extract_pdf(pdf_bytes)
-
-                stored_filename = make_storage_name(uploaded.name)
-                save_pdf(pdf_bytes, stored_filename)
-
-                add_document(
-                    title=title.strip() or default_title,
-                    filename=uploaded.name,
-                    stored_filename=stored_filename,
-                    category=category,
-                    description=description.strip(),
-                    tags=tags.strip(),
-                    extracted_text=extracted_text,
-                    file_size=len(pdf_bytes),
-                    page_count=page_count,
-                    version=version.strip() or "1.0",
-                    uploaded_by=st.session_state.user_email,
-                )
-
-            st.success(
-                f"{uploaded.name} uploaded successfully and indexed."
-            )
-            st.session_state.page = "Manage Content"
-            st.rerun()
-
-        except Exception as exc:
-            st.error(f"Upload failed: {exc}")
-
-
-# ============================================================
-# ADMIN — MANAGE CONTENT
-# ============================================================
-
-def manage_content_page() -> None:
-    if not st.session_state.is_admin:
-        st.error("Administrator access required.")
-        return
-
-    top_header()
-
-    st.markdown(
-        '<div class="section-title">🗂️ Manage Content</div>',
-        unsafe_allow_html=True,
-    )
-
-    docs = get_documents()
-
-    if not docs:
-        st.info("No documents have been uploaded.")
-        return
-
-    # Search within admin content.
-    admin_search = st.text_input(
-        "Find document",
-        placeholder="Search title, category, tags...",
-    )
-
-    filtered = docs
-
-    if admin_search.strip():
-        filtered = search_documents(admin_search)
-
-    st.caption(f"{len(filtered)} document(s)")
-
-    for doc in filtered:
-        with st.expander(
-            f"📄 {doc['title']}  •  {doc['category']}  •  v{doc['version']}"
-        ):
-            left, right = st.columns(2)
-
-            with left:
-                title = st.text_input(
-                    "Title",
-                    value=doc["title"],
-                    key=f"edit_title_{doc['id']}",
-                )
-
-                category = st.selectbox(
-                    "Category",
-                    DEFAULT_CATEGORIES,
-                    index=(
-                        DEFAULT_CATEGORIES.index(doc["category"])
-                        if doc["category"] in DEFAULT_CATEGORIES
-                        else len(DEFAULT_CATEGORIES) - 1
-                    ),
-                    key=f"edit_category_{doc['id']}",
-                )
-
-                version = st.text_input(
-                    "Version",
-                    value=doc["version"],
-                    key=f"edit_version_{doc['id']}",
-                )
-
-            with right:
-                description = st.text_area(
-                    "Description",
-                    value=doc["description"],
-                    key=f"edit_description_{doc['id']}",
-                )
-
-                tags = st.text_input(
-                    "Tags",
-                    value=doc["tags"],
-                    key=f"edit_tags_{doc['id']}",
-                )
-
-                replacement = st.file_uploader(
-                    "Replace PDF (optional)",
-                    type=["pdf"],
-                    key=f"replace_pdf_{doc['id']}",
-                )
-
-            action_col1, action_col2, action_col3 = st.columns(3)
-
-            with action_col1:
-                if st.button(
-                    "Save Changes",
-                    type="primary",
-                    key=f"save_{doc['id']}",
-                    use_container_width=True,
-                ):
-                    pdf_bytes = (
-                        replacement.getvalue()
-                        if replacement is not None
-                        else None
-                    )
-
-                    update_document(
-                        doc["id"],
-                        title=title.strip() or doc["title"],
-                        category=category,
-                        description=description.strip(),
-                        tags=tags.strip(),
-                        version=version.strip() or doc["version"],
-                        uploaded_by=st.session_state.user_email,
-                        pdf_bytes=pdf_bytes,
-                    )
-
-                    st.success("Document updated.")
-                    st.rerun()
-
-            with action_col2:
-                pdf_bytes = load_pdf(doc["stored_filename"])
-
-                if pdf_bytes:
-                    st.download_button(
-                        "Download",
-                        data=pdf_bytes,
-                        file_name=doc["filename"],
-                        mime="application/pdf",
-                        key=f"admin_download_{doc['id']}",
-                        use_container_width=True,
-                    )
-
-            with action_col3:
-                if st.button(
-                    "Delete",
-                    key=f"delete_{doc['id']}",
-                    use_container_width=True,
-                ):
-                    st.session_state[f"confirm_delete_{doc['id']}"] = True
-
-            if st.session_state.get(
-                f"confirm_delete_{doc['id']}",
-                False,
-            ):
-                st.warning(
-                    "Deleting removes this document from the active "
-                    "knowledge base."
-                )
-
-                if st.button(
-                    "Confirm Delete",
-                    key=f"confirm_delete_button_{doc['id']}",
-                    type="primary",
-                ):
-                    delete_document(doc["id"])
-                    st.session_state.pop(
-                        f"confirm_delete_{doc['id']}",
-                        None,
-                    )
-                    st.success("Document deleted.")
-                    st.rerun()
-
-
-# ============================================================
-# ADMIN — ACCESS CODES
-# ============================================================
-
-def access_codes_page() -> None:
-    if not st.session_state.is_admin:
-        st.error("Administrator access required.")
-        return
-
-    top_header()
-
-    st.markdown(
-        '<div class="section-title">🔐 One-Time Access Codes</div>',
-        unsafe_allow_html=True,
-    )
-
-    st.info(
-        "Each generated code is stored as a SHA-256 hash and can be "
-        "successfully consumed only once. Codes expire automatically."
-    )
-
-    if st.button(
-        "＋ Generate New One-Time Access Code",
-        type="primary",
-    ):
-        code = create_access_code(st.session_state.user_email)
-
-        st.session_state.new_access_code = code
-
-    if st.session_state.get("new_access_code"):
-        st.success("New access code generated.")
-
-        st.code(
-            st.session_state.new_access_code,
-            language=None,
-        )
-
-        st.warning(
-            "Copy this code now. It is intentionally not stored in plain text "
-            "and cannot be recovered after leaving this session."
-        )
-
-    connection = db()
-    rows = connection.execute(
-        """
-        SELECT id, created_at, expires_at, used_at, revoked
-        FROM access_codes
-        ORDER BY id DESC
-        LIMIT 50
-        """
-    ).fetchall()
-    connection.close()
-
-    if not rows:
-        st.caption("No access codes have been generated.")
-        return
-
-    table = []
-
-    for row in rows:
-        if row["revoked"]:
-            status = "Revoked"
-        elif row["used_at"]:
-            status = "Used"
+        if not filtered_docs:
+            st.info("No documents match the current filters.")
         else:
-            try:
-                expiry = datetime.fromisoformat(row["expires_at"])
-                if expiry.tzinfo is None:
-                    expiry = expiry.replace(tzinfo=timezone.utc)
-                status = "Active" if expiry > now_utc() else "Expired"
-            except Exception:
-                status = "Unknown"
+            for doc in filtered_docs:
+                with st.container(border=True):
+                    a, b = st.columns([4, 1])
+                    with a:
+                        st.markdown(f"**📄 {doc['filename']}**")
+                        st.caption(f"{doc['category']} · {doc['page_count']} pages · {format_bytes(doc['file_size'])} · ✓ {doc['status']}")
+                    with b:
+                        if st.button("Delete", key=f"admin_delete_{doc['id']}"):
+                            delete_document(doc["id"])
+                            clear_knowledge_caches()
+                            st.rerun()
 
-        table.append(
-            {
-                "ID": row["id"],
-                "Created": row["created_at"][:19].replace("T", " "),
-                "Expires": row["expires_at"][:19].replace("T", " "),
-                "Used": (
-                    row["used_at"][:19].replace("T", " ")
-                    if row["used_at"]
-                    else "—"
-                ),
-                "Status": status,
-            }
-        )
+    if st.button("← Back to Search"):
+        st.session_state.page = "Search"
+        st.rerun()
 
-    st.dataframe(
-        pd.DataFrame(table),
-        use_container_width=True,
-        hide_index=True,
-    )
 
-    st.markdown("### Revoke Active Code")
-
-    active_rows = [
-        row for row in rows
-        if not row["revoked"] and not row["used_at"]
-    ]
-
-    if active_rows:
-        options = {
-            f"Code #{row['id']} — expires {row['expires_at'][:19]}": row["id"]
-            for row in active_rows
-        }
-
-        selected = st.selectbox(
-            "Select code",
-            list(options.keys()),
-        )
-
-        if st.button("Revoke Selected Code"):
-            connection = db()
-            connection.execute(
-                "UPDATE access_codes SET revoked = 1 WHERE id = ?",
-                (options[selected],),
-            )
-            connection.commit()
-            connection.close()
-            st.success("Code revoked.")
-            st.rerun()
+# ============================================================
+# HOME / SEARCH
+# ============================================================
+if st.session_state.page in {"Browse All","Categories","Favorites","Recent","Analytics","Feedback","Help","Upload PDF"}:
+    docs=get_documents()
+    if st.session_state.page=="Upload PDF":
+        if not st.session_state.admin_authenticated: st.session_state.page="Admin Login"; st.rerun()
+        else: st.session_state.page="Manage Documents"; st.rerun()
+    elif st.session_state.page=="Browse All":
+        st.markdown('<div class="page-heading"><div><div class="page-title">Browse All Documents</div><div class="page-description">Search and open any indexed PDF.</div></div></div>',unsafe_allow_html=True)
+        q=st.text_input("Browse",placeholder="Filter documents by title...",label_visibility="collapsed",key="browse_filter")
+        for doc in docs:
+            if q and q.lower() not in doc["filename"].lower(): continue
+            a,b=st.columns([5,1])
+            with a: st.markdown(f"**📄 {doc['filename']}**"); st.caption(f"{doc['category']} · {doc['page_count']} pages · {format_bytes(doc['file_size'])}")
+            with b:
+                if st.button("Open",key=f"browse_{doc['id']}"):
+                    st.session_state.search_query=doc["filename"].replace(".pdf",""); st.session_state.force_result_id=None; st.session_state.page="Search"; st.session_state.search_signature=None; st.rerun()
+                if st.button("☆",key=f"fav_{doc['id']}"):
+                    favs=st.session_state.setdefault("favorites",set())
+                    if doc["id"] in favs: favs.remove(doc["id"])
+                    else: favs.add(doc["id"])
+                    st.rerun()
+            st.divider()
+    elif st.session_state.page=="Categories":
+        st.markdown('<div class="page-heading"><div><div class="page-title">Categories</div><div class="page-description">Browse documents by category.</div></div></div>',unsafe_allow_html=True)
+        counts={}
+        for d in docs: counts[d["category"]]=counts.get(d["category"],0)+1
+        cols=st.columns(4)
+        for i,(cat,count) in enumerate(sorted(counts.items())):
+            with cols[i%4]:
+                with st.container(border=True):
+                    st.markdown(f"### {cat}"); st.caption(f"{count} document(s)")
+                    if st.button("Browse",key=f"cat_{cat}"):
+                        st.session_state.search_query=cat; st.session_state.page="Search"; st.session_state.search_signature=None; st.rerun()
+    elif st.session_state.page=="Recent":
+        st.markdown('<div class="page-heading"><div><div class="page-title">Recent Documents</div><div class="page-description">Latest documents added to the knowledge base.</div></div></div>',unsafe_allow_html=True)
+        for d in docs[:20]: st.markdown(f"**📄 {d['filename']}** — {d['category']} · {d['page_count']} pages"); st.divider()
+    elif st.session_state.page=="Favorites":
+        st.markdown('<div class="page-heading"><div><div class="page-title">Favorites</div><div class="page-description">Documents marked for quick access in this browser session.</div></div></div>',unsafe_allow_html=True)
+        favs=st.session_state.get("favorites",set()); favorite_docs=[d for d in docs if d["id"] in favs]
+        if not favorite_docs: st.info("No favorites yet.")
+        for d in favorite_docs: st.markdown(f"⭐ **{d['filename']}**")
+    elif st.session_state.page=="Analytics":
+        st.markdown('<div class="page-heading"><div><div class="page-title">Analytics</div><div class="page-description">Current knowledge-base inventory.</div></div></div>',unsafe_allow_html=True)
+        a,b,c,d=st.columns(4); a.metric("Documents",len(docs)); b.metric("Categories",len(get_categories())); c.metric("Pages",sum(int(x["page_count"] or 0) for x in docs)); d.metric("Storage",format_bytes(sum(int(x["file_size"] or 0) for x in docs)))
+    elif st.session_state.page=="Feedback":
+        st.markdown('<div class="page-heading"><div><div class="page-title">Feedback</div><div class="page-description">Tell us what would make search easier.</div></div></div>',unsafe_allow_html=True)
+        with st.form("feedback_form"):
+            feedback=st.text_area("Feedback",placeholder="What should we improve?")
+            if st.form_submit_button("Submit Feedback",type="primary"): st.success("Thank you for your feedback.")
+    elif st.session_state.page=="Help":
+        st.markdown('<div class="page-heading"><div><div class="page-title">Help</div><div class="page-description">Quick guide to using the knowledge base.</div></div></div>',unsafe_allow_html=True)
+        st.markdown("**Search:** enter a topic, keyword, phrase, or question.  \n**Open Result:** opens the matching PDF page with highlighted terms.  \n**Filters:** narrow results by category and result count.  \n**Admin:** use the gear beside Authorized User, then enter the Admin PIN to manage PDFs.")
+else:
+    docs=get_documents(); cats=get_categories(); active_query=st.session_state.search_query.strip()
+    if not active_query:
+        st.markdown('<div class="hero"><h1>Find the answers you need</h1><p>Search our knowledge base, explore topics, or browse by category.</p></div>',unsafe_allow_html=True)
+        hq,hb=st.columns([5.4,1],gap="small")
+        with hq: hero_query=st.text_input("Hero search",placeholder="Search for solutions, guides, or keywords...",label_visibility="collapsed",key="hero_search_box")
+        with hb:
+            if st.button("Search",type="primary",use_container_width=True,key="hero_search_btn"):
+                st.session_state.search_query=hero_query.strip(); st.session_state.page="Search"; st.session_state.search_signature=None; st.rerun()
+        st.markdown('<div class="popular">Popular searches: <span class="chip">Licensing</span><span class="chip">Portal Access</span><span class="chip">Account Setup</span><span class="chip">Troubleshooting</span><span class="chip">HPE GreenLake</span><span class="chip">Software Support</span></div>',unsafe_allow_html=True)
+        total_pages=sum(int(d["page_count"] or 0) for d in docs); recent_count=min(24,len(docs))
+        st.markdown(f'<div class="metric-grid"><div class="metric green"><div class="metric-icon">▤</div><div><div class="metric-value">{len(docs)}</div><div class="metric-label">Total Documents</div></div><div class="metric-arrow">›</div></div><div class="metric blue"><div class="metric-icon">▱</div><div><div class="metric-value">{len(cats)}</div><div class="metric-label">Categories</div></div><div class="metric-arrow">›</div></div><div class="metric gold"><div class="metric-icon">★</div><div><div class="metric-value">{total_pages:,}</div><div class="metric-label">Indexed Pages</div></div><div class="metric-arrow">›</div></div><div class="metric purple"><div class="metric-icon">⇧</div><div><div class="metric-value">{recent_count}</div><div class="metric-label">Recently Added</div></div><div class="metric-arrow">›</div></div></div>',unsafe_allow_html=True)
+        counts={}
+        for d in docs: counts[d["category"]]=counts.get(d["category"],0)+1
+        items=sorted(counts.items(),key=lambda x:(-x[1],x[0]))[:8]
+        cat_html=''.join([f'<div class="cat"><div class="cat-icon">{["●","⌕","▣","⚙","☁","▤","◈","◇"][i]}</div><div><div class="cat-name">{cat}</div><div class="cat-count">{count} documents</div></div></div>' for i,(cat,count) in enumerate(items)])
+        st.markdown(f'<div class="section-card"><div class="section-head"><div class="section-title">▦ &nbsp;Browse by Category</div><div class="section-link">{len(cats)} categories</div></div><div class="cat-grid">{cat_html}</div></div>',unsafe_allow_html=True)
+        recent=sorted(docs,key=lambda x:x.get("uploaded_at","") or "",reverse=True)[:5]
+        left,right=st.columns([1.05,.95],gap="large")
+        with left:
+            st.markdown('<div class="section-card"><div class="section-head"><div class="section-title">▤ &nbsp;Recent Documents</div><div class="section-link">View All →</div></div>',unsafe_allow_html=True)
+            if recent:
+                for d in recent: st.markdown(f'<div class="recent-row"><div class="pdf-icon">PDF</div><div><div class="recent-title">{d["filename"]}</div><div class="recent-meta">{d["category"]} · {d["page_count"]} pages</div></div><div class="recent-date">{str(d.get("uploaded_at", ""))[:10]}</div></div>',unsafe_allow_html=True)
+            else: st.caption("No documents have been indexed yet.")
+            st.markdown('</div>',unsafe_allow_html=True)
+        with right:
+            st.markdown('<div class="section-card"><div class="section-head"><div class="section-title">★ &nbsp;Featured Document</div></div>',unsafe_allow_html=True)
+            if docs:
+                featured=recent[0] if recent else docs[0]; preview=render_pdf_page(featured["stored_path"],1,scale=1.0)
+                if preview: st.image(preview,use_container_width=True)
+                st.markdown(f'<div class="featured-title">{featured["filename"]}</div><div class="featured-meta">{featured["category"]} · {featured["page_count"]} pages</div>',unsafe_allow_html=True)
+                if st.button("Open Document →",type="primary",use_container_width=True,key="featured_open"):
+                    st.session_state.search_query=featured["filename"].replace(".pdf",""); st.session_state.page="Search"; st.session_state.search_signature=None; st.rerun()
+            else: st.info("Upload a PDF to feature it here.")
+            st.markdown('</div>',unsafe_allow_html=True)
     else:
-        st.caption("There are no active codes to revoke.")
+        search_col,button_col,filter_col=st.columns([6.4,1,1],gap="small")
+        with search_col: query=st.text_input("Search",value=active_query,placeholder="Search for solutions, guides, or keywords...",label_visibility="collapsed",key="main_search_box")
+        with button_col: search_clicked=st.button("Search",type="primary",use_container_width=True,key="result_search_btn")
+        with filter_col:
+            with st.popover("☷ Filters",use_container_width=True):
+                category=st.selectbox("Category",["All Categories"]+get_categories(),key="search_category"); top_k=st.selectbox("Results",[5,10,20],index=1,key="search_top_k")
+        if search_clicked: st.session_state.search_query=query.strip(); st.session_state.search_signature=None; st.rerun()
+        active_query=st.session_state.search_query.strip(); category=st.session_state.get("search_category","All Categories"); top_k=st.session_state.get("search_top_k",10); sig=(active_query,category,top_k)
+        if st.session_state.get("search_signature")!=sig: st.session_state.search_results=search_documents(active_query,category=category,top_k=top_k); st.session_state.search_signature=sig; st.session_state.viewer_page=None
+        results=st.session_state.get("search_results",[])
+        if st.session_state.force_result_id is not None:
+            fid=st.session_state.force_result_id; forced=[r for r in results if r["id"]==fid]; others=[r for r in results if r["id"]!=fid]
+            if forced: results=forced+others; st.session_state.viewer_page=forced[0]["page_number"]
+            st.session_state.force_result_id=None
+        if not results: st.warning("No matching PDF was found. Try different keywords or upload another document.")
+        else:
+            best=results[0]; best_doc=get_document_by_id(best["document_id"]); total_pages=int(best_doc["page_count"] or 0) if best_doc else 0
+            if st.session_state.get("viewer_page") is None: st.session_state.viewer_page=int(best["page_number"])
+            viewer_page=max(1,min(int(st.session_state.viewer_page),max(total_pages,1)))
+            st.markdown(f'<div class="search-count">{len(results)} search result(s) · Highest match shown first</div>',unsafe_allow_html=True)
+            source_col,related_col=st.columns([1.8,.82],gap="large")
+            with source_col:
+                st.markdown(f'<div class="reader-toolbar"><div class="reader-title">▣ {best["filename"]}</div><div class="reader-meta">Page {viewer_page} of {total_pages} · Search: “{active_query}”</div><div class="reader-match">Highest match · source text shown exactly as it appears in the PDF</div></div>',unsafe_allow_html=True)
+                n1,n2,n3,n4=st.columns([1,1.1,1,1.1],gap="small")
+                with n1:
+                    if st.button("‹ Previous",disabled=viewer_page<=1,use_container_width=True,key="pdf_prev"): st.session_state.viewer_page=max(1,viewer_page-1); st.rerun()
+                with n2: st.markdown(f"<div style='text-align:center;padding-top:8px;font-size:11px;color:#687b87'>Page <b>{viewer_page}</b> / {total_pages}</div>",unsafe_allow_html=True)
+                with n3:
+                    if st.button("Next ›",disabled=viewer_page>=total_pages,use_container_width=True,key="pdf_next"): st.session_state.viewer_page=min(total_pages,viewer_page+1); st.rerun()
+                with n4: zoom=st.selectbox("Zoom",[100,125,150,175,200],index=1,format_func=lambda x:f"{x}%",label_visibility="collapsed",key="pdf_zoom")
+                image=render_pdf_page_highlighted(best["stored_path"],viewer_page,active_query,scale=zoom/100*1.25)
+                if image: st.image(image,width={100:720,125:820,150:980,175:1140,200:1300}.get(int(zoom),820))
+                else: st.error("Unable to render this PDF page.")
+                try:
+                    with fitz.open(best["stored_path"]) as pdf: current_text=clean_text(pdf[viewer_page-1].get_text("text"))
+                except Exception: current_text=""
+                if current_text: st.markdown(f'<div class="match-panel"><div class="match-panel-title">Match context · Page {viewer_page}</div><div class="result-snippet" style="font-size:12px;line-height:1.55;color:#294a5c">{make_snippet(current_text,active_query,radius=520)}</div></div>',unsafe_allow_html=True)
+            with related_col:
+                st.markdown('<div class="panel-title">Search Results</div>',unsafe_allow_html=True)
+                for i,result in enumerate(results):
+                    with st.container(key=f"search_result_{'best' if i==0 else i}",border=True):
+                        score_pct=min(99,max(1,round(result["score"]*100))); label="Highest Match" if i==0 else "Search Result"
+                        st.markdown(f'<div class="result-label">{label}<span class="result-score-pill">{score_pct}%</span></div><div class="result-filename">{result["filename"]}</div><div class="result-page">Page {result["page_number"]}</div><div class="result-snippet">{result["snippet"]}</div>',unsafe_allow_html=True)
+                        if st.button("Open Result",key=f"open_result_{result['id']}",use_container_width=True): st.session_state.force_result_id=result["id"]; st.session_state.viewer_page=result["page_number"]; st.rerun()
+                matches=find_document_matches(best["stored_path"],active_query,limit=8)
+                st.markdown('<div class="match-panel"><div class="match-panel-title">Matches in this PDF</div>',unsafe_allow_html=True)
+                if matches:
+                    for match in matches:
+                        if st.button(f"Page {match['page']}",key=f"jump_match_{best['id']}_{match['page']}",use_container_width=True): st.session_state.viewer_page=match["page"]; st.rerun()
+                        st.markdown(f'<div class="match-item"><div class="match-item-page">Page {match["page"]} · {match["score"]} term match(es)</div><div class="match-item-text">{match["snippet"]}</div></div>',unsafe_allow_html=True)
+                else: st.caption("No exact text occurrence was detected on the other pages.")
+                st.markdown('</div>',unsafe_allow_html=True)
 
-
-# ============================================================
-# ADMIN — ANALYTICS
-# ============================================================
-
-def analytics_page() -> None:
-    if not st.session_state.is_admin:
-        st.error("Administrator access required.")
-        return
-
-    top_header()
-
-    docs = get_documents()
-
-    st.markdown(
-        '<div class="section-title">📊 Knowledge Base Analytics</div>',
-        unsafe_allow_html=True,
-    )
-
-    if not docs:
-        st.info("No documents to analyze yet.")
-        return
-
-    left, right = st.columns(2)
-
-    with left:
-        category_counts = (
-            pd.DataFrame(docs)
-            .groupby("category")
-            .size()
-            .reset_index(name="documents")
-            .sort_values("documents", ascending=False)
-        )
-
-        st.markdown("#### Documents by Category")
-        st.bar_chart(
-            category_counts.set_index("category")
-        )
-
-    with right:
-        views = pd.DataFrame(
-            [
-                {
-                    "Document": doc["title"],
-                    "Views": doc["view_count"],
-                }
-                for doc in docs
-            ]
-        ).sort_values("Views", ascending=False).head(10)
-
-        st.markdown("#### Most Viewed Documents")
-        st.bar_chart(
-            views.set_index("Document")
-        )
-
-    st.markdown("#### Document Inventory")
-
-    inventory = pd.DataFrame(
-        [
-            {
-                "Title": d["title"],
-                "Category": d["category"],
-                "Version": d["version"],
-                "Pages": d["page_count"],
-                "Views": d["view_count"],
-                "Updated": d["updated_at"][:10],
-            }
-            for d in docs
-        ]
-    )
-
-    st.dataframe(
-        inventory,
-        use_container_width=True,
-        hide_index=True,
-    )
-
-
-# ============================================================
-# MAIN ROUTER
-# ============================================================
-
-def main() -> None:
-    if not st.session_state.authenticated:
-        login_page()
-        return
-
-    sidebar()
-
-    page = st.session_state.get("page", "Home")
-
-    if page == "Home":
-        home_page()
-    elif page == "Browse All":
-        browse_page()
-    elif page == "Categories":
-        categories_page()
-    elif page == "Favorites":
-        favorites_page()
-    elif page == "Recent":
-        recent_page()
-    elif page == "Document":
-        document_page()
-    elif page == "Upload PDF":
-        upload_page()
-    elif page == "Manage Content":
-        manage_content_page()
-    elif page == "Access Codes":
-        access_codes_page()
-    elif page == "Analytics":
-        analytics_page()
-    else:
-        home_page()
-
-
-if __name__ == "__main__":
-    main()
+st.markdown('<div style="height:22px"></div><div style="text-align:center;color:#78909c;font-size:10px">HPE Knowledge Base · PDF Search</div>',unsafe_allow_html=True)
