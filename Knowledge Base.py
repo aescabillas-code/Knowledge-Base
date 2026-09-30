@@ -341,6 +341,65 @@ button[kind="header"],
     border-radius:5px; padding:5px 8px; font-size:10px; font-weight:700;
     display:inline-block; margin-top:5px;
 }
+
+.reader-page-indicator {
+    text-align:right;
+    color:#687b87;
+    font-size:11px;
+    line-height:30px;
+    padding-right:4px;
+}
+
+/* PDF reader: arrow controls float over the page edges instead of taking a
+   separate toolbar row. The shell is positioned so the arrows stay centered
+   against the rendered PDF page. */
+.st-key-pdf_viewer_shell {
+    position:relative !important;
+    overflow:visible !important;
+    padding:0 !important;
+}
+.st-key-pdf_prev_wrap,
+.st-key-pdf_next_wrap {
+    position:absolute !important;
+    top:50% !important;
+    transform:translateY(-50%) !important;
+    z-index:20 !important;
+    width:42px !important;
+}
+.st-key-pdf_prev_wrap { left:10px !important; }
+.st-key-pdf_next_wrap { right:10px !important; }
+.st-key-pdf_prev_wrap button,
+.st-key-pdf_next_wrap button {
+    width:42px !important;
+    min-width:42px !important;
+    height:42px !important;
+    min-height:42px !important;
+    padding:0 !important;
+    border-radius:50% !important;
+    border:1px solid rgba(16,45,66,.18) !important;
+    background:rgba(255,255,255,.94) !important;
+    box-shadow:0 2px 10px rgba(12,54,70,.12) !important;
+    color:#123b50 !important;
+    font-size:28px !important;
+    line-height:1 !important;
+    transition:transform .12s ease, box-shadow .12s ease !important;
+}
+.st-key-pdf_prev_wrap button:hover:not(:disabled),
+.st-key-pdf_next_wrap button:hover:not(:disabled) {
+    transform:scale(1.06) !important;
+    box-shadow:0 4px 14px rgba(12,54,70,.18) !important;
+}
+.st-key-pdf_prev_wrap button:disabled,
+.st-key-pdf_next_wrap button:disabled {
+    opacity:.35 !important;
+}
+
+/* Reduce excess vertical spacing around the rendered page so the reader
+   feels faster and more continuous while scrolling. */
+.st-key-pdf_viewer_shell [data-testid="stImage"] {
+    margin-top:0 !important;
+    margin-bottom:4px !important;
+}
 .ai-answer-card {
     background: linear-gradient(110deg, #f1fcf8, #ffffff 72%);
     border: 1px solid #9bdcc8;
@@ -1684,27 +1743,63 @@ else:
                     unsafe_allow_html=True,
                 )
 
-                nav1, nav2, nav3, nav4 = st.columns([1, 1.1, 1, 1.1], gap="small")
-                with nav1:
-                    if st.button("‹ Previous", disabled=(viewer_page <= 1), use_container_width=True, key="pdf_prev"):
-                        st.session_state.viewer_page = max(1, viewer_page - 1)
-                        st.rerun()
-                with nav2:
-                    st.markdown(f"<div style='text-align:center;padding-top:8px;font-size:11px;color:#687b87;'>Page <b>{viewer_page}</b> / {total_pages}</div>", unsafe_allow_html=True)
-                with nav3:
-                    if st.button("Next ›", disabled=(viewer_page >= total_pages), use_container_width=True, key="pdf_next"):
-                        st.session_state.viewer_page = min(total_pages, viewer_page + 1)
-                        st.rerun()
-                with nav4:
-                    zoom = st.selectbox("Zoom", [125, 150, 175, 200], index=1, format_func=lambda x: f"{x}%", label_visibility="collapsed", key="pdf_zoom")
+                # Keep zoom controls in the toolbar, while the page navigation arrows
+                # float over the left/right edges of the PDF itself.  This keeps the
+                # reader compact and makes page turning feel like a real document viewer.
+                zoom_col, page_col = st.columns([1, 1.25], gap="small")
+                with zoom_col:
+                    zoom = st.selectbox(
+                        "Zoom",
+                        [100, 125, 150, 175, 200],
+                        index=2,
+                        format_func=lambda x: f"{x}%",
+                        label_visibility="collapsed",
+                        key="pdf_zoom",
+                    )
+                with page_col:
+                    st.markdown(
+                        f"<div class='reader-page-indicator'>Page <b>{viewer_page}</b> / {total_pages}</div>",
+                        unsafe_allow_html=True,
+                    )
 
-                image = render_pdf_page_highlighted(selected_result["stored_path"], viewer_page, active_query, scale=zoom / 100 * 1.25)
+                # Render at a slightly lower pixel density than the old 1.25x multiplier.
+                # The displayed width still follows the zoom setting, but the browser has
+                # fewer pixels to paint, which makes scrolling and page navigation faster.
+                render_scale = zoom / 100 * 1.05
+                image = render_pdf_page_highlighted(
+                    selected_result["stored_path"],
+                    viewer_page,
+                    active_query,
+                    scale=render_scale,
+                )
+
                 if image:
-                    # Do not force the image to the column width: that makes every zoom
-                    # level look identical.  A fixed display width lets the selected zoom
-                    # visibly enlarge the rendered PDF page.
-                    display_width = {125: 780, 150: 930, 175: 1080, 200: 1230}.get(int(zoom), 930)
-                    st.image(image, width=display_width)
+                    display_width = {100: 700, 125: 820, 150: 930, 175: 1040, 200: 1180}.get(int(zoom), 930)
+
+                    with st.container(key="pdf_viewer_shell"):
+                        # These are intentionally icon-only and positioned over the PDF.
+                        # They remain disabled at the first/last page.
+                        with st.container(key="pdf_prev_wrap"):
+                            if st.button(
+                                "‹",
+                                disabled=(viewer_page <= 1),
+                                key="pdf_prev",
+                                help="Previous page",
+                            ):
+                                st.session_state.viewer_page = max(1, viewer_page - 1)
+                                st.rerun()
+
+                        with st.container(key="pdf_next_wrap"):
+                            if st.button(
+                                "›",
+                                disabled=(viewer_page >= total_pages),
+                                key="pdf_next",
+                                help="Next page",
+                            ):
+                                st.session_state.viewer_page = min(total_pages, viewer_page + 1)
+                                st.rerun()
+
+                        st.image(image, width=display_width)
                 else:
                     st.error("Unable to render this PDF page.")
 
