@@ -20,6 +20,12 @@ try:
     from streamlit_cookies_controller import CookieController
 except Exception:
     CookieController = None
+
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -73,8 +79,7 @@ html, body, [class*="css"] {
 
 [data-testid="stHeader"] { background: transparent; }
 
-/* Hide Streamlit's default upper-right toolbar/menu icons.
-   The app's own gear control remains visible because it is rendered in the page body. */
+/* Hide Streamlit's default upper-right toolbar/menu icons. */
 [data-testid="stToolbar"],
 [data-testid="stDecoration"],
 [data-testid="stStatusWidget"],
@@ -92,12 +97,11 @@ button[kind="header"],
     min-height: 0 !important;
 }
 
-/* Hide the default sidebar container; this app uses its own page navigation. */
+/* Hide the default sidebar container */
 [data-testid="stSidebar"],
 [data-testid="stSidebarCollapsedControl"] {
     display: none !important;
 }
-
 
 .kb-topbar {
     display: flex;
@@ -123,7 +127,8 @@ button[kind="header"],
 .title-block { flex: 1; }
 .top-tagline { text-align: right; color: #18394e; font-size: 12px; line-height: 1.3; margin-right: 12px; }
 .top-actions { width: 36px; }
-/* Header action group: Authorized User + admin gear stay together. */
+
+/* Header action group */
 .st-key-header_shell {
     position: relative !important;
     width: 100% !important;
@@ -176,35 +181,81 @@ button[kind="header"],
     box-shadow: none !important;
 }
 
-
 .bell { font-size: 22px; color: var(--navy); }
 
-.exact-answer-card {
-    background: linear-gradient(110deg, #f1fcf8, #ffffff 65%);
-    border: 1px solid #7ad8bd;
-    border-radius: 10px;
-    padding: 18px 20px 16px;
-    box-shadow: 0 3px 12px rgba(12, 54, 70, .05);
-    margin-top: 8px;
+/* Exact Answer & Copilot Styling */
+.copilot-card {
+    background: #ffffff;
+    border: 1px solid #9bdcc8;
+    border-radius: 12px;
+    padding: 22px 24px;
+    box-shadow: 0 4px 16px rgba(12, 54, 70, .06);
+    margin-bottom: 22px;
 }
-.exact-answer-head { display: flex; justify-content: space-between; align-items: center; }
-.exact-answer-title { color: #07866b; font-size: 19px; font-weight: 700; vertical-align: middle; }
-.check-circle {
-    display: inline-flex; width: 31px; height: 31px; border-radius: 50%;
-    align-items: center; justify-content: center; background: #00a982; color: white;
-    font-weight: 800; margin-right: 8px;
+.copilot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #ebf2f5;
+    padding-bottom: 10px;
 }
-.match-pill { background: #d9f5ea; color: #087b64; font-weight: 700; padding: 5px 12px; border-radius: 20px; font-size: 12px; }
-.exact-answer-note { margin: 5px 0 10px 39px; color: var(--muted); font-size: 12px; }
-.exact-answer-text {
-    margin: 0 0 12px 0; padding: 14px 18px; border-left: 4px solid var(--teal);
-    background: rgba(255,255,255,.78); color: #172f42; font-size: 16px; line-height: 1.55;
+.copilot-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
-.answer-meta { display: flex; flex-wrap: wrap; gap: 22px; color: #506672; font-size: 12px; padding-left: 2px; }
-
-.source-header { background: white; border: 1px solid var(--border); border-bottom: 0; border-radius: 10px 10px 0 0; padding: 14px 16px; }
-.source-title { font-size: 18px; font-weight: 700; color: var(--text); }
-.source-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.copilot-icon {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #00a982;
+    color: white;
+    font-weight: 800;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+.copilot-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #064e43;
+}
+.copilot-pill {
+    background: #d9f5ea;
+    color: #087b64;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+.copilot-content {
+    color: #172f42;
+    font-size: 14.5px;
+    line-height: 1.65;
+}
+.copilot-image-section {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px dashed #d1e2e2;
+}
+.copilot-image-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #315468;
+    margin-bottom: 8px;
+}
+.copilot-meta-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f4f6;
+    font-size: 11.5px;
+    color: #687b87;
+}
 
 .panel-title { font-size: 17px; font-weight: 700; color: var(--text); margin: 3px 0 8px; }
 .related-title { color: #0561a0; font-weight: 700; font-size: 14px; }
@@ -228,10 +279,8 @@ button[kind="header"],
 .admin-icon { font-size:40px; color:var(--teal); }
 .admin-title { font-size:24px; font-weight:700; color:var(--text); }
 .admin-subtitle { color:var(--muted); margin-top:5px; font-size:13px; }
-.content-gap { height: 10px; }
 .bottom-nav-spacer { height: 46px; }
 .bottom-nav-label { text-align:center; color:#6c808b; font-size:10px; padding:4px 0 8px; }
-
 
 .auth-shell { max-width: 620px; margin: 70px auto 22px; text-align: center; }
 .auth-brand-mark { width: 55px; height: 8px; border: 3px solid #00a982; margin: 0 auto 10px; }
@@ -239,7 +288,6 @@ button[kind="header"],
 .auth-title { margin-top: 26px; font-size: 31px; font-weight: 700; color: var(--text); }
 .auth-subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
 .auth-card-title { font-size: 24px; font-weight: 700; color: var(--text); margin-top: 20px; }
-.auth-switch { text-align:center; color:var(--muted); font-size:12px; margin:12px 0 6px; }
 .top-user {
     color:#315468;
     font-size:12px;
@@ -302,33 +350,6 @@ button[kind="header"],
     font-size:10px;
 }
 
-.st-key-search_result_best button,
-.st-key-search_result_1 button,
-.st-key-search_result_2 button,
-.st-key-search_result_3 button,
-.st-key-search_result_4 button,
-.st-key-search_result_5 button,
-.st-key-search_result_6 button,
-.st-key-search_result_7 button,
-.st-key-search_result_8 button,
-.st-key-search_result_9 button {
-    min-height: 28px !important;
-    height: 28px !important;
-    padding: 2px 8px !important;
-    font-size: 11px !important;
-    margin-top: 4px !important;
-}
-
-.best-match-card { background:linear-gradient(110deg,#f1fcf8,#fff 70%); border:1px solid #7ad8bd; border-radius:10px; padding:16px 18px; margin-top:8px; box-shadow:0 3px 12px rgba(12,54,70,.05); }
-.best-match-head { display:flex; justify-content:space-between; align-items:center; }
-.pdf-badge { display:inline-flex; background:#e94b3c; color:white; font-weight:800; font-size:10px; border-radius:4px; padding:4px 6px; margin-right:7px; }
-.best-match-title { color:#07866b; font-size:18px; font-weight:700; }
-.best-match-file { color:#102d42; font-size:20px; font-weight:700; margin-top:8px; }
-.best-match-meta { color:#687b87; font-size:12px; margin-top:4px; }
-.source-page-label { font-size:12px; font-weight:700; color:#315468; margin:14px 0 6px; padding:6px 10px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
-
-
-/* Search / document reader redesign */
 .search-count { color:#687b87; font-size:11px; margin:2px 0 8px; }
 .reader-toolbar {
     background:#ffffff; border:1px solid var(--border); border-radius:8px;
@@ -350,9 +371,6 @@ button[kind="header"],
     padding-right:4px;
 }
 
-/* PDF reader: arrow controls float over the page edges instead of taking a
-   separate toolbar row. The shell is positioned so the arrows stay centered
-   against the rendered PDF page. */
 .st-key-pdf_viewer_shell {
     position:relative !important;
     overflow:visible !important;
@@ -382,62 +400,10 @@ button[kind="header"],
     color:#123b50 !important;
     font-size:28px !important;
     line-height:1 !important;
-    transition:transform .12s ease, box-shadow .12s ease !important;
 }
-.st-key-pdf_prev_wrap button:hover:not(:disabled),
-.st-key-pdf_next_wrap button:hover:not(:disabled) {
-    transform:scale(1.06) !important;
-    box-shadow:0 4px 14px rgba(12,54,70,.18) !important;
-}
-.st-key-pdf_prev_wrap button:disabled,
-.st-key-pdf_next_wrap button:disabled {
-    opacity:.35 !important;
-}
-
-/* Reduce excess vertical spacing around the rendered page so the reader
-   feels faster and more continuous while scrolling. */
 .st-key-pdf_viewer_shell [data-testid="stImage"] {
     margin-top:0 !important;
     margin-bottom:4px !important;
-}
-.ai-answer-card {
-    background: linear-gradient(110deg, #f1fcf8, #ffffff 72%);
-    border: 1px solid #9bdcc8;
-    border-radius: 10px;
-    padding: 14px 17px;
-    margin: 8px 0 12px;
-    box-shadow: 0 3px 12px rgba(12,54,70,.04);
-}
-.ai-answer-head {
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:12px;
-}
-.ai-answer-title {
-    color:#087c63;
-    font-size:16px;
-    font-weight:700;
-}
-.ai-answer-badge {
-    background:#d9f5ea;
-    color:#087b64;
-    font-size:10px;
-    font-weight:700;
-    border-radius:12px;
-    padding:4px 8px;
-    white-space:nowrap;
-}
-.ai-answer-body {
-    margin-top:8px;
-    color:#172f42;
-    font-size:14px;
-    line-height:1.55;
-}
-.ai-source-note {
-    margin-top:8px;
-    color:#687b87;
-    font-size:10px;
 }
 
 .match-panel {
@@ -460,7 +426,6 @@ button[kind="header"],
     float:right; background:#e7f8f1; color:#087c63; border-radius:10px;
     padding:2px 6px; font-size:9px; font-weight:700;
 }
-.source-page-label { font-size:11px; font-weight:700; color:#315468; margin:8px 0 5px; padding:5px 8px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
 
 /* Streamlit controls */
 button[kind="primary"] { background: var(--teal) !important; border-color: var(--teal) !important; }
@@ -474,7 +439,6 @@ button[kind="primary"]:hover { background: var(--teal-dark) !important; }
     .brand-divider, .top-tagline { display: none; }
     .app-title { font-size: 22px; }
     .app-subtitle { font-size: 12px; }
-    .exact-answer-title { font-size: 16px; }
 }
 </style>
 """,
@@ -531,7 +495,6 @@ def init_db():
             text TEXT NOT NULL,
             FOREIGN KEY(document_id) REFERENCES documents(id)
         );
-
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document_page ON chunks(document_id, page_number)")
@@ -737,7 +700,6 @@ def get_document_by_id(document_id):
     conn = db()
     row = conn.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
     conn.close()
-    # Return plain Python data so Streamlit's cache can serialize the result.
     return dict(row) if row is not None else None
 
 
@@ -757,9 +719,6 @@ def make_hash(data: bytes) -> str:
 
 
 def split_text(text: str, chunk_size=1100, overlap=180):
-    """
-    Splits text approximately by words while preserving overlap.
-    """
     words = text.split()
     if not words:
         return []
@@ -882,7 +841,6 @@ def get_documents():
         """
     ).fetchall()
     conn.close()
-    # sqlite3.Row is not safely serializable by Streamlit's cache.
     return [dict(row) for row in rows]
 
 
@@ -919,7 +877,6 @@ def get_all_chunks():
         """
     ).fetchall()
     conn.close()
-    # Keep database rows as plain dictionaries for reliable caching/indexing.
     return [dict(row) for row in rows]
 
 
@@ -1094,11 +1051,6 @@ def search_documents(query, category="All Categories", top_k=10):
             }
         )
 
-    # Each uploaded PDF can contain many indexed chunks/pages.
-    # The search UI should show one result per PDF, not one result per chunk.
-    # Keep the highest-scoring chunk from each PDF as that PDF's representative
-    # result; the PDF viewer's "Matches in this PDF" section can still expose
-    # the other matching pages from the selected document.
     best_by_document = {}
     for item in results:
         document_id = item["document_id"]
@@ -1112,7 +1064,8 @@ def search_documents(query, category="All Categories", top_k=10):
     return results[:top_k]
 
 
-# PDF VIEWER
+# ============================================================
+# PDF VIEWER & IMAGE EXTRACTION
 # ============================================================
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -1156,25 +1109,141 @@ def find_document_matches(document_path, query, limit=8):
         return []
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def extract_page_images_and_figures(document_path, page_number, max_images=3):
+    """
+    Extracts embedded pictures, architecture diagrams, or flowcharts directly from the PDF page.
+    If no embedded image objects are present, generates a focused visual clip of the source page.
+    """
+    extracted_images = []
+    try:
+        with fitz.open(document_path) as doc:
+            if page_number < 1 or page_number > len(doc):
+                return []
+            page = doc[page_number - 1]
+            image_list = page.get_images(full=True)
+
+            for img_info in image_list[:max_images]:
+                xref = img_info[0]
+                base_image = doc.extract_image(xref)
+                image_bytes = base_image.get("image")
+                image_ext = base_image.get("ext", "png")
+                # Filter out small icons/decorative pixels
+                if len(image_bytes) > 2500 and base_image.get("width", 0) > 100:
+                    extracted_images.append({
+                        "bytes": image_bytes,
+                        "type": image_ext,
+                        "caption": f"Extracted figure from Page {page_number}"
+                    })
+
+            # If no embedded raster image is found, create an illustrative high-res clip of the top half
+            if not extracted_images:
+                rect = page.rect
+                clip_box = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y0 + (rect.height * 0.58))
+                pix = page.get_pixmap(clip=clip_box, matrix=fitz.Matrix(1.5, 1.5))
+                extracted_images.append({
+                    "bytes": pix.tobytes("png"),
+                    "type": "png",
+                    "caption": f"Document context reference snippet (Page {page_number})"
+                })
+    except Exception:
+        pass
+    return extracted_images
+
+
 # ============================================================
-# UI STATE
+# COPILOT ENGINE
 # ============================================================
 
-if "page" not in st.session_state:
-    st.session_state.page = "Search"
+def format_segmented_answer(raw_text, query, doc_name, page_no):
+    """Fallback segmenter when OpenAI is not configured."""
+    clean = re.sub(r"\s+", " ", raw_text).strip()
+    sentences = re.split(r"(?<=[.!?])\s+", clean)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 8]
 
-if "selected_document" not in st.session_state:
-    st.session_state.selected_document = None
+    overview = " ".join(sentences[:2]) if sentences else clean[:300]
+    steps = sentences[2:8] if len(sentences) > 2 else []
 
-if "selected_page" not in st.session_state:
-    st.session_state.selected_page = 1
+    formatted = f"### 📌 Executive Summary\n{overview}\n\n"
+    if steps:
+        formatted += "### 📋 Key Details & Steps\n"
+        for i, step in enumerate(steps, 1):
+            formatted += f"{i}. {step}\n"
+        formatted += "\n"
+    formatted += f"> **Direct Reference:** Extracted directly from `{doc_name}` on **Page {page_no}**."
+    return formatted
 
-if "search_query" not in st.session_state:
-    st.session_state.search_query = ""
 
-if "admin_authenticated" not in st.session_state:
-    st.session_state.admin_authenticated = False
+@st.cache_data(ttl=300, show_spinner=False)
+def generate_copilot_response(query, results):
+    """
+    Gathers top PDF match content and generates an easy-to-understand,
+    properly spaced and segmented exact answer.
+    """
+    if not results:
+        return "No relevant information found in the uploaded documents.", []
 
+    top_result = results[0]
+    doc_path = top_result["stored_path"]
+    page_no = top_result["page_number"]
+    doc_name = top_result["filename"]
+
+    # Gather full contextual text around the highest scoring matches
+    section_chunks = get_relevant_section(doc_path, page_no, query, max_pages=3)
+    if section_chunks:
+        full_context = "\n\n".join([f"[Page {p}]: {t}" for p, t in section_chunks])
+    else:
+        full_context = f"[Page {page_no}]: {top_result['text']}"
+
+    # Extract applicable images/diagrams from the PDF page
+    extracted_images = extract_page_images_and_figures(doc_path, page_no)
+
+    # Check for OpenAI Key to synthesize exact answers
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    try:
+        openai_key = openai_key or st.secrets.get("OPENAI_API_KEY", "")
+    except Exception:
+        pass
+
+    if OpenAI and openai_key:
+        try:
+            client = OpenAI(api_key=openai_key)
+            prompt = f"""
+You are an expert AI Copilot analyzing uploaded enterprise PDF documents.
+Answer the user's question accurately using ONLY the context provided below.
+
+Rules:
+1. Provide the exact answer in a clear, easy-to-understand layout with clean spacing and segmentation.
+2. Structure the answer into clear markdown sections:
+   - ### 📌 Direct Answer (Concise overview answering the question immediately)
+   - ### 📋 Steps / Procedures / Key Points (Numbered list or bullet points with line breaks)
+   - ### 💡 Important Notes & Considerations (Any caveats, conditions, or prerequisites)
+3. Cite the exact source document and page number.
+4. Do NOT hallucinate. If the answer cannot be found in the text, clearly state that.
+
+Source Context:
+Document: {doc_name}
+{full_context}
+
+Question:
+{query}
+"""
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a precise corporate knowledge assistant."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0
+            )
+            answer_text = completion.choices[0].message.content
+            return answer_text, extracted_images
+        except Exception:
+            pass
+
+    # Deterministic fallback segmentation if no LLM key is configured
+    fallback_answer = format_segmented_answer(top_result["text"], query, doc_name, page_no)
+    return fallback_answer, extracted_images
 
 
 # ============================================================
@@ -1210,7 +1279,7 @@ def render_pdf_page_highlighted(document_path, page_number, query="", scale=1.75
 
 def clear_knowledge_caches():
     """Invalidate cached database/search/PDF-derived data after document changes."""
-    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, render_pdf_page, render_pdf_page_highlighted):
+    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, render_pdf_page, render_pdf_page_highlighted, extract_page_images_and_figures, generate_copilot_response):
         try:
             fn.clear()
         except Exception:
@@ -1222,7 +1291,6 @@ def clear_knowledge_caches():
 # ============================================================
 
 def get_admin_pin():
-    """Read the admin PIN from Streamlit secrets first, then environment."""
     try:
         pin = st.secrets.get("ADMIN_PIN")
         if pin:
@@ -1273,13 +1341,8 @@ if "admin_authenticated" not in st.session_state:
 
 
 # ============================================================
-# ============================================================
 # PERSISTENT BROWSER ACCESS
 # ============================================================
-# Streamlit Cloud can lose client-side cookies across a fresh WebSocket
-# connection. To make F5/refresh deterministic, the signed authorization
-# token is persisted in the app URL. The token contains no user information.
-# IMPORTANT: anyone who has the full authorized URL can access the app.
 
 ACCESS_CODE = str(
     st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
@@ -1348,7 +1411,6 @@ def authorize_browser():
     if not token:
         return False
 
-    # Query parameters survive a normal browser refresh on Streamlit Cloud.
     st.query_params["kb_access"] = token
     st.session_state.access_authorized = True
     return True
@@ -1407,8 +1469,6 @@ def render_access_gate():
         if submitted:
             if entered_code.strip() == ACCESS_CODE:
                 if authorize_browser():
-                    # No Continue button. The signed token is placed in the
-                    # URL and the app immediately loads the Knowledge Base.
                     st.rerun()
                 else:
                     st.error("Unable to create the browser authorization token.")
@@ -1426,6 +1486,7 @@ if not browser_is_authorized():
     st.stop()
 
 
+# ============================================================
 # HEADER
 # ============================================================
 
@@ -1450,8 +1511,6 @@ with st.container(key="header_shell"):
         unsafe_allow_html=True,
     )
 
-    # Gear is inside the same header container as Authorized User, so its vertical
-    # position is tied to the header rather than the browser viewport.
     with st.container(key="gear_wrap"):
         with st.popover("⚙", use_container_width=False):
             st.markdown("**Knowledge Base Access**")
@@ -1623,10 +1682,6 @@ elif st.session_state.page == "Manage Documents":
 else:
     st.session_state.page = "Search"
 
-    # Put the search box and Search button inside a Streamlit form so pressing
-    # Enter in the text field submits the search exactly like clicking Search.
-    # The filter popover remains outside the form so changing filters does not
-    # require a separate form submission.
     search_form_col, filter_col = st.columns([7.4, 1.0], gap="small")
     with search_form_col:
         with st.form("main_search_form", clear_on_submit=False):
@@ -1635,7 +1690,7 @@ else:
                 query = st.text_input(
                     "Search",
                     value=st.session_state.search_query,
-                    placeholder="What should I check or find in the knowledge base?",
+                    placeholder="Ask Copilot a question or search for processes, guides, and policies...",
                     label_visibility="collapsed",
                     key="main_search_box",
                 )
@@ -1666,21 +1721,14 @@ else:
 
         if not results:
             st.session_state.selected_result_id = None
-
-        if not results:
             st.warning("No matching PDF was found. Try different keywords or upload another document.")
         else:
             best = results[0]
 
-            # The selected result controls the PDF shown in the viewer.
-            # The search ranking itself stays unchanged; selecting a result only
-            # changes which PDF/page is displayed on the right.
             selected_result_id = st.session_state.get("selected_result_id")
             selected_matches = [r for r in results if r["id"] == selected_result_id]
             selected_result = selected_matches[0] if selected_matches else best
 
-            # If the selected result disappeared because filters/search changed,
-            # automatically fall back to the highest match.
             if selected_result_id != selected_result["id"]:
                 st.session_state.selected_result_id = selected_result["id"]
                 st.session_state.viewer_page = int(selected_result["page_number"])
@@ -1693,6 +1741,52 @@ else:
 
             viewer_page = max(1, min(int(st.session_state.viewer_page), max(total_pages, 1)))
 
+            # ============================================================
+            # COPILOT EXACT ANSWER & PDF IMAGE EXTRACTION
+            # ============================================================
+            copilot_answer, extracted_imgs = generate_copilot_response(active_query, results)
+
+            with st.container():
+                st.markdown(
+                    f"""
+                    <div class="copilot-card">
+                        <div class="copilot-header">
+                            <div class="copilot-title-group">
+                                <div class="copilot-icon">⚡</div>
+                                <div class="copilot-title">Copilot Answer</div>
+                            </div>
+                            <div class="copilot-pill">Grounded in Uploaded PDFs</div>
+                        </div>
+                        <div class="copilot-content">
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(copilot_answer)
+
+                if extracted_imgs:
+                    st.markdown('<div class="copilot-image-section"><div class="copilot-image-title">📷 Applicable Figures & References from PDF:</div></div>', unsafe_allow_html=True)
+                    img_cols = st.columns(min(len(extracted_imgs), 3))
+                    for col_idx, img_data in enumerate(extracted_imgs[:3]):
+                        with img_cols[col_idx]:
+                            st.image(img_data["bytes"], caption=img_data["caption"], use_container_width=True)
+
+                st.markdown(
+                    f"""
+                        </div>
+                        <div class="copilot-meta-bar">
+                            <span><b>Primary Source:</b> {best['filename']}</span>
+                            <span><b>Page:</b> {best['page_number']}</span>
+                            <span><b>Match Relevance:</b> {min(99, max(1, round(best['score'] * 100)))}%</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # ============================================================
+            # SEARCH RESULTS & PDF VIEWER
+            # ============================================================
             st.markdown(
                 f'<div class="search-count">{len(results)} search result(s) · Showing the highest match first</div>',
                 unsafe_allow_html=True,
@@ -1737,7 +1831,6 @@ else:
                 else:
                     st.caption("No exact text occurrence was detected on the other pages.")
 
-
             with source_col:
                 st.markdown(
                     f"""
@@ -1750,9 +1843,6 @@ else:
                     unsafe_allow_html=True,
                 )
 
-                # Keep zoom controls in the toolbar, while the page navigation arrows
-                # float over the left/right edges of the PDF itself.  This keeps the
-                # reader compact and makes page turning feel like a real document viewer.
                 zoom_col, page_col = st.columns([1, 1.25], gap="small")
                 with zoom_col:
                     zoom = st.selectbox(
@@ -1769,9 +1859,6 @@ else:
                         unsafe_allow_html=True,
                     )
 
-                # Render at a slightly lower pixel density than the old 1.25x multiplier.
-                # The displayed width still follows the zoom setting, but the browser has
-                # fewer pixels to paint, which makes scrolling and page navigation faster.
                 render_scale = zoom / 100 * 1.05
                 image = render_pdf_page_highlighted(
                     selected_result["stored_path"],
@@ -1784,8 +1871,6 @@ else:
                     display_width = {100: 700, 125: 820, 150: 930, 175: 1040, 200: 1180}.get(int(zoom), 930)
 
                     with st.container(key="pdf_viewer_shell"):
-                        # These are intentionally icon-only and positioned over the PDF.
-                        # They remain disabled at the first/last page.
                         with st.container(key="pdf_prev_wrap"):
                             if st.button(
                                 "‹",
@@ -1851,6 +1936,7 @@ st.markdown('<div class="bottom-nav-spacer"></div>', unsafe_allow_html=True)
 nav_left, nav_center, nav_right = st.columns([1, 2, 1])
 with nav_center:
     if st.button("⌕  Search Knowledge Base", use_container_width=True):
-        st.session_state.page = "Search"; st.rerun()
+        st.session_state.page = "Search"
+        st.rerun()
 
 st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search</div>', unsafe_allow_html=True)
