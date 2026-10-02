@@ -1,1856 +1,1229 @@
-import os
-import re
-import io
-import math
-import time
-import hashlib
+import streamlit as st
 import sqlite3
+import hashlib
+import secrets as py_secrets
 from datetime import datetime
 from pathlib import Path
-
-import fitz  # PyMuPDF
-import streamlit as st
-
-try:
-    from itsdangerous import URLSafeTimedSerializer
-except Exception:
-    URLSafeTimedSerializer = None
-
-try:
-    from streamlit_cookies_controller import CookieController
-except Exception:
-    CookieController = None
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from html import escape
 
 # ============================================================
-# CONFIG
+# HPE KNOWLEDGE BASE
+# Single-file Streamlit application
+#
+# Secrets required:
+#   ACCESS_TOKEN = "one-time-token"
+#   ADMIN_PASSWORD = "admin-password"
+#
+# Optional:
+#   ADMIN_NAME = "Arianne Escabillas"
+#
+# Example .streamlit/secrets.toml:
+# ACCESS_TOKEN = "CHANGE-ME"
+# ADMIN_PASSWORD = "CHANGE-ME"
+# ADMIN_NAME = "Arianne Escabillas"
+#
+# This demo uses SQLite for SOP/document metadata so it can run
+# without an external database. Replace the repository functions
+# with MongoDB calls later if needed.
 # ============================================================
 
-APP_NAME = "Knowledge Base"
-DATA_DIR = Path("knowledge_base_data")
+st.set_page_config(
+    page_title="HPE Knowledge Base",
+    page_icon="📚",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+APP_DIR = Path(__file__).resolve().parent
+DATA_DIR = APP_DIR / "kb_data"
 PDF_DIR = DATA_DIR / "pdfs"
 DB_PATH = DATA_DIR / "knowledge_base.db"
-
 DATA_DIR.mkdir(exist_ok=True)
 PDF_DIR.mkdir(exist_ok=True)
 
-st.set_page_config(
-    page_title="Knowledge Base",
-    page_icon="📚",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-# ============================================================
-# CSS
-# ============================================================
-
-st.markdown(
-    """
+# -----------------------------
+# Theme / CSS
+# -----------------------------
+st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 :root {
-    --navy: #0b2538;
-    --navy-2: #123b50;
-    --teal: #00a982;
-    --teal-dark: #007f72;
-    --green-soft: #e7f8f1;
-    --bg: #f5f8fa;
-    --white: #ffffff;
-    --border: #d9e3e8;
-    --text: #102d42;
-    --muted: #687b87;
+    --ink:#102238;
+    --muted:#667384;
+    --nav:#00363d;
+    --nav2:#002c32;
+    --green:#01a982;
+    --green-dark:#007f69;
+    --teal:#008f83;
+    --line:#e4e9ee;
+    --surface:#ffffff;
+    --page:#f5f7fa;
 }
 
 html, body, [class*="css"] {
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: "Inter", Arial, sans-serif;
 }
 
 .stApp {
-    background: linear-gradient(180deg, #f8fbfc 0%, #f2f6f8 100%);
-    color: var(--text);
+    background:#f5f7fa;
+    color:var(--ink);
 }
 
-[data-testid="stHeader"] { background: transparent; }
-
-/* Hide Streamlit's default upper-right toolbar/menu icons.
-   The app's own gear control remains visible because it is rendered in the page body. */
-[data-testid="stToolbar"],
-[data-testid="stDecoration"],
-[data-testid="stStatusWidget"],
-[data-testid="stAppDeployButton"],
-[data-testid="stMainMenu"],
-button[kind="header"],
-[data-testid="stHeaderActionElements"] {
-    display: none !important;
-    visibility: hidden !important;
+#MainMenu, footer, header {
+    visibility:hidden;
 }
 
-/* Keep the header area clean after removing the native controls. */
+.block-container {
+    padding:0 22px 32px 224px !important;
+    max-width:none !important;
+}
+
 [data-testid="stHeader"] {
-    height: 0 !important;
-    min-height: 0 !important;
+    height:0 !important;
 }
 
-/* Hide the default sidebar container; this app uses its own page navigation. */
-[data-testid="stSidebar"],
-[data-testid="stSidebarCollapsedControl"] {
-    display: none !important;
+[data-testid="stToolbar"] {
+    display:none !important;
 }
 
-
-.kb-topbar {
-    display: flex;
-    align-items: center;
-    min-height: 76px;
-    padding: 8px 10px 12px 8px;
-    border-bottom: 1px solid #dfe7eb;
-    background: linear-gradient(105deg, #ffffff 0%, #f7fbfc 70%, #e8f7f7 100%);
-    margin-bottom: 8px;
+/* Fixed left navigation */
+.kb-sidebar {
+    position:fixed;
+    z-index:1000;
+    top:0;
+    left:0;
+    bottom:0;
+    width:212px;
+    background:linear-gradient(180deg,#003c42 0%,#002f35 100%);
+    color:white;
+    box-shadow:2px 0 14px rgba(5,31,39,.08);
 }
 
-.brand-block { width: 145px; }
-.brand-mark {
-    width: 46px;
-    height: 7px;
-    border: 3px solid #00a982;
-    margin-bottom: 7px;
-}
-.brand-name { font-size: 14px; font-weight: 700; line-height: 1.05; color: #111; }
-.brand-divider { height: 45px; width: 1px; background: #b8c7cf; margin: 0 22px 0 8px; }
-.app-title { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1; }
-.app-subtitle { margin-top: 5px; font-size: 14px; color: #304a5c; }
-.title-block { flex: 1; }
-.top-tagline { text-align: right; color: #18394e; font-size: 12px; line-height: 1.3; margin-right: 12px; }
-.top-actions { width: 36px; }
-/* Header action group: Authorized User + admin gear stay together. */
-.st-key-header_shell {
-    position: relative !important;
-    width: 100% !important;
-    height: 76px !important;
-    min-height: 76px !important;
-    margin: 0 0 8px 0 !important;
-    padding: 0 !important;
-    overflow: visible !important;
-}
-.st-key-header_shell .kb-topbar {
-    position: relative !important;
-}
-.st-key-gear_wrap {
-    position: absolute !important;
-    top: 50% !important;
-    right: 10px !important;
-    width: 30px !important;
-    height: 30px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    transform: translateY(-50%) !important;
-    z-index: 10000 !important;
-    pointer-events: none !important;
-}
-.st-key-gear_wrap > div,
-.st-key-gear_wrap div[data-testid="stPopover"] {
-    width: 30px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    pointer-events: auto !important;
-}
-.st-key-gear_wrap div[data-testid="stPopover"] > button {
-    width: 30px !important;
-    min-width: 30px !important;
-    height: 30px !important;
-    min-height: 30px !important;
-    padding: 0 !important;
-    border: 1px solid #cfdde2 !important;
-    border-radius: 6px !important;
-    background: #e8f7f7 !important;
-    box-shadow: none !important;
-    color: #315468 !important;
-    font-size: 13px !important;
-    line-height: 30px !important;
-}
-.st-key-gear_wrap div[data-testid="stPopover"] > button:hover,
-.st-key-gear_wrap div[data-testid="stPopover"] > button:focus {
-    background: #e8f7f7 !important;
-    color: #087c63 !important;
-    box-shadow: none !important;
+.kb-logo {
+    height:62px;
+    background:#f8fafc;
+    color:#0d1828;
+    display:flex;
+    align-items:center;
+    padding:0 22px;
+    font-size:35px;
+    font-weight:800;
+    letter-spacing:-2px;
 }
 
-
-.bell { font-size: 22px; color: var(--navy); }
-
-.exact-answer-card {
-    background: linear-gradient(110deg, #f1fcf8, #ffffff 65%);
-    border: 1px solid #7ad8bd;
-    border-radius: 10px;
-    padding: 18px 20px 16px;
-    box-shadow: 0 3px 12px rgba(12, 54, 70, .05);
-    margin-top: 8px;
+.kb-logo span {
+    color:#01a982;
+    margin-left:1px;
 }
-.exact-answer-head { display: flex; justify-content: space-between; align-items: center; }
-.exact-answer-title { color: #07866b; font-size: 19px; font-weight: 700; vertical-align: middle; }
-.check-circle {
-    display: inline-flex; width: 31px; height: 31px; border-radius: 50%;
-    align-items: center; justify-content: center; background: #00a982; color: white;
-    font-weight: 800; margin-right: 8px;
+
+.kb-menu {
+    padding:31px 11px 0;
 }
-.match-pill { background: #d9f5ea; color: #087b64; font-weight: 700; padding: 5px 12px; border-radius: 20px; font-size: 12px; }
-.exact-answer-note { margin: 5px 0 10px 39px; color: var(--muted); font-size: 12px; }
-.exact-answer-text {
-    margin: 0 0 12px 0; padding: 14px 18px; border-left: 4px solid var(--teal);
-    background: rgba(255,255,255,.78); color: #172f42; font-size: 16px; line-height: 1.55;
+
+.kb-nav {
+    width:100%;
+    border:0;
+    border-radius:9px;
+    background:transparent;
+    color:#eef7f8;
+    padding:11px 14px;
+    margin:3px 0;
+    text-align:left;
+    font-size:14px;
+    font-weight:500;
+    cursor:pointer;
 }
-.answer-meta { display: flex; flex-wrap: wrap; gap: 22px; color: #506672; font-size: 12px; padding-left: 2px; }
 
-.source-header { background: white; border: 1px solid var(--border); border-bottom: 0; border-radius: 10px 10px 0 0; padding: 14px 16px; }
-.source-title { font-size: 18px; font-weight: 700; color: var(--text); }
-.source-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
-
-.panel-title { font-size: 17px; font-weight: 700; color: var(--text); margin: 3px 0 8px; }
-.related-title { color: #0561a0; font-weight: 700; font-size: 14px; }
-.related-number { float: left; width: 23px; height: 23px; background: #dfe9ed; border-radius: 4px; text-align: center; line-height: 23px; font-weight: 700; color: #294a5c; }
-
-.welcome-card {
-    margin: 42px auto; max-width: 720px; text-align: center; background: white;
-    border: 1px solid var(--border); border-radius: 14px; padding: 42px;
-    box-shadow: 0 5px 18px rgba(12,54,70,.05);
+.kb-nav:hover { background:rgba(1,169,130,.14); }
+.kb-nav.active {
+    background:linear-gradient(90deg,#01a982,#00a88c);
+    color:white;
+    box-shadow:0 5px 13px rgba(0,0,0,.12);
 }
-.welcome-icon { font-size: 42px; color: var(--teal); }
-.welcome-title { font-size: 25px; font-weight: 700; color: var(--text); margin-top: 8px; }
-.welcome-text { color: var(--muted); max-width: 560px; margin: 10px auto; line-height: 1.6; font-size: 14px; }
-.welcome-stats { display: flex; justify-content: center; gap: 35px; color: #57707e; margin-top: 18px; font-size: 12px; }
 
-.page-heading { display:flex; justify-content:space-between; align-items:center; margin: 18px 0; }
-.page-title { font-size: 26px; font-weight: 700; color: var(--text); }
-.page-description { color: var(--muted); font-size: 13px; margin-top: 4px; }
-.admin-badge { background:#e4f6f0; color:#087c63; font-size:11px; font-weight:700; border-radius:20px; padding:6px 12px; }
-.admin-card { max-width:420px; margin:80px auto 20px; text-align:center; }
-.admin-icon { font-size:40px; color:var(--teal); }
-.admin-title { font-size:24px; font-weight:700; color:var(--text); }
-.admin-subtitle { color:var(--muted); margin-top:5px; font-size:13px; }
-.content-gap { height: 10px; }
-.bottom-nav-spacer { height: 46px; }
-.bottom-nav-label { text-align:center; color:#6c808b; font-size:10px; padding:4px 0 8px; }
+.kb-nav .ico {
+    display:inline-block;
+    width:25px;
+    font-size:17px;
+    margin-right:8px;
+    text-align:center;
+}
 
-
-.auth-shell { max-width: 620px; margin: 70px auto 22px; text-align: center; }
-.auth-brand-mark { width: 55px; height: 8px; border: 3px solid #00a982; margin: 0 auto 10px; }
-.auth-brand { font-size: 14px; font-weight: 700; color: #111; line-height: 1.05; }
-.auth-title { margin-top: 26px; font-size: 31px; font-weight: 700; color: var(--text); }
-.auth-subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
-.auth-card-title { font-size: 24px; font-weight: 700; color: var(--text); margin-top: 20px; }
-.auth-switch { text-align:center; color:var(--muted); font-size:12px; margin:12px 0 6px; }
-.top-user {
-    color:#315468;
-    font-size:12px;
-    white-space:nowrap;
-    background:#e8f7f7;
-    padding:7px 10px;
-    border-radius:4px;
+.kb-brand-bottom {
     position:absolute;
-    right:46px;
-    top:50%;
-    transform:translateY(-50%);
+    left:23px;
+    bottom:17px;
+    color:white;
+}
+.kb-brand-bottom .mini {
+    font-size:21px;
+    font-weight:700;
+}
+.kb-brand-bottom .small {
+    font-size:12px;
+    opacity:.9;
+}
+.kb-brand-bottom .version {
+    font-size:10px;
+    opacity:.65;
+    margin-top:5px;
+}
+
+/* Header */
+.topbar {
+    height:62px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:#f7f9fb;
+}
+
+.page-title {
+    font-size:24px;
+    font-weight:750;
+    letter-spacing:-.5px;
+}
+
+.search-top {
+    width:46%;
+}
+
+.profile-pill {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-width:220px;
+    justify-content:flex-end;
+}
+.avatar {
+    width:38px;
+    height:38px;
+    border-radius:50%;
+    background:linear-gradient(145deg,#f1c5b7,#fff);
+    border:2px solid #fff;
+    box-shadow:0 1px 4px #bfc7ce;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:17px;
+}
+.profile-name {
+    font-weight:650;
+    font-size:13px;
+}
+.profile-role {
+    color:#6b7684;
+    font-size:11px;
+}
+
+/* Hero */
+.hero {
+    position:relative;
+    overflow:hidden;
+    border-radius:10px;
+    min-height:213px;
+    padding:30px 38px 24px;
+    background:
+      radial-gradient(circle at 88% 15%,rgba(34,223,205,.20),transparent 28%),
+      linear-gradient(115deg,#0b222a 0%,#0a4a50 45%,#007e79 100%);
+    color:white;
+    box-shadow:0 3px 14px rgba(8,37,46,.09);
+}
+.hero:after {
+    content:"";
+    position:absolute;
+    right:-60px;
+    top:-70px;
+    width:510px;
+    height:310px;
+    opacity:.20;
+    background:
+      linear-gradient(145deg,transparent 45%,#00e0c2 46%,transparent 47%),
+      linear-gradient(165deg,transparent 57%,#36f5df 58%,transparent 59%);
+    transform:skewX(-14deg);
+}
+.hero h1 {
+    margin:0 0 8px;
+    font-size:35px;
+    line-height:1.12;
+    letter-spacing:-1px;
+    position:relative;
     z-index:2;
 }
-
-/* Compact search-result cards */
-.st-key-search_result_best,
-.st-key-search_result_1,
-.st-key-search_result_2,
-.st-key-search_result_3,
-.st-key-search_result_4,
-.st-key-search_result_5,
-.st-key-search_result_6,
-.st-key-search_result_7,
-.st-key-search_result_8,
-.st-key-search_result_9 {
-    margin-bottom: 7px !important;
+.hero p {
+    margin:0 0 19px;
+    font-size:16px;
+    position:relative;
+    z-index:2;
 }
-
-.st-key-search_result_best [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_1 [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_2 [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_3 [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_4 [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_5 [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_6 [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_7 [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_8 [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-search_result_9 [data-testid="stVerticalBlockBorderWrapper"] {
-    padding: 8px 10px !important;
-    border-radius: 7px !important;
+.hero-search {
+    max-width:850px;
+    position:relative;
+    z-index:3;
 }
-
-.result-label {
-    color:#0561a0;
-    font-weight:700;
-    font-size:11px;
-    line-height:1.2;
+.popular {
+    display:flex;
+    align-items:center;
+    gap:9px;
+    margin-top:11px;
+    flex-wrap:wrap;
+    position:relative;
+    z-index:3;
 }
-.result-filename {
-    margin-top:3px;
-    color:#0561a0;
-    font-weight:700;
+.popular-label {
     font-size:12px;
-    line-height:1.35;
-    word-break:break-word;
 }
-.result-score {
-    margin-top:3px;
-    color:#687b87;
-    font-size:10px;
-}
-
-.st-key-search_result_best button,
-.st-key-search_result_1 button,
-.st-key-search_result_2 button,
-.st-key-search_result_3 button,
-.st-key-search_result_4 button,
-.st-key-search_result_5 button,
-.st-key-search_result_6 button,
-.st-key-search_result_7 button,
-.st-key-search_result_8 button,
-.st-key-search_result_9 button {
-    min-height: 28px !important;
-    height: 28px !important;
-    padding: 2px 8px !important;
-    font-size: 11px !important;
-    margin-top: 4px !important;
-}
-
-.best-match-card { background:linear-gradient(110deg,#f1fcf8,#fff 70%); border:1px solid #7ad8bd; border-radius:10px; padding:16px 18px; margin-top:8px; box-shadow:0 3px 12px rgba(12,54,70,.05); }
-.best-match-head { display:flex; justify-content:space-between; align-items:center; }
-.pdf-badge { display:inline-flex; background:#e94b3c; color:white; font-weight:800; font-size:10px; border-radius:4px; padding:4px 6px; margin-right:7px; }
-.best-match-title { color:#07866b; font-size:18px; font-weight:700; }
-.best-match-file { color:#102d42; font-size:20px; font-weight:700; margin-top:8px; }
-.best-match-meta { color:#687b87; font-size:12px; margin-top:4px; }
-.source-page-label { font-size:12px; font-weight:700; color:#315468; margin:14px 0 6px; padding:6px 10px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
-
-
-/* Search / document reader redesign */
-.search-count { color:#687b87; font-size:11px; margin:2px 0 8px; }
-.reader-toolbar {
-    background:#ffffff; border:1px solid var(--border); border-radius:8px;
-    padding:7px 10px; margin-bottom:8px;
-}
-.reader-title { font-size:15px; font-weight:700; color:var(--text); line-height:1.3; word-break:break-word; }
-.reader-meta { font-size:11px; color:var(--muted); margin-top:2px; }
-.reader-match {
-    background:#e7f8f1; border:1px solid #9bdcc8; color:#087c63;
-    border-radius:5px; padding:5px 8px; font-size:10px; font-weight:700;
-    display:inline-block; margin-top:5px;
-}
-
-.reader-page-indicator {
-    text-align:right;
-    color:#687b87;
+.tag {
+    border:1px solid rgba(255,255,255,.13);
+    background:rgba(0,0,0,.22);
+    color:#eefefe;
+    border-radius:16px;
+    padding:5px 12px;
     font-size:11px;
-    line-height:30px;
-    padding-right:4px;
 }
 
-/* PDF reader: arrow controls float over the page edges instead of taking a
-   separate toolbar row. The shell is positioned so the arrows stay centered
-   against the rendered PDF page. */
-.st-key-pdf_viewer_shell {
-    position:relative !important;
-    overflow:visible !important;
-    padding:0 !important;
+/* Cards */
+.metric-row {
+    margin-top:15px;
 }
-.st-key-pdf_prev_wrap,
-.st-key-pdf_next_wrap {
-    position:absolute !important;
-    top:50% !important;
-    transform:translateY(-50%) !important;
-    z-index:20 !important;
-    width:42px !important;
+.metric-card {
+    background:white;
+    border:1px solid #e9edf1;
+    border-radius:10px;
+    min-height:83px;
+    padding:15px 17px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    box-shadow:0 2px 9px rgba(25,40,50,.035);
 }
-.st-key-pdf_prev_wrap { left:10px !important; }
-.st-key-pdf_next_wrap { right:10px !important; }
-.st-key-pdf_prev_wrap button,
-.st-key-pdf_next_wrap button {
-    width:42px !important;
-    min-width:42px !important;
-    height:42px !important;
-    min-height:42px !important;
-    padding:0 !important;
-    border-radius:50% !important;
-    border:1px solid rgba(16,45,66,.18) !important;
-    background:rgba(255,255,255,.94) !important;
-    box-shadow:0 2px 10px rgba(12,54,70,.12) !important;
-    color:#123b50 !important;
-    font-size:28px !important;
-    line-height:1 !important;
-    transition:transform .12s ease, box-shadow .12s ease !important;
+.metric-icon {
+    width:48px;
+    height:48px;
+    border-radius:15px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:24px;
 }
-.st-key-pdf_prev_wrap button:hover:not(:disabled),
-.st-key-pdf_next_wrap button:hover:not(:disabled) {
-    transform:scale(1.06) !important;
-    box-shadow:0 4px 14px rgba(12,54,70,.18) !important;
+.metric-number { font-size:23px; font-weight:750; }
+.metric-label { font-size:12px; color:#263342; margin-top:1px; }
+.metric-arrow { font-size:23px; color:#1b2c38; }
+
+/* Section */
+.section-card {
+    background:#fff;
+    border:1px solid #e5e9ed;
+    border-radius:11px;
+    box-shadow:0 2px 9px rgba(25,40,50,.035);
+    padding:17px 14px;
 }
-.st-key-pdf_prev_wrap button:disabled,
-.st-key-pdf_next_wrap button:disabled {
-    opacity:.35 !important;
+.section-head {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:0 1px 10px;
+}
+.section-title {
+    font-size:17px;
+    font-weight:750;
+}
+.section-link {
+    color:#172532;
+    font-size:12px;
 }
 
-/* Reduce excess vertical spacing around the rendered page so the reader
-   feels faster and more continuous while scrolling. */
-.st-key-pdf_viewer_shell [data-testid="stImage"] {
-    margin-top:0 !important;
-    margin-bottom:4px !important;
+/* category cards */
+.cat-card {
+    border:1px solid #e6eaee;
+    border-radius:9px;
+    min-height:70px;
+    padding:12px 13px;
+    background:white;
+    display:flex;
+    align-items:center;
+    gap:11px;
 }
-.ai-answer-card {
-    background: linear-gradient(110deg, #f1fcf8, #ffffff 72%);
-    border: 1px solid #9bdcc8;
-    border-radius: 10px;
-    padding: 14px 17px;
-    margin: 8px 0 12px;
-    box-shadow: 0 3px 12px rgba(12,54,70,.04);
+.cat-icon {
+    width:39px;
+    height:39px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:19px;
 }
-.ai-answer-head {
+.cat-name { font-size:12px; font-weight:650; }
+.cat-count { font-size:10px; color:#6f7b86; margin-top:3px; }
+.cat-arrow { margin-left:auto; font-size:18px; }
+
+/* document list */
+.doc-row {
+    display:flex;
+    align-items:center;
+    padding:11px 8px;
+    border-bottom:1px solid #edf0f2;
+}
+.doc-row:last-child { border-bottom:0; }
+.pdf {
+    width:33px;
+    height:37px;
+    border-radius:7px;
+    background:#fff0f1;
+    color:#df2935;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:11px;
+    font-weight:800;
+    margin-right:11px;
+}
+.doc-title { font-size:12px; font-weight:650; }
+.doc-meta { font-size:10px; color:#6e7a86; margin-top:3px; }
+.doc-date { margin-left:auto; color:#707b87; font-size:10px; white-space:nowrap; }
+.kebab { margin-left:14px; font-size:18px; color:#4e5964; }
+
+/* viewer */
+.viewer {
+    background:#1f252a;
+    border-radius:7px 7px 0 0;
+    min-height:280px;
+    padding:14px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    overflow:hidden;
+}
+.paper {
+    width:82%;
+    min-height:285px;
+    background:white;
+    padding:24px 30px;
+    color:#142333;
+    box-shadow:0 2px 14px rgba(0,0,0,.25);
+}
+.paper-logo {
+    font-size:20px;
+    font-weight:800;
+    letter-spacing:-1px;
+}
+.paper-logo span { color:#01a982; }
+.paper h3 { margin:12px 0 5px; font-size:18px; }
+.paper .line { width:120px; height:3px; background:#01a982; margin:12px 0; }
+.paper p { font-size:10px; color:#65717c; line-height:1.55; }
+.viewer-footer {
     display:flex;
     justify-content:space-between;
     align-items:center;
-    gap:12px;
+    padding:12px 0 0;
 }
-.ai-answer-title {
-    color:#087c63;
-    font-size:16px;
-    font-weight:700;
+.open-doc {
+    background:#01a982;
+    color:white;
+    border:0;
+    border-radius:8px;
+    padding:10px 17px;
+    font-weight:650;
 }
-.ai-answer-badge {
-    background:#d9f5ea;
-    color:#087b64;
+
+/* Admin */
+.admin-banner {
+    background:linear-gradient(90deg,#063c40,#007e70);
+    color:white;
+    border-radius:10px;
+    padding:18px 22px;
+    margin-bottom:16px;
+}
+.form-card {
+    background:#fff;
+    border:1px solid #e3e8ec;
+    border-radius:11px;
+    padding:20px;
+}
+.admin-badge {
+    display:inline-block;
+    background:#d9fff5;
+    color:#007e69;
+    border-radius:13px;
+    padding:4px 9px;
     font-size:10px;
     font-weight:700;
-    border-radius:12px;
-    padding:4px 8px;
-    white-space:nowrap;
-}
-.ai-answer-body {
-    margin-top:8px;
-    color:#172f42;
-    font-size:14px;
-    line-height:1.55;
-}
-.ai-source-note {
-    margin-top:8px;
-    color:#687b87;
-    font-size:10px;
 }
 
-.match-panel {
-    background:#ffffff; border:1px solid var(--border); border-radius:8px;
-    padding:10px; margin-top:10px;
+/* Access gate */
+.gate {
+    max-width:580px;
+    margin:70px auto;
+    text-align:center;
+    background:#fff;
+    border:1px solid #e5eaee;
+    border-radius:14px;
+    padding:34px 38px;
+    box-shadow:0 9px 35px rgba(0,40,50,.08);
 }
-.match-panel-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:7px; }
-.match-item {
-    background:#f7fafb; border:1px solid #e1e8ec; border-radius:6px;
-    padding:7px 8px; margin-bottom:6px;
-}
-.match-item-page { color:#0561a0; font-size:10px; font-weight:700; }
-.match-item-text { color:#385362; font-size:10px; line-height:1.35; margin-top:2px; }
-.result-snippet {
-    color:#536b78; font-size:10px; line-height:1.4; margin-top:5px;
-    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
-}
-.result-page { color:#687b87; font-size:10px; margin-top:3px; }
-.result-score-pill {
-    float:right; background:#e7f8f1; color:#087c63; border-radius:10px;
-    padding:2px 6px; font-size:9px; font-weight:700;
-}
-.source-page-label { font-size:11px; font-weight:700; color:#315468; margin:8px 0 5px; padding:5px 8px; background:#eef7f5; border-left:3px solid #00a982; border-radius:4px; }
+.gate-logo { font-size:42px; font-weight:850; letter-spacing:-3px; }
+.gate-logo span { color:#01a982; }
+.gate h1 { font-size:25px; margin:10px 0 5px; }
+.gate p { color:#6c7782; font-size:13px; }
 
-/* Streamlit controls */
-button[kind="primary"] { background: var(--teal) !important; border-color: var(--teal) !important; }
-button[kind="primary"]:hover { background: var(--teal-dark) !important; }
-[data-testid="stFileUploader"] { background: white; border-radius: 10px; border: 1px dashed #9ab1bc; }
-[data-testid="stVerticalBlockBorderWrapper"] { border-color: var(--border) !important; border-radius: 9px !important; }
-.stDownloadButton button { border-color: #00a982 !important; color: #087b64 !important; }
+/* Buttons */
+div.stButton > button,
+div.stFormSubmitButton > button {
+    border-radius:8px;
+    border:1px solid #dbe2e7;
+    font-weight:600;
+}
+div.stButton > button[kind="primary"],
+div.stFormSubmitButton > button[kind="primary"] {
+    background:#01a982;
+    color:white;
+    border-color:#01a982;
+}
+div.stButton > button[kind="primary"]:hover,
+div.stFormSubmitButton > button[kind="primary"]:hover {
+    background:#008f73;
+    border-color:#008f73;
+}
 
+/* Dialog-ish panels */
+div[data-testid="stExpander"] {
+    border:1px solid #e3e8ec;
+    border-radius:9px;
+}
+
+/* Mobile */
 @media (max-width: 900px) {
-    .brand-block { width: 110px; }
-    .brand-divider, .top-tagline { display: none; }
-    .app-title { font-size: 22px; }
-    .app-subtitle { font-size: 12px; }
-    .exact-answer-title { font-size: 16px; }
+    .kb-sidebar { width:74px; }
+    .kb-logo { padding:0 13px; font-size:27px; }
+    .kb-menu { padding-left:7px; padding-right:7px; }
+    .kb-nav { font-size:0; text-align:center; }
+    .kb-nav .ico { margin:0; font-size:18px; }
+    .kb-brand-bottom { display:none; }
+    .block-container { padding-left:88px !important; padding-right:12px !important; }
+    .profile-pill { min-width:auto; }
+    .profile-name, .profile-role { display:none; }
+    .hero h1 { font-size:27px; }
+    .hero { padding:25px; }
 }
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-# ============================================================
-# DATABASE
-# ============================================================
+# -----------------------------
+# Session state
+# -----------------------------
+defaults = {
+    "access_granted": False,
+    "admin": False,
+    "page": "Home",
+    "selected_doc": None,
+    "notice": None,
+    "nav_nonce": 0,
+}
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
+# -----------------------------
+# Secrets
+# -----------------------------
+def get_secret(name: str, default=None):
+    try:
+        return st.secrets[name]
+    except Exception:
+        return default
+
+ACCESS_TOKEN = get_secret("ACCESS_TOKEN", "CHANGE-ME")
+ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD", "CHANGE-ME")
+ADMIN_NAME = get_secret("ADMIN_NAME", "Knowledge Base Admin")
+
+# -----------------------------
+# SQLite repository
+# -----------------------------
 def db():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def init_db():
     conn = db()
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA temp_store=MEMORY")
-    conn.execute("PRAGMA cache_size=-16000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            employee_id TEXT NOT NULL UNIQUE,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        );
-
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT NOT NULL,
-            stored_path TEXT NOT NULL,
-            file_hash TEXT UNIQUE NOT NULL,
-            category TEXT DEFAULT 'General',
-            page_count INTEGER DEFAULT 0,
-            file_size INTEGER DEFAULT 0,
-            uploaded_at TEXT NOT NULL,
-            indexed_at TEXT,
-            status TEXT DEFAULT 'Indexed'
-        );
-
-        CREATE TABLE IF NOT EXISTS chunks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            document_id INTEGER NOT NULL,
-            page_number INTEGER NOT NULL,
-            chunk_index INTEGER NOT NULL,
-            text TEXT NOT NULL,
-            FOREIGN KEY(document_id) REFERENCES documents(id)
-        );
-
-        """
-    )
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document_page ON chunks(document_id, page_number)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category)")
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            version TEXT DEFAULT 'v1.0',
+            description TEXT DEFAULT '',
+            keywords TEXT DEFAULT '',
+            product TEXT DEFAULT '',
+            audience TEXT DEFAULT '',
+            procedure TEXT DEFAULT '',
+            source_url TEXT DEFAULT '',
+            filename TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            featured INTEGER DEFAULT 0
+        )
+    """)
     conn.commit()
-    conn.close()
 
+    count = conn.execute("SELECT COUNT(*) AS c FROM documents").fetchone()["c"]
+    if count == 0:
+        seed = [
+            ("HPE iLO 7 Licensing Guide", "Licensing", "v1.0",
+             "Public-reference mock entry covering purchasing, registration and activation of HPE iLO licenses.",
+             "iLO 7, licensing, SAID, activation, support", "HPE iLO 7", "Support / Licensing",
+             "Use the official HPE iLO licensing guide for license purchase, registration, activation and support-entitlement references.",
+             "https://support.hpe.com/hpesc/public/docDisplay?docId=sd00005843en_us", "", "2026-09-28 09:00", "2026-09-28 09:00", 1),
+
+            ("HPE OneView Licensing Overview", "Licensing", "v1.0",
+             "Public-reference mock entry about licensing requirements for HPE OneView-managed hardware.",
+             "OneView, licensing, server, Synergy, trial", "HPE OneView", "Support / Operations",
+             "Confirm the managed hardware and applicable OneView license type in the official product documentation before advising a customer.",
+             "https://support.hpe.com/hpesc/public/docDisplay?docId=sd00007490en_us", "", "2026-09-25 09:00", "2026-09-25 09:00", 0),
+
+            ("HPE iLO Documentation Quick Links", "Technical Support", "v1.0",
+             "Public-reference mock entry pointing agents to iLO user, security, troubleshooting, licensing and Redfish documentation.",
+             "iLO, user guide, troubleshooting, Redfish, security", "HPE iLO", "Technical Support",
+             "Use the HPE documentation index to select the guide matching the customer's iLO generation.",
+             "https://support.hpe.com/hpesc/public/docDisplay?docId=sd00004310en_us", "", "2026-09-20 09:00", "2026-09-20 09:00", 0),
+
+            ("HPE ProLiant iLO License Features", "Product Guides", "v1.0",
+             "Mock knowledge article summarizing the distinction between standard and licensed iLO features.",
+             "ProLiant, iLO Standard, iLO Advanced, features", "HPE ProLiant", "Technical Support",
+             "Check the applicable iLO generation and license family. Do not assume a feature is available across every generation.",
+             "https://support.hpe.com/hpesc/public/docDisplay?docId=c05269613", "", "2026-09-18 09:00", "2026-09-18 09:00", 0),
+
+            ("HPE OneView Product Information Reference", "Product Guides", "v1.0",
+             "Mock product reference for HPE OneView editions and licensing terminology.",
+             "OneView, product information, license, LTU, E-LTU", "HPE OneView", "Product Support",
+             "Use the official HPE product information reference for current part numbers and product descriptions.",
+             "https://support.hpe.com/hpesc/public/docDisplay?docId=a00006903en_us", "", "2026-09-15 09:00", "2026-09-15 09:00", 0),
+        ]
+        conn.executemany("""
+            INSERT INTO documents
+            (title,category,version,description,keywords,product,audience,procedure,source_url,filename,created_at,updated_at,featured)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, seed)
+        conn.commit()
+    conn.close()
 
 init_db()
 
-# ============================================================
-# AUTHENTICATION
-# ============================================================
-
-def normalize_email(email):
-    return email.strip().lower()
-
-
-def hash_password(password, salt=None):
-    if salt is None:
-        salt = os.urandom(16)
-    derived = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt,
-        210_000,
-    )
-    return salt.hex() + ":" + derived.hex()
-
-
-def verify_password(password, stored):
-    try:
-        salt_hex, digest_hex = stored.split(":", 1)
-        salt = bytes.fromhex(salt_hex)
-        expected = bytes.fromhex(digest_hex)
-        actual = hashlib.pbkdf2_hmac(
-            "sha256",
-            password.encode("utf-8"),
-            salt,
-            210_000,
-        )
-        return __import__("hmac").compare_digest(actual, expected)
-    except Exception:
-        return False
-
-
-def create_user(first_name, last_name, employee_id, email, password):
-    first_name = first_name.strip()
-    last_name = last_name.strip()
-    employee_id = employee_id.strip()
-    email = normalize_email(email)
-
-    if not all([first_name, last_name, employee_id, email, password]):
-        return False, "All fields are required."
-
-    if "@" not in email:
-        return False, "Enter a valid email address."
-
-    if len(password) < 8:
-        return False, "Password must be at least 8 characters."
-
+def all_docs():
     conn = db()
-    try:
-        conn.execute(
-            """
-            INSERT INTO users
-            (first_name, last_name, employee_id, email, password_hash, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                first_name,
-                last_name,
-                employee_id,
-                email,
-                hash_password(password),
-                datetime.now().isoformat(timespec="seconds"),
-            ),
-        )
-        conn.commit()
-        return True, "Account created successfully. You can now sign in."
-    except sqlite3.IntegrityError as e:
-        message = str(e).lower()
-        if "employee_id" in message:
-            return False, "That Employee ID is already registered."
-        if "email" in message:
-            return False, "That email address is already registered."
-        return False, "An account with those details already exists."
-    finally:
-        conn.close()
-
-
-def authenticate_user(email, password):
-    conn = db()
-    row = conn.execute(
-        "SELECT * FROM users WHERE email = ?",
-        (normalize_email(email),),
-    ).fetchone()
+    rows = conn.execute("SELECT * FROM documents ORDER BY updated_at DESC").fetchall()
     conn.close()
+    return [dict(r) for r in rows]
 
-    if not row or not verify_password(password, row["password_hash"]):
-        return None
-
-    return dict(row)
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def get_relevant_section(document_path, page_number, query, max_pages=4):
-    """Extract the original PDF section related to the search query."""
-    try:
-        with fitz.open(document_path) as pdf:
-            start_page = max(1, page_number)
-            pages = []
-            for pno in range(start_page, min(len(pdf), start_page + max_pages - 1) + 1):
-                raw = pdf[pno - 1].get_text("text")
-                if raw.strip():
-                    pages.append((pno, raw))
-
-            if not pages:
-                return []
-
-            terms = [t.lower() for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
-
-            def is_heading(line):
-                x = re.sub(r"\s+", " ", line).strip()
-                if not x or len(x) > 120:
-                    return False
-                if re.match(r"^\d+(?:\.\d+)+\s", x):
-                    return True
-                if re.search(r"\b(steps?|checklist|procedure|process|requirements?|troubleshooting|instructions?|overview|guidelines?)\b", x, re.I):
-                    return True
-                letters = re.sub(r"[^A-Za-z]", "", x)
-                return bool(letters) and letters.isupper() and len(letters) >= 4
-
-            best_page = start_page
-            best_line_index = 0
-            best_score = -1
-            for pno, raw in pages:
-                lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
-                for i, line in enumerate(lines):
-                    low = line.lower()
-                    score = sum(low.count(t) for t in terms)
-                    if score > best_score:
-                        best_score = score
-                        best_page = pno
-                        best_line_index = i
-
-            relevant = []
-            found_heading = False
-            for pno in range(best_page, min(len(pdf), best_page + max_pages - 1) + 1):
-                raw = pdf[pno - 1].get_text("text")
-                lines = [re.sub(r"\s+", " ", x).strip() for x in raw.splitlines() if x.strip()]
-                if not lines:
-                    continue
-
-                if pno == best_page:
-                    heading_idx = None
-                    for i in range(min(best_line_index, len(lines) - 1), -1, -1):
-                        if is_heading(lines[i]):
-                            heading_idx = i
-                            break
-                    start_idx = heading_idx if heading_idx is not None else max(0, best_line_index)
-                    found_heading = heading_idx is not None
-                else:
-                    start_idx = 0
-
-                for i in range(start_idx, len(lines)):
-                    line = lines[i]
-                    if found_heading and i > start_idx and is_heading(line):
-                        return _group_section_lines(relevant)
-                    relevant.append((pno, line))
-
-                if not found_heading:
-                    break
-
-            if len(relevant) < 2:
-                raw = pdf[best_page - 1].get_text("text")
-                return [(best_page, re.sub(r"\s+", " ", raw).strip())]
-            return _group_section_lines(relevant)
-    except Exception:
-        return []
-
-
-def _group_section_lines(relevant):
-    grouped = []
-    current_page = None
-    current_lines = []
-    for pno, line in relevant:
-        if current_page is None:
-            current_page = pno
-        if pno != current_page:
-            grouped.append((current_page, " ".join(current_lines)))
-            current_page = pno
-            current_lines = []
-        current_lines.append(line)
-    if current_page is not None and current_lines:
-        grouped.append((current_page, " ".join(current_lines)))
-    return grouped
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def get_document_by_id(document_id):
+def search_docs(query):
+    query = query.strip().lower()
+    if not query:
+        return all_docs()
     conn = db()
-    row = conn.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+    rows = conn.execute("""
+        SELECT * FROM documents
+        WHERE lower(title) LIKE ?
+           OR lower(category) LIKE ?
+           OR lower(keywords) LIKE ?
+           OR lower(product) LIKE ?
+           OR lower(description) LIKE ?
+           OR lower(procedure) LIKE ?
+        ORDER BY updated_at DESC
+    """, tuple([f"%{query}%"] * 6)).fetchall()
     conn.close()
-    # Return plain Python data so Streamlit's cache can serialize the result.
-    return dict(row) if row is not None else None
+    return [dict(r) for r in rows]
 
+def categories():
+    docs = all_docs()
+    out = {}
+    for d in docs:
+        out[d["category"]] = out.get(d["category"], 0) + 1
+    return out
 
-# ============================================================
-# HELPERS
-# ============================================================
-
-def clean_text(text: str) -> str:
-    text = text.replace("\x00", " ")
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
-def make_hash(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def split_text(text: str, chunk_size=1100, overlap=180):
-    """
-    Splits text approximately by words while preserving overlap.
-    """
-    words = text.split()
-    if not words:
-        return []
-
-    chunks = []
-    start = 0
-
-    while start < len(words):
-        end = min(len(words), start + chunk_size)
-        chunk = " ".join(words[start:end]).strip()
-
-        if chunk:
-            chunks.append(chunk)
-
-        if end >= len(words):
-            break
-
-        start = max(0, end - overlap)
-
-    return chunks
-
-
-def extract_pdf(pdf_bytes: bytes):
-    pages = []
-    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-        for page_number, page in enumerate(doc, start=1):
-            text = clean_text(page.get_text("text"))
-            pages.append((page_number, text))
-        page_count = len(doc)
-    return pages, page_count
-
-
-def save_pdf(file_name: str, pdf_bytes: bytes, file_hash: str):
-    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", file_name)
-    destination = PDF_DIR / f"{file_hash[:12]}_{safe_name}"
-    destination.write_bytes(pdf_bytes)
-    return str(destination)
-
-
-def document_exists(file_hash):
+def save_doc(data):
     conn = db()
-    row = conn.execute(
-        "SELECT id FROM documents WHERE file_hash = ?",
-        (file_hash,),
-    ).fetchone()
-    conn.close()
-    return row
-
-
-def add_document(file_name, pdf_bytes, category="General"):
-    file_hash = make_hash(pdf_bytes)
-
-    if document_exists(file_hash):
-        return False, "This PDF has already been uploaded."
-
-    try:
-        pages, page_count = extract_pdf(pdf_bytes)
-    except Exception as e:
-        return False, f"Could not read PDF: {e}"
-
-    stored_path = save_pdf(file_name, pdf_bytes, file_hash)
-
-    conn = db()
-    now = datetime.now().isoformat(timespec="seconds")
-
-    cursor = conn.execute(
-        """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    conn.execute("""
         INSERT INTO documents
-        (filename, stored_path, file_hash, category, page_count,
-         file_size, uploaded_at, indexed_at, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            file_name,
-            stored_path,
-            file_hash,
-            category,
-            page_count,
-            len(pdf_bytes),
-            now,
-            now,
-            "Indexed",
-        ),
-    )
-
-    document_id = cursor.lastrowid
-
-    for page_number, page_text in pages:
-        page_chunks = split_text(page_text)
-
-        for chunk_index, chunk in enumerate(page_chunks):
-            conn.execute(
-                """
-                INSERT INTO chunks
-                (document_id, page_number, chunk_index, text)
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    document_id,
-                    page_number,
-                    chunk_index,
-                    chunk,
-                ),
-            )
-
+        (title,category,version,description,keywords,product,audience,procedure,source_url,filename,created_at,updated_at,featured)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    """, (
+        data["title"], data["category"], data["version"], data["description"],
+        data["keywords"], data["product"], data["audience"], data["procedure"],
+        data["source_url"], data["filename"], now, now, int(data["featured"])
+    ))
     conn.commit()
     conn.close()
 
-    return True, f"{file_name} indexed successfully."
-
-
-@st.cache_data(ttl=30, show_spinner=False)
-def get_documents():
+def update_doc(doc_id, data):
     conn = db()
-    rows = conn.execute(
-        """
-        SELECT *
-        FROM documents
-        ORDER BY uploaded_at DESC
-        """
-    ).fetchall()
-    conn.close()
-    # sqlite3.Row is not safely serializable by Streamlit's cache.
-    return [dict(row) for row in rows]
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def get_categories():
-    conn = db()
-    rows = conn.execute(
-        """
-        SELECT DISTINCT category
-        FROM documents
-        ORDER BY category
-        """
-    ).fetchall()
-    conn.close()
-    return [r["category"] for r in rows]
-
-
-def get_all_chunks():
-    conn = db()
-    rows = conn.execute(
-        """
-        SELECT
-            c.id,
-            c.document_id,
-            c.page_number,
-            c.chunk_index,
-            c.text,
-            d.filename,
-            d.category,
-            d.stored_path
-        FROM chunks c
-        JOIN documents d ON d.id = c.document_id
-        ORDER BY c.id
-        """
-    ).fetchall()
-    conn.close()
-    # Keep database rows as plain dictionaries for reliable caching/indexing.
-    return [dict(row) for row in rows]
-
-
-def delete_document(document_id):
-    conn = db()
-
-    row = conn.execute(
-        "SELECT stored_path FROM documents WHERE id = ?",
-        (document_id,),
-    ).fetchone()
-
-    if row:
-        try:
-            Path(row["stored_path"]).unlink(missing_ok=True)
-        except Exception:
-            pass
-
-    conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
-    conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    conn.execute("""
+        UPDATE documents SET
+        title=?, category=?, version=?, description=?, keywords=?,
+        product=?, audience=?, procedure=?, source_url=?, updated_at=?,
+        featured=?
+        WHERE id=?
+    """, (
+        data["title"], data["category"], data["version"], data["description"],
+        data["keywords"], data["product"], data["audience"], data["procedure"],
+        data["source_url"], now, int(data["featured"]), doc_id
+    ))
     conn.commit()
     conn.close()
 
-
-def format_bytes(value):
-    if value is None:
-        return "0 B"
-
-    value = float(value)
-
-    if value < 1024:
-        return f"{value:.0f} B"
-    if value < 1024**2:
-        return f"{value / 1024:.1f} KB"
-    if value < 1024**3:
-        return f"{value / 1024**2:.1f} MB"
-
-    return f"{value / 1024**3:.1f} GB"
-
-
-def exact_passage(text, query, max_sentences=4, max_chars=1400):
-    """Return verbatim text from the indexed PDF; never paraphrase."""
-    normalized = re.sub(r"\s+", " ", text).strip()
-    if not normalized:
-        return ""
-
-    sentences = re.split(r"(?<=[.!?])\s+", normalized)
-    sentences = [s.strip() for s in sentences if s.strip()]
-
-    terms = [
-        t.lower()
-        for t in re.findall(r"[A-Za-z0-9]+", query)
-        if len(t) > 2
-    ]
-
-    if not terms or not sentences:
-        return normalized[:max_chars]
-
-    scored = []
-    for i, sentence in enumerate(sentences):
-        lower = sentence.lower()
-        score = sum(lower.count(term) for term in terms)
-        if score:
-            scored.append((score, i))
-
-    if not scored:
-        return normalized[:max_chars]
-
-    scored.sort(key=lambda x: (-x[0], x[1]))
-    selected = set()
-
-    for _, i in scored[:max_sentences]:
-        selected.add(i)
-        if len(selected) < max_sentences and i + 1 < len(sentences):
-            selected.add(i + 1)
-
-    passage = " ".join(sentences[i] for i in sorted(selected))
-
-    if len(passage) > max_chars:
-        passage = passage[:max_chars].rsplit(" ", 1)[0] + "..."
-
-    return passage
-
-
-def make_snippet(text, query, radius=260):
-    text_clean = re.sub(r"\s+", " ", text).strip()
-    if not query:
-        return text_clean[:radius] + ("..." if len(text_clean) > radius else "")
-
-    terms = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2]
-
-    positions = []
-    lower = text_clean.lower()
-
-    for term in terms:
-        pos = lower.find(term)
-        if pos >= 0:
-            positions.append(pos)
-
-    if not positions:
-        return text_clean[:radius] + ("..." if len(text_clean) > radius else "")
-
-    center = min(positions)
-    start = max(0, center - radius // 2)
-    end = min(len(text_clean), start + radius)
-
-    prefix = "..." if start > 0 else ""
-    suffix = "..." if end < len(text_clean) else ""
-
-    return prefix + text_clean[start:end] + suffix
-
-
-# ============================================================
-# SEARCH
-# ============================================================
-
-@st.cache_data(ttl=30, show_spinner=False)
-def build_search_index():
-    rows = get_all_chunks()
-
-    if not rows:
-        return None, [], []
-
-    texts = [row["text"] for row in rows]
-
-    vectorizer = TfidfVectorizer(
-        lowercase=True,
-        stop_words="english",
-        ngram_range=(1, 2),
-        min_df=1,
-        max_df=0.98,
-        sublinear_tf=True,
-        dtype="float32",
-    )
-
-    matrix = vectorizer.fit_transform(texts)
-
-    return vectorizer, matrix, [dict(r) for r in rows]
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def search_documents(query, category="All Categories", top_k=10):
-    query = query.strip()
-
-    if not query:
-        return []
-
-    vectorizer, matrix, rows = build_search_index()
-
-    if vectorizer is None:
-        return []
-
-    query_vector = vectorizer.transform([query])
-    scores = cosine_similarity(query_vector, matrix).flatten()
-
-    results = []
-
-    for idx, score in enumerate(scores):
-        row = rows[idx]
-
-        if category != "All Categories" and row["category"] != category:
-            continue
-
-        if score <= 0:
-            continue
-
-        results.append(
-            {
-                **row,
-                "score": float(score),
-                "snippet": make_snippet(row["text"], query),
-                "exact_passage": exact_passage(row["text"], query),
-            }
-        )
-
-    # Each uploaded PDF can contain many indexed chunks/pages.
-    # The search UI should show one result per PDF, not one result per chunk.
-    # Keep the highest-scoring chunk from each PDF as that PDF's representative
-    # result; the PDF viewer's "Matches in this PDF" section can still expose
-    # the other matching pages from the selected document.
-    best_by_document = {}
-    for item in results:
-        document_id = item["document_id"]
-        current = best_by_document.get(document_id)
-        if current is None or item["score"] > current["score"]:
-            best_by_document[document_id] = item
-
-    results = list(best_by_document.values())
-    results.sort(key=lambda x: x["score"], reverse=True)
-
-    return results[:top_k]
-
-
-# PDF VIEWER
-# ============================================================
-
-@st.cache_data(ttl=600, show_spinner=False)
-def render_pdf_page(document_path, page_number, scale=1.75):
-    try:
-        with fitz.open(document_path) as pdf:
-            if page_number < 1 or page_number > len(pdf):
-                return None
-            page = pdf[page_number - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(float(scale), float(scale)), alpha=False)
-            return pix.tobytes("png")
-    except Exception:
-        return None
-
-
-@st.cache_data(ttl=120, show_spinner=False)
-def find_document_matches(document_path, query, limit=8):
-    """Find pages containing the user's actual search terms and return verbatim context."""
-    try:
-        terms = [t.lower() for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
-        if not terms:
-            return []
-        matches = []
-        with fitz.open(document_path) as pdf:
-            for page_number, page in enumerate(pdf, start=1):
-                raw = clean_text(page.get_text("text"))
-                if not raw:
-                    continue
-                low = raw.lower()
-                score = sum(low.count(term) for term in terms)
-                if score <= 0:
-                    continue
-                matches.append({
-                    "page": page_number,
-                    "score": score,
-                    "snippet": make_snippet(raw, query, radius=190),
-                })
-        matches.sort(key=lambda x: (-x["score"], x["page"]))
-        return matches[:limit]
-    except Exception:
-        return []
-
-
-# ============================================================
-# UI STATE
-# ============================================================
-
-if "page" not in st.session_state:
-    st.session_state.page = "Search"
-
-if "selected_document" not in st.session_state:
-    st.session_state.selected_document = None
-
-if "selected_page" not in st.session_state:
-    st.session_state.selected_page = 1
-
-if "search_query" not in st.session_state:
-    st.session_state.search_query = ""
-
-if "admin_authenticated" not in st.session_state:
-    st.session_state.admin_authenticated = False
-
-
-
-# ============================================================
-# PDF HIGHLIGHTING
-# ============================================================
-
-@st.cache_data(ttl=600, show_spinner=False)
-def render_pdf_page_highlighted(document_path, page_number, query="", scale=1.75):
-    """Render a PDF page with matching query terms highlighted at the requested scale."""
-    try:
-        with fitz.open(document_path) as pdf:
-            if page_number < 1 or page_number > len(pdf):
-                return None
-            page = pdf[page_number - 1]
-            terms = [t for t in re.findall(r"[A-Za-z0-9]+", query) if len(t) > 2]
-            highlighted = set()
-            for term in terms[:12]:
-                try:
-                    for rect in page.search_for(term):
-                        key = (round(rect.x0, 1), round(rect.y0, 1), round(rect.x1, 1), round(rect.y1, 1))
-                        if key in highlighted:
-                            continue
-                        highlighted.add(key)
-                        annot = page.add_highlight_annot(rect)
-                        annot.update()
-                except Exception:
-                    continue
-            pix = page.get_pixmap(matrix=fitz.Matrix(float(scale), float(scale)), alpha=False)
-            return pix.tobytes("png")
-    except Exception:
-        return None
-
-
-def clear_knowledge_caches():
-    """Invalidate cached database/search/PDF-derived data after document changes."""
-    for fn in (build_search_index, search_documents, get_documents, get_categories, get_document_by_id, get_relevant_section, render_pdf_page, render_pdf_page_highlighted):
-        try:
-            fn.clear()
-        except Exception:
-            pass
-
-
-# ============================================================
-# ADMIN AUTHENTICATION
-# ============================================================
-
-def get_admin_pin():
-    """Read the admin PIN from Streamlit secrets first, then environment."""
-    try:
-        pin = st.secrets.get("ADMIN_PIN")
-        if pin:
-            return str(pin)
-    except Exception:
-        pass
-
-    return os.getenv("ADMIN_PIN", "")
-
-
-def admin_is_configured():
-    return bool(get_admin_pin())
-
-
-# ============================================================
-# AUTH STATE
-# ============================================================
-
-if "access_authorized" not in st.session_state:
-    st.session_state.access_authorized = False
-
-if "cookie_restore_checked" not in st.session_state:
-    st.session_state.cookie_restore_checked = False
-
-if "page" not in st.session_state:
-    st.session_state.page = "Search"
-
-if "search_query" not in st.session_state:
-    st.session_state.search_query = ""
-
-if "selected_document" not in st.session_state:
-    st.session_state.selected_document = None
-
-if "selected_page" not in st.session_state:
-    st.session_state.selected_page = 1
-
-if "selected_result_id" not in st.session_state:
-    st.session_state.selected_result_id = None
-
-if "search_results" not in st.session_state:
-    st.session_state.search_results = []
-
-if "search_signature" not in st.session_state:
-    st.session_state.search_signature = None
-
-if "admin_authenticated" not in st.session_state:
-    st.session_state.admin_authenticated = False
-
-
-# ============================================================
-# ============================================================
-# PERSISTENT BROWSER ACCESS
-# ============================================================
-# Streamlit Cloud can lose client-side cookies across a fresh WebSocket
-# connection. To make F5/refresh deterministic, the signed authorization
-# token is persisted in the app URL. The token contains no user information.
-# IMPORTANT: anyone who has the full authorized URL can access the app.
-
-ACCESS_CODE = str(
-    st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
-).strip()
-
-TOKEN_SECRET = str(
-    st.secrets.get("TOKEN_SECRET", os.getenv("TOKEN_SECRET", ""))
-).strip()
-
-if not TOKEN_SECRET:
-    TOKEN_SECRET = hashlib.sha256(
-        f"{os.getcwd()}::{os.getenv('HOSTNAME', 'streamlit')}".encode()
-    ).hexdigest()
-
-
-def get_token_serializer():
-    if URLSafeTimedSerializer is None or not TOKEN_SECRET:
-        return None
-    return URLSafeTimedSerializer(
-        TOKEN_SECRET,
-        salt="knowledge-base-browser-access",
-    )
-
-
-def create_browser_token():
-    serializer = get_token_serializer()
-    if serializer is None:
-        return ""
-    return serializer.dumps({"authorized": True})
-
-
-def validate_browser_token(token):
-    if not token:
+def get_doc(doc_id):
+    conn = db()
+    row = conn.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+# -----------------------------
+# One-time token gate
+# -----------------------------
+def token_matches(value):
+    if not value:
         return False
-    serializer = get_token_serializer()
-    if serializer is None:
-        return False
-    try:
-        payload = serializer.loads(str(token))
-        return bool(payload.get("authorized"))
-    except Exception:
-        return False
+    return py_secrets.compare_digest(str(value).strip(), str(ACCESS_TOKEN))
 
+if not st.session_state.access_granted:
+    st.markdown("""
+    <div class="gate">
+        <div class="gate-logo">HP<span>E</span></div>
+        <h1>Knowledge Base Access</h1>
+        <p>Enter the one-time access token to open the HPE Knowledge Base.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-def get_url_access_token():
-    try:
-        return st.query_params.get("kb_access", "")
-    except Exception:
-        return ""
+    with st.form("access_form"):
+        token = st.text_input("Access token", type="password", placeholder="Enter access token")
+        submit = st.form_submit_button("Access Knowledge Base", type="primary", use_container_width=True)
 
-
-def browser_is_authorized():
-    if st.session_state.access_authorized:
-        return True
-
-    token = get_url_access_token()
-    if validate_browser_token(token):
-        st.session_state.access_authorized = True
-        return True
-
-    return False
-
-
-def authorize_browser():
-    token = create_browser_token()
-    if not token:
-        return False
-
-    # Query parameters survive a normal browser refresh on Streamlit Cloud.
-    st.query_params["kb_access"] = token
-    st.session_state.access_authorized = True
-    return True
-
-
-def clear_browser_access():
-    st.session_state.access_authorized = False
-    try:
-        st.query_params.clear()
-    except Exception:
-        pass
-
-
-def render_access_gate():
-    st.markdown(
-        """
-        <div class="auth-shell">
-            <div class="auth-brand-mark"></div>
-            <div class="auth-brand">Hewlett Packard Enterprise</div>
-            <div class="auth-title">Knowledge Base</div>
-            <div class="auth-subtitle">
-                Secure access to your organization's PDF knowledge base.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    if not ACCESS_CODE:
-        st.error(
-            "Access control is not configured. Add ACCESS_CODE to Streamlit Secrets."
-        )
-        st.stop()
-
-    _, center, _ = st.columns([1, 2, 1])
-
-    with center:
-        st.markdown(
-            '<div class="auth-card-title">Enter Access Code</div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("You only need to enter the code once on this browser.")
-
-        with st.form("access_code_form"):
-            entered_code = st.text_input(
-                "Access Code",
-                type="password",
-                placeholder="Enter access code",
-            )
-            submitted = st.form_submit_button(
-                "Access Knowledge Base",
-                type="primary",
-                use_container_width=True,
-            )
-
-        if submitted:
-            if entered_code.strip() == ACCESS_CODE:
-                if authorize_browser():
-                    # No Continue button. The signed token is placed in the
-                    # URL and the app immediately loads the Knowledge Base.
-                    st.rerun()
-                else:
-                    st.error("Unable to create the browser authorization token.")
-            else:
-                st.error("Invalid access code.")
-
-        st.caption(
-            "The access code is never stored in the URL. A signed authorization "
-            "token is used to keep this browser authorized."
-        )
-
-
-if not browser_is_authorized():
-    render_access_gate()
+    if submit:
+        if token_matches(token):
+            st.session_state.access_granted = True
+            st.session_state.page = "Home"
+            st.rerun()
+        else:
+            st.error("Invalid access token.")
     st.stop()
 
+# -----------------------------
+# Sidebar
+# -----------------------------
+pages = ["Home", "Browse All", "Categories", "Favorites", "Recent", "Upload PDF", "Manage Content", "Analytics", "Feedback", "Help"]
+icons = ["⌂", "▣", "⊞", "☆", "◷", "♧", "▤", "⌁", "□", "?"]
 
-# HEADER
-# ============================================================
+st.markdown("""
+<div class="kb-sidebar">
+  <div class="kb-logo">HP<span>E</span></div>
+  <div class="kb-menu">
+""", unsafe_allow_html=True)
 
-user_name = "Authorized User"
-
-with st.container(key="header_shell"):
-    st.markdown(
-        f"""
-        <div class="kb-topbar">
-            <div class="brand-block">
-                <div class="brand-mark"></div>
-                <div class="brand-name">Hewlett Packard<br>Enterprise</div>
-            </div>
-            <div class="brand-divider"></div>
-            <div class="title-block">
-                <div class="app-title">Knowledge Base</div>
-                <div class="app-subtitle">Find exact information from your organization's documents</div>
-            </div>
-            <div class="top-user">{user_name}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Gear is inside the same header container as Authorized User, so its vertical
-    # position is tied to the header rather than the browser viewport.
-    with st.container(key="gear_wrap"):
-        with st.popover("⚙", use_container_width=False):
-            st.markdown("**Knowledge Base Access**")
-            st.caption(
-                "Browser authorization: Persistent until manually cleared"
-            )
-            st.divider()
-
-            if st.session_state.admin_authenticated:
-                if st.button("Manage Documents", use_container_width=True):
-                    st.session_state.page = "Manage Documents"
-                    st.rerun()
-
-                if st.button("Sign out admin", use_container_width=True):
-                    st.session_state.admin_authenticated = False
-                    st.session_state.page = "Search"
-                    st.rerun()
-            else:
-                if st.button("🔒 Manage Documents", use_container_width=True):
-                    st.session_state.page = "Admin Login"
-                    st.rerun()
-
-            if st.button("Clear Browser Access", use_container_width=True):
-                clear_browser_access()
-                st.session_state.admin_authenticated = False
-                st.session_state.page = "Search"
-                st.rerun()
-
-
-# ============================================================
-# ADMIN LOGIN
-# ============================================================
-
-if st.session_state.page == "Admin Login":
-    st.markdown(
-        """
-        <div class="admin-card">
-            <div class="admin-icon">⚙</div>
-            <div class="admin-title">Admin Access</div>
-            <div class="admin-subtitle">Enter the administrator PIN to manage knowledge-base documents.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    if not admin_is_configured():
-        st.error("Admin access is not configured. Set ADMIN_PIN in Streamlit Secrets or an environment variable.")
-    else:
-        with st.form("admin_login_form"):
-            pin = st.text_input("Admin PIN", type="password", placeholder="Enter admin PIN")
-            submitted = st.form_submit_button("Unlock", type="primary", use_container_width=True)
-        if submitted:
-            if pin == get_admin_pin():
-                st.session_state.admin_authenticated = True
-                st.session_state.page = "Manage Documents"
-                st.rerun()
-            else:
-                st.error("Incorrect admin PIN.")
-
-    if st.button("← Back to Search", use_container_width=True):
-        st.session_state.page = "Search"
+for p, ico in zip(pages, icons):
+    active = st.session_state.page == p
+    # Buttons live in the fixed sidebar container visually.
+    label = f"{ico}   {p}"
+    if st.button(label, key=f"nav_{p}", use_container_width=True):
+        st.session_state.page = p
+        st.session_state.selected_doc = None
         st.rerun()
 
+st.markdown("""
+  </div>
+  <div class="kb-brand-bottom">
+      <div class="mini">HPE</div>
+      <div class="small">Knowledge Base</div>
+      <div class="version">v1.0.0</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-# ============================================================
-# ADMIN: MANAGE DOCUMENTS
-# ============================================================
+# -----------------------------
+# Header
+# -----------------------------
+header_left, header_mid, header_right = st.columns([1.35, 3.0, 1.55], vertical_alignment="center")
 
-elif st.session_state.page == "Manage Documents":
-    if not st.session_state.admin_authenticated:
-        st.session_state.page = "Admin Login"
-        st.rerun()
+with header_left:
+    st.markdown(f'<div class="page-title">{escape(st.session_state.page)}</div>', unsafe_allow_html=True)
 
-    st.markdown(
-        """
-        <div class="page-heading">
-            <div>
-                <div class="page-title">Manage Documents</div>
-                <div class="page-description">Upload, manage, and index PDF documents for the knowledge base.</div>
-            </div>
-            <div class="admin-badge">ADMIN ONLY</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+with header_mid:
+    top_search = st.text_input(
+        "Search",
+        placeholder="Search for topics, keywords, or questions...",
+        label_visibility="collapsed",
+        key="top_search"
     )
 
-    upload_col, library_col = st.columns([0.95, 1.35], gap="large")
-
-    with upload_col:
-        st.markdown('<div class="panel-title">Upload Documents</div>', unsafe_allow_html=True)
-        category = st.selectbox(
-            "Category",
-            ["General", "Policies", "Procedures", "Technical Support", "Licensing", "Training", "Product", "Account Management", "Other"],
-            key="admin_category",
-        )
-        uploaded_files = st.file_uploader(
-            "Drag and drop PDF files here",
-            type=["pdf"],
-            accept_multiple_files=True,
-            key="admin_uploader",
-        )
-        if uploaded_files:
-            st.caption(f"{len(uploaded_files)} PDF file(s) selected")
-            for f in uploaded_files:
-                st.write(f"📄 {f.name} · {format_bytes(len(f.getvalue()))}")
-
-        if st.button("Upload & Index Documents", type="primary", use_container_width=True):
-            if not uploaded_files:
-                st.warning("Select at least one PDF file.")
-            else:
-                progress = st.progress(0)
-                success_count = 0
-                for i, uploaded_file in enumerate(uploaded_files):
-                    ok, message = add_document(uploaded_file.name, uploaded_file.getvalue(), category)
-                    if ok:
-                        success_count += 1
-                        st.success(message)
-                    else:
-                        st.warning(message)
-                    progress.progress((i + 1) / len(uploaded_files))
-                clear_knowledge_caches()
-                st.session_state.search_results = []
-                st.session_state.search_signature = None
-                st.success(f"Completed. {success_count} document(s) indexed.")
-
-    with library_col:
-        st.markdown('<div class="panel-title">Document Library</div>', unsafe_allow_html=True)
-        docs = get_documents()
-        lc1, lc2 = st.columns([1.5, 1])
-        with lc1:
-            library_search = st.text_input("Search documents", placeholder="Search documents...", label_visibility="collapsed", key="library_search")
-        with lc2:
-            library_category = st.selectbox("Library category", ["All Categories"] + get_categories(), label_visibility="collapsed", key="library_category")
-
-        filtered_docs = []
-        for doc in docs:
-            if library_search and library_search.lower() not in doc["filename"].lower():
-                continue
-            if library_category != "All Categories" and doc["category"] != library_category:
-                continue
-            filtered_docs.append(doc)
-
-        if not filtered_docs:
-            st.info("No documents match the current filters.")
-        else:
-            for doc in filtered_docs:
-                with st.container(border=True):
-                    a, b = st.columns([4, 1])
-                    with a:
-                        st.markdown(f"**📄 {doc['filename']}**")
-                        st.caption(f"{doc['category']} · {doc['page_count']} pages · {format_bytes(doc['file_size'])} · ✓ {doc['status']}")
-                    with b:
-                        if st.button("Delete", key=f"admin_delete_{doc['id']}"):
-                            delete_document(doc["id"])
-                            clear_knowledge_caches()
-                            st.session_state.search_results = []
-                            st.session_state.search_signature = None
-                            st.rerun()
-
-    if st.button("← Back to Search"):
-        st.session_state.page = "Search"
-        st.rerun()
-
-
-# ============================================================
-# SEARCH KNOWLEDGE BASE
-# ============================================================
-
-else:
-    st.session_state.page = "Search"
-
-    # Put the search box and Search button inside a Streamlit form so pressing
-    # Enter in the text field submits the search exactly like clicking Search.
-    # The filter popover remains outside the form so changing filters does not
-    # require a separate form submission.
-    search_form_col, filter_col = st.columns([7.4, 1.0], gap="small")
-    with search_form_col:
-        with st.form("main_search_form", clear_on_submit=False):
-            search_col, button_col = st.columns([6.4, 1.0], gap="small")
-            with search_col:
-                query = st.text_input(
-                    "Search",
-                    value=st.session_state.search_query,
-                    placeholder="What should I check or find in the knowledge base?",
-                    label_visibility="collapsed",
-                    key="main_search_box",
-                )
-            with button_col:
-                search_clicked = st.form_submit_button("Search", type="primary", use_container_width=True)
-    with filter_col:
-        with st.popover("☷ Filters", use_container_width=True):
-            category = st.selectbox("Category", ["All Categories"] + get_categories(), key="search_category")
-            top_k = st.selectbox("Results", [5, 10, 20], index=1, key="search_top_k")
-
-    if search_clicked:
-        st.session_state.search_query = query
-        st.session_state.selected_result_id = None
-        st.session_state.search_signature = None
-
-    active_query = st.session_state.search_query.strip()
-    category = st.session_state.get("search_category", "All Categories")
-    top_k = st.session_state.get("search_top_k", 10)
-
-    if active_query:
-        search_signature = (active_query, category, top_k)
-        if st.session_state.get("search_signature") != search_signature:
-            st.session_state.search_results = search_documents(active_query, category=category, top_k=top_k)
-            st.session_state.search_signature = search_signature
-            st.session_state.viewer_page = None
-
-        results = st.session_state.get("search_results", [])
-
-        if not results:
-            st.session_state.selected_result_id = None
-
-        if not results:
-            st.warning("No matching PDF was found. Try different keywords or upload another document.")
-        else:
-            best = results[0]
-
-            # The selected result controls the PDF shown in the viewer.
-            # The search ranking itself stays unchanged; selecting a result only
-            # changes which PDF/page is displayed on the right.
-            selected_result_id = st.session_state.get("selected_result_id")
-            selected_matches = [r for r in results if r["id"] == selected_result_id]
-            selected_result = selected_matches[0] if selected_matches else best
-
-            # If the selected result disappeared because filters/search changed,
-            # automatically fall back to the highest match.
-            if selected_result_id != selected_result["id"]:
-                st.session_state.selected_result_id = selected_result["id"]
-                st.session_state.viewer_page = int(selected_result["page_number"])
-
-            selected_doc = get_document_by_id(selected_result["document_id"])
-            total_pages = int(selected_doc["page_count"] or 0) if selected_doc else 0
-
-            if st.session_state.get("viewer_page") is None:
-                st.session_state.viewer_page = int(selected_result["page_number"])
-
-            viewer_page = max(1, min(int(st.session_state.viewer_page), max(total_pages, 1)))
-
-            st.markdown(
-                f'<div class="search-count">{len(results)} search result(s) · Showing the highest match first</div>',
-                unsafe_allow_html=True,
-            )
-
-            related_col, source_col = st.columns([0.82, 1.8], gap="large")
-
-            with related_col:
-                st.markdown('<div class="panel-title">Search Results</div>', unsafe_allow_html=True)
-
-                for i, result in enumerate(results):
-                    is_best = i == 0
-                    key_prefix = "best" if is_best else str(i)
-                    with st.container(key=f"search_result_{key_prefix}", border=True):
-                        score_pct = min(99, max(1, round(result["score"] * 100)))
-                        label = "Highest Match" if is_best else "Search Result"
-                        st.markdown(
-                            f"""
-                            <div class='result-label'>{label}<span class='result-score-pill'>{score_pct}%</span></div>
-                            <div class='result-filename'>{result['filename']}</div>
-                            <div class='result-page'>Page {result['page_number']}</div>
-                            <div class='result-snippet'>{result['snippet']}</div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                        if st.button("Open Result", key=f"open_result_{result['id']}", use_container_width=True):
-                            st.session_state.selected_result_id = result["id"]
-                            st.session_state.viewer_page = int(result["page_number"])
-                            st.rerun()
-
-                matches = find_document_matches(selected_result["stored_path"], active_query, limit=8)
-                st.markdown('<div class="match-panel"><div class="match-panel-title">Matches in this PDF</div></div>', unsafe_allow_html=True)
-                if matches:
-                    for match in matches:
-                        if st.button(f"Page {match['page']}", key=f"jump_match_{selected_result['id']}_{match['page']}", use_container_width=True):
-                            st.session_state.viewer_page = match["page"]
-                            st.rerun()
-                        st.markdown(
-                            f"<div class='match-item'><div class='match-item-page'>Page {match['page']} · {match['score']} term match(es)</div><div class='match-item-text'>{match['snippet']}</div></div>",
-                            unsafe_allow_html=True,
-                        )
-                else:
-                    st.caption("No exact text occurrence was detected on the other pages.")
-
-
-            with source_col:
-                st.markdown(
-                    f"""
-                    <div class='reader-toolbar'>
-                        <div class='reader-title'>▣ {selected_result['filename']}</div>
-                        <div class='reader-meta'>Page {viewer_page} of {total_pages} · Search: “{active_query}”</div>
-                        <div class='reader-match'>Selected result · source text shown exactly as it appears in the PDF</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                # Keep zoom controls in the toolbar, while the page navigation arrows
-                # float over the left/right edges of the PDF itself.  This keeps the
-                # reader compact and makes page turning feel like a real document viewer.
-                zoom_col, page_col = st.columns([1, 1.25], gap="small")
-                with zoom_col:
-                    zoom = st.selectbox(
-                        "Zoom",
-                        [100, 125, 150, 175, 200],
-                        index=2,
-                        format_func=lambda x: f"{x}%",
-                        label_visibility="collapsed",
-                        key="pdf_zoom",
-                    )
-                with page_col:
-                    st.markdown(
-                        f"<div class='reader-page-indicator'>Page <b>{viewer_page}</b> / {total_pages}</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                # Render at a slightly lower pixel density than the old 1.25x multiplier.
-                # The displayed width still follows the zoom setting, but the browser has
-                # fewer pixels to paint, which makes scrolling and page navigation faster.
-                render_scale = zoom / 100 * 1.05
-                image = render_pdf_page_highlighted(
-                    selected_result["stored_path"],
-                    viewer_page,
-                    active_query,
-                    scale=render_scale,
-                )
-
-                if image:
-                    display_width = {100: 700, 125: 820, 150: 930, 175: 1040, 200: 1180}.get(int(zoom), 930)
-
-                    with st.container(key="pdf_viewer_shell"):
-                        # These are intentionally icon-only and positioned over the PDF.
-                        # They remain disabled at the first/last page.
-                        with st.container(key="pdf_prev_wrap"):
-                            if st.button(
-                                "‹",
-                                disabled=(viewer_page <= 1),
-                                key="pdf_prev",
-                                help="Previous page",
-                            ):
-                                st.session_state.viewer_page = max(1, viewer_page - 1)
-                                st.rerun()
-
-                        with st.container(key="pdf_next_wrap"):
-                            if st.button(
-                                "›",
-                                disabled=(viewer_page >= total_pages),
-                                key="pdf_next",
-                                help="Next page",
-                            ):
-                                st.session_state.viewer_page = min(total_pages, viewer_page + 1)
-                                st.rerun()
-
-                        st.image(image, width=display_width)
-                else:
-                    st.error("Unable to render this PDF page.")
-
-                current_text = ""
-                try:
-                    with fitz.open(selected_result["stored_path"]) as pdf:
-                        current_text = clean_text(pdf[viewer_page - 1].get_text("text"))
-                except Exception:
-                    current_text = ""
-
-                if current_text:
-                    st.markdown(
-                        f"""
-                        <div class='match-panel'>
-                            <div class='match-panel-title'>Match context · Page {viewer_page}</div>
-                            <div class='result-snippet' style='font-size:12px;line-height:1.55;color:#294a5c;'>{make_snippet(current_text, active_query, radius=520)}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-    else:
-        docs = get_documents()
-        total_pages = sum(int(d["page_count"] or 0) for d in docs)
+with header_right:
+    c1, c2, c3 = st.columns([.55, 2.0, .65], vertical_alignment="center")
+    with c1:
+        # Gear opens admin login.
+        gear = st.button("⚙", help="Admin settings", key="gear_btn")
+        if gear:
+            st.session_state.admin_login_open = True
+    with c2:
+        role_text = "Admin" if st.session_state.admin else "Viewer"
         st.markdown(
-            f"""
-            <div class="welcome-card">
-                <div class="welcome-icon">⌕</div>
-                <div class="welcome-title">Search your knowledge base</div>
-                <div class="welcome-text">Search for a process, checklist, policy, troubleshooting step, or any information contained in your uploaded PDFs.</div>
-                <div class="welcome-stats"><span><b>{len(docs)}</b> documents</span><span><b>{total_pages:,}</b> indexed pages</span></div>
+            f'<div class="profile-pill"><div class="avatar">👩🏻</div>'
+            f'<div><div class="profile-name">{escape(ADMIN_NAME if st.session_state.admin else "Knowledge User")}</div>'
+            f'<div class="profile-role">{role_text}</div></div></div>',
+            unsafe_allow_html=True
+        )
+    with c3:
+        st.markdown('<div style="font-size:20px;text-align:right;">⌄</div>', unsafe_allow_html=True)
+
+# Admin login panel
+if st.session_state.get("admin_login_open", False) and not st.session_state.admin:
+    with st.expander("Admin sign-in", expanded=True):
+        with st.form("admin_login"):
+            pw = st.text_input("Admin password", type="password")
+            a, b = st.columns(2)
+            with a:
+                ok = st.form_submit_button("Sign in as Admin", type="primary", use_container_width=True)
+            with b:
+                cancel = st.form_submit_button("Cancel", use_container_width=True)
+
+        if cancel:
+            st.session_state.admin_login_open = False
+            st.rerun()
+        if ok:
+            if py_secrets.compare_digest(pw, str(ADMIN_PASSWORD)):
+                st.session_state.admin = True
+                st.session_state.admin_login_open = False
+                st.session_state.page = "Manage Content"
+                st.success("Admin access granted.")
+                st.rerun()
+            else:
+                st.error("Incorrect admin password.")
+
+if st.session_state.admin:
+    st.markdown('<span class="admin-badge">ADMIN MODE</span>', unsafe_allow_html=True)
+    st.write("")
+
+# -----------------------------
+# Search route
+# -----------------------------
+if top_search.strip():
+    st.session_state.page = "Browse All"
+
+# -----------------------------
+# Home
+# -----------------------------
+def render_home():
+    docs = all_docs()
+    cats = categories()
+
+    st.markdown("""
+    <div class="hero">
+      <h1>Find the answers you need</h1>
+      <p>Search our knowledge base, explore topics, or browse by category.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.container():
+        hero_search = st.text_input(
+            "Search the knowledge base",
+            placeholder="Search for solutions, guides, or keywords...",
+            label_visibility="collapsed",
+            key="hero_search"
+        )
+        if hero_search:
+            st.session_state.page = "Browse All"
+            st.session_state.search_term = hero_search
+            st.rerun()
+
+    st.markdown("""
+    <div class="popular">
+      <span class="popular-label">Popular searches:</span>
+      <span class="tag">Licensing</span>
+      <span class="tag">Portal Access</span>
+      <span class="tag">Account Setup</span>
+      <span class="tag">Troubleshooting</span>
+      <span class="tag">HPE GreenLake</span>
+      <span class="tag">Software Support</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div class='metric-row'></div>", unsafe_allow_html=True)
+    cols = st.columns(4, gap="small")
+    metrics = [
+        ("📖", len(docs), "Total Documents", "#dcfbf2"),
+        ("▣", len(cats), "Categories", "#e3f0ff"),
+        ("★", max(0, min(36, len(docs)*7)), "Most Viewed", "#fff5d9"),
+        ("☁", min(24, len(docs)), "Recently Added", "#f0e9ff"),
+    ]
+    for col, (ico, num, label, bg) in zip(cols, metrics):
+        with col:
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-icon" style="background:{bg}">{ico}</div>'
+                f'<div style="flex:1;margin-left:12px"><div class="metric-number">{num}</div>'
+                f'<div class="metric-label">{label}</div></div><div class="metric-arrow">›</div></div>',
+                unsafe_allow_html=True
+            )
+
+    st.write("")
+    st.markdown('<div class="section-card"><div class="section-head"><div class="section-title">▦ &nbsp;Browse by Category</div><div class="section-link">View All Categories →</div></div>', unsafe_allow_html=True)
+
+    category_icons = {
+        "Account Management": ("♙", "#dffaf1"),
+        "Licensing": ("⚿", "#e3f0ff"),
+        "Portal & Access": ("▣", "#dffaf1"),
+        "Technical Support": ("🔧", "#f0e6ff"),
+        "HPE GreenLake": ("☁", "#dffaf1"),
+        "Product Guides": ("▣", "#e3f0ff"),
+        "Policies & Procedures": ("♢", "#fff4d7"),
+        "Troubleshooting": ("⚙", "#e3f0ff"),
+    }
+
+    items = list(cats.items())[:8]
+    if items:
+        for start in range(0, len(items), 4):
+            row = items[start:start+4]
+            c = st.columns(4, gap="small")
+            for col, (name, count) in zip(c, row):
+                ico, bg = category_icons.get(name, ("▤", "#edf2f6"))
+                with col:
+                    if st.button(f"{ico}   {name}\n{count} documents", key=f"cat_{name}", use_container_width=True):
+                        st.session_state.page = "Browse All"
+                        st.session_state.search_term = name
+                        st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.write("")
+    left, right = st.columns([1.1, .9], gap="small")
+
+    recent = sorted(docs, key=lambda x: x["updated_at"], reverse=True)[:5]
+    with left:
+        st.markdown('<div class="section-card"><div class="section-head"><div class="section-title">▤ &nbsp;Recent Documents</div><div class="section-link">View All →</div></div>', unsafe_allow_html=True)
+        for d in recent:
+            if st.button(f"📄  {d['title']}   ·   {d['category']} · {d['version']}", key=f"recent_{d['id']}", use_container_width=True):
+                st.session_state.selected_doc = d["id"]
+                st.session_state.page = "Browse All"
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with right:
+        featured = next((d for d in docs if d["featured"]), docs[0] if docs else None)
+        st.markdown('<div class="section-card"><div class="section-head"><div class="section-title">★ &nbsp;Featured Document</div></div>', unsafe_allow_html=True)
+        if featured:
+            st.markdown(f"""
+            <div class="viewer">
+              <div class="paper">
+                <div class="paper-logo">HP<span>E</span></div>
+                <h3>{escape(featured["title"])}</h3>
+                <div class="line"></div>
+                <p>Public-reference knowledge article</p>
+                <p>{escape(featured["description"])}</p>
+                <p><b>Category:</b> {escape(featured["category"])} &nbsp; <b>Version:</b> {escape(featured["version"])}</p>
+              </div>
             </div>
-            """,
-            unsafe_allow_html=True,
+            """, unsafe_allow_html=True)
+            x, y = st.columns([1.3, .7], vertical_alignment="center")
+            with x:
+                st.markdown(f"**{escape(featured['title'])}**<br><span style='font-size:11px;color:#697582'>{escape(featured['category'])} · {escape(featured['version'])} · {escape(featured['updated_at'][:10])}</span>", unsafe_allow_html=True)
+            with y:
+                if st.button("Open Document →", key="open_featured", type="primary", use_container_width=True):
+                    st.session_state.selected_doc = featured["id"]
+                    st.session_state.page = "Browse All"
+                    st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# -----------------------------
+# Browse
+# -----------------------------
+def render_browse():
+    query = st.session_state.get("search_term", top_search)
+    docs = search_docs(query)
+    if st.session_state.selected_doc:
+        selected = get_doc(st.session_state.selected_doc)
+    else:
+        selected = None
+
+    st.markdown("### Search and browse")
+    search = st.text_input("Search knowledge base", value=query or "", placeholder="Try: iLO licensing, OneView, ProLiant...")
+    if search != query:
+        st.session_state.search_term = search
+        docs = search_docs(search)
+
+    if selected:
+        st.markdown(f"#### {escape(selected['title'])}", unsafe_allow_html=True)
+        st.caption(f"{selected['category']} · {selected['version']} · Updated {selected['updated_at'][:10]}")
+        st.markdown(f"**Overview**  \n{escape(selected['description'])}")
+        st.markdown(f"**Keywords:** {escape(selected['keywords'])}")
+        st.markdown(f"**Procedure / agent notes**  \n{escape(selected['procedure'])}")
+        if selected["source_url"]:
+            st.link_button("Open official public reference ↗", selected["source_url"])
+        if st.button("← Back to results", key="back_results"):
+            st.session_state.selected_doc = None
+            st.rerun()
+        return
+
+    st.write(f"**{len(docs)} result(s)**")
+    if not docs:
+        st.info("No matching documents. Try a broader keyword.")
+    for d in docs:
+        with st.container(border=True):
+            a, b = st.columns([5, 1], vertical_alignment="center")
+            with a:
+                st.markdown(f"**{escape(d['title'])}**")
+                st.caption(f"{d['category']} · {d['version']} · {d['updated_at'][:10]}")
+                st.write(d["description"])
+                if d["keywords"]:
+                    st.caption("Keywords: " + d["keywords"])
+            with b:
+                if st.button("Open", key=f"open_{d['id']}", use_container_width=True):
+                    st.session_state.selected_doc = d["id"]
+                    st.rerun()
+
+# -----------------------------
+# Categories
+# -----------------------------
+def render_categories():
+    st.markdown("### Categories")
+    cats = categories()
+    for start in range(0, len(cats), 4):
+        row = list(cats.items())[start:start+4]
+        cols = st.columns(4)
+        for col, (cat, count) in zip(cols, row):
+            with col:
+                if st.button(f"▦\n\n**{cat}**\n\n{count} documents", key=f"browsecat_{cat}", use_container_width=True):
+                    st.session_state.search_term = cat
+                    st.session_state.page = "Browse All"
+                    st.rerun()
+
+# -----------------------------
+# Upload PDF
+# -----------------------------
+def render_upload():
+    st.markdown("### Upload PDF")
+    st.info("Upload a public or internally approved PDF. The file is stored locally and its metadata is registered in the knowledge base.")
+    with st.form("pdf_upload_form"):
+        uploaded = st.file_uploader("PDF file", type=["pdf"])
+        title = st.text_input("Document title")
+        category = st.selectbox("Category", ["Licensing", "Portal & Access", "Account Management", "Technical Support", "HPE GreenLake", "Product Guides", "Policies & Procedures", "Troubleshooting"])
+        version = st.text_input("Version", "v1.0")
+        description = st.text_area("Short description")
+        keywords = st.text_input("Keywords", placeholder="iLO, licensing, activation...")
+        source_url = st.text_input("Public source URL (optional)")
+        submit = st.form_submit_button("Add PDF to Knowledge Base", type="primary")
+
+    if submit:
+        if not uploaded or not title:
+            st.error("Please provide a PDF and document title.")
+        else:
+            safe_name = Path(uploaded.name).name.replace(" ", "_")
+            destination = PDF_DIR / f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_name}"
+            destination.write_bytes(uploaded.getbuffer())
+            save_doc({
+                "title": title,
+                "category": category,
+                "version": version,
+                "description": description,
+                "keywords": keywords,
+                "product": "",
+                "audience": "Knowledge Base",
+                "procedure": "Open the PDF and review the source content before using it as an agent reference.",
+                "source_url": source_url,
+                "filename": destination.name,
+                "featured": False,
+            })
+            st.success("PDF registered successfully.")
+            st.rerun()
+
+# -----------------------------
+# Admin SOP editor
+# -----------------------------
+def render_manage():
+    if not st.session_state.admin:
+        st.warning("Admin access is required. Use the ⚙ button in the upper-right corner.")
+        return
+
+    st.markdown("""
+    <div class="admin-banner">
+      <div style="font-size:21px;font-weight:750;">SOP Management</div>
+      <div style="font-size:12px;opacity:.88;margin-top:4px;">
+        Create structured SOP records or update an existing knowledge article.
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    docs = all_docs()
+    choices = {"➕ Create new SOP": None}
+    choices.update({f"{d['title']} · {d['version']}": d["id"] for d in docs})
+    selected_label = st.selectbox("Action", list(choices.keys()))
+    selected_id = choices[selected_label]
+    existing = get_doc(selected_id) if selected_id else None
+
+    st.markdown('<div class="form-card">', unsafe_allow_html=True)
+    with st.form("sop_form"):
+        st.markdown("#### SOP information")
+        c1, c2 = st.columns(2)
+        with c1:
+            title = st.text_input("SOP / Article title *", value=existing["title"] if existing else "")
+            category = st.selectbox(
+                "Category *",
+                ["Licensing", "Portal & Access", "Account Management", "Technical Support", "HPE GreenLake", "Product Guides", "Policies & Procedures", "Troubleshooting"],
+                index=(["Licensing", "Portal & Access", "Account Management", "Technical Support", "HPE GreenLake", "Product Guides", "Policies & Procedures", "Troubleshooting"].index(existing["category"]) if existing and existing["category"] in ["Licensing", "Portal & Access", "Account Management", "Technical Support", "HPE GreenLake", "Product Guides", "Policies & Procedures", "Troubleshooting"] else 0)
+            )
+            version = st.text_input("Version", value=existing["version"] if existing else "v1.0")
+            product = st.text_input("Product / device", value=existing["product"] if existing else "")
+            audience = st.text_input("Audience", value=existing["audience"] if existing else "Support / Licensing")
+        with c2:
+            keywords = st.text_input("Search keywords *", value=existing["keywords"] if existing else "")
+            source_url = st.text_input("Official/public source URL", value=existing["source_url"] if existing else "")
+            featured = st.checkbox("Feature this document on the home page", value=bool(existing["featured"]) if existing else False)
+            filename = existing["filename"] if existing else ""
+            if filename:
+                st.caption(f"Attached PDF: {filename}")
+
+        description = st.text_area(
+            "Overview / purpose *",
+            value=existing["description"] if existing else "",
+            height=110
+        )
+        procedure = st.text_area(
+            "Procedure / resolution steps *",
+            value=existing["procedure"] if existing else "",
+            height=210,
+            placeholder="1. Identify the product and generation.\n2. Verify entitlement or license state.\n3. Follow the official HPE procedure.\n4. Document the outcome."
         )
 
-# ============================================================
-# BOTTOM NAVIGATION
-# ============================================================
+        pdf = st.file_uploader(
+            "Optional supporting PDF",
+            type=["pdf"],
+            key=f"sop_pdf_{selected_id or 'new'}"
+        )
 
-st.markdown('<div class="bottom-nav-spacer"></div>', unsafe_allow_html=True)
-nav_left, nav_center, nav_right = st.columns([1, 2, 1])
-with nav_center:
-    if st.button("⌕  Search Knowledge Base", use_container_width=True):
-        st.session_state.page = "Search"; st.rerun()
+        submitted = st.form_submit_button(
+            "Update SOP" if existing else "Create SOP",
+            type="primary",
+            use_container_width=True
+        )
 
-st.markdown('<div class="bottom-nav-label">Knowledge Base · PDF Search</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if submitted:
+        if not title.strip() or not keywords.strip() or not description.strip() or not procedure.strip():
+            st.error("Title, keywords, overview and procedure are required.")
+            return
+
+        saved_filename = filename
+        if pdf:
+            safe_name = Path(pdf.name).name.replace(" ", "_")
+            dest = PDF_DIR / f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_name}"
+            dest.write_bytes(pdf.getbuffer())
+            saved_filename = dest.name
+
+        payload = {
+            "title": title.strip(),
+            "category": category,
+            "version": version.strip() or "v1.0",
+            "description": description.strip(),
+            "keywords": keywords.strip(),
+            "product": product.strip(),
+            "audience": audience.strip(),
+            "procedure": procedure.strip(),
+            "source_url": source_url.strip(),
+            "filename": saved_filename,
+            "featured": featured,
+        }
+
+        if existing:
+            update_doc(existing["id"], payload)
+            st.success("SOP updated successfully.")
+        else:
+            save_doc(payload)
+            st.success("New SOP created successfully.")
+        st.rerun()
+
+    st.markdown("#### Existing SOPs")
+    for d in docs:
+        with st.expander(f"{d['title']} · {d['version']} · {d['category']}"):
+            st.write(d["description"])
+            st.caption("Keywords: " + d["keywords"])
+
+# -----------------------------
+# Analytics / other pages
+# -----------------------------
+def render_analytics():
+    docs = all_docs()
+    cats = categories()
+    st.markdown("### Knowledge Base Analytics")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Documents", len(docs))
+    c2.metric("Categories", len(cats))
+    c3.metric("Featured", sum(1 for d in docs if d["featured"]))
+    st.markdown("#### Documents by category")
+    for cat, count in cats.items():
+        st.progress(min(1.0, count / max(1, len(docs))), text=f"{cat} — {count}")
+
+def render_feedback():
+    st.markdown("### Feedback")
+    with st.form("feedback"):
+        rating = st.radio("Was this article useful?", ["Yes", "Partly", "No"], horizontal=True)
+        notes = st.text_area("Comments")
+        send = st.form_submit_button("Submit feedback", type="primary")
+    if send:
+        st.success("Thank you. Feedback recorded for this demo.")
+
+def render_help():
+    st.markdown("### Help")
+    st.info("Use the search bar to find SOPs, product references and troubleshooting material. Admins can use ⚙ → Admin sign-in → Manage Content to create or update structured SOPs.")
+    st.markdown("""
+**Security notes**
+- The access token and admin password are read from `st.secrets`.
+- Do not hard-code credentials in the Python file.
+- The included SQLite database is suitable for a prototype. For multi-user production deployment, move document records and uploaded files to a persistent database/object store.
+""")
+
+def render_simple(title):
+    st.markdown(f"### {title}")
+    if title == "Favorites":
+        st.info("Favorites are available as a UI placeholder. Add a favorites table/user identity layer when user accounts are connected.")
+    elif title == "Recent":
+        docs = sorted(all_docs(), key=lambda x: x["updated_at"], reverse=True)
+        for d in docs[:10]:
+            st.write(f"📄 **{d['title']}** — {d['category']} · {d['updated_at'][:10]}")
+    else:
+        st.info("This section is ready for extension.")
+
+# -----------------------------
+# Route
+# -----------------------------
+page = st.session_state.page
+
+if page == "Home":
+    render_home()
+elif page == "Browse All":
+    render_browse()
+elif page == "Categories":
+    render_categories()
+elif page == "Upload PDF":
+    render_upload()
+elif page == "Manage Content":
+    render_manage()
+elif page == "Analytics":
+    render_analytics()
+elif page == "Feedback":
+    render_feedback()
+elif page == "Help":
+    render_help()
+else:
+    render_simple(page)
+
+# -----------------------------
+# Admin logout
+# -----------------------------
+if st.session_state.admin:
+    with st.sidebar:
+        pass
+    st.markdown("---")
+    c1, c2 = st.columns([8, 1])
+    with c2:
+        if st.button("Exit Admin", key="exit_admin"):
+            st.session_state.admin = False
+            st.session_state.page = "Home"
+            st.rerun()
