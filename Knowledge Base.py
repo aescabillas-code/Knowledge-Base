@@ -822,38 +822,32 @@ div[data-testid="stToolbar"] { display:none !important; }
 .arrow-red{background:#ffe3e6;color:#f24f5a}
 .arrow-slate{background:#e8eef3;color:#516c83}
 
-.family-click {
-  position:relative;
-  z-index:20;
-  height:0;
-}
 
-.family-click div.stButton {
-  position:relative !important;
-  top:-137px !important;
-  height:137px !important;
-  margin-bottom:-137px !important;
-}
 
-.family-click div.stButton > button {
-  height:137px !important;
-  min-height:137px !important;
-  width:100% !important;
-  opacity:0 !important;
-  cursor:pointer !important;
-  border:0 !important;
-  background:transparent !important;
-  padding:0 !important;
-  margin:0 !important;
+.family-link {
+  display:block !important;
+  text-decoration:none !important;
+  color:inherit !important;
+  -webkit-tap-highlight-color:transparent;
 }
-
-.family-click div.stButton > button:hover,
-.family-click div.stButton > button:focus,
-.family-click div.stButton > button:active {
-  opacity:0 !important;
-  background:transparent !important;
-  border:0 !important;
-  box-shadow:none !important;
+.family-link:hover,
+.family-link:focus,
+.family-link:active {
+  text-decoration:none !important;
+  color:inherit !important;
+}
+.family-link .family-card {
+  cursor:pointer;
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.family-link:hover .family-card {
+  transform:translateY(-2px);
+  border-color:#9edfd8;
+  box-shadow:0 8px 24px rgba(0,150,135,.15);
+}
+.family-link:focus-visible .family-card {
+  outline:3px solid rgba(0,191,165,.28);
+  outline-offset:2px;
 }
 
 .main-grid {
@@ -870,7 +864,7 @@ div[data-testid="stToolbar"] { display:none !important; }
   padding:16px;
 }
 
-.ai-panel { min-height:405px; }
+.ai-panel { min-height:0 !important; height:auto !important; }
 
 .ai-panel div[data-testid="stTextInput"] {
   margin:7px 0 4px !important;
@@ -1296,14 +1290,6 @@ div.stButton > button {
   min-height:31px !important;
 }
 
-.family-click div.stButton > button {
-  opacity:0 !important;
-  height:48px !important;
-  min-height:48px !important;
-  margin-top:-45px !important;
-  position:relative !important;
-  z-index:30 !important;
-}
 
 .small-button div.stButton > button {
   min-height:26px !important;
@@ -1317,6 +1303,36 @@ div.stButton > button {
 
 /* The AI Assistant uses form submission only.
    No standalone "Ask this question" button is rendered. */
+
+
+/* Admin gear: compact, keyboard accessible and touch friendly. */
+div[data-testid="stPopover"] > button {
+  position:fixed !important;
+  top:12px !important;
+  right:18px !important;
+  z-index:9999 !important;
+  width:38px !important;
+  height:38px !important;
+  min-height:38px !important;
+  border-radius:50% !important;
+  padding:0 !important;
+  background:rgba(255,255,255,.92) !important;
+  border:1px solid #cfe4e8 !important;
+  color:#244c67 !important;
+  box-shadow:0 4px 14px rgba(26,73,88,.12) !important;
+  font-size:17px !important;
+}
+div[data-testid="stPopover"] > button:hover {
+  border-color:#00bfa5 !important;
+  color:#008f7b !important;
+}
+.ai-panel {
+  min-height:0 !important;
+  height:auto !important;
+}
+.ai-panel .ai-head {
+  margin-bottom:6px !important;
+}
 
 </style>
 """, unsafe_allow_html=True)
@@ -1360,6 +1376,11 @@ def render_hero():
             with c2:
                 submitted = st.form_submit_button("→", use_container_width=True)
         if submitted:
+            value = st.session_state.get("global_query", "").strip()
+            if value:
+                st.session_state["home_ai_query"] = value
+                st.session_state["home_ai_submitted"] = value
+                st.session_state["home_ai_action"] = None
             st.session_state.view = "home"
             st.rerun()
 
@@ -1370,6 +1391,9 @@ def render_hero():
             with chip_cols[i]:
                 if st.button(chip, key=f"hero_chip_{i}", use_container_width=True):
                     st.session_state.global_query = chip
+                    st.session_state["home_ai_query"] = chip
+                    st.session_state["home_ai_submitted"] = chip
+                    st.session_state["home_ai_action"] = None
                     st.session_state.view = "home"
                     st.rerun()
 
@@ -1382,27 +1406,35 @@ def open_group(group):
 
 
 def render_family_cards():
+    """
+    The entire product-family tile is a real navigation link.
+    There is deliberately NO Streamlit button underneath the tile.
+    The family is passed in the URL so the navigation also works reliably
+    on mobile and after a refresh.
+    """
     names = list(PRODUCT_GROUPS.keys())
     cols = st.columns(6, gap="small")
 
     for i, group in enumerate(names):
         data = PRODUCT_GROUPS[group]
+        # URL-safe query value without requiring an extra dependency.
+        family_param = group.replace(" ", "+").replace("&", "%26")
+
         with cols[i]:
             st.markdown(
                 f"""
-                <div class="family-card">
-                  <div class="family-icon {data['class']}">{data['icon']}</div>
-                  <div class="family-name">{eh(group)}</div>
-                  <div class="family-desc">{eh(data['description'])}</div>
-                  <div class="family-arrow arrow-{data['class']}">→</div>
-                </div>
+                <a class="family-link" href="?family={family_param}"
+                   aria-label="Open {eh(group)} product family">
+                  <div class="family-card">
+                    <div class="family-icon {data['class']}">{data['icon']}</div>
+                    <div class="family-name">{eh(group)}</div>
+                    <div class="family-desc">{eh(data['description'])}</div>
+                    <div class="family-arrow arrow-{data['class']}">→</div>
+                  </div>
+                </a>
                 """,
                 unsafe_allow_html=True
             )
-            st.markdown('<div class="family-click">', unsafe_allow_html=True)
-            if st.button(f"Open {group}", key=f"family_{group}", use_container_width=True, help=f"Open {group} topics and SOPs"):
-                open_group(group)
-            st.markdown("</div>", unsafe_allow_html=True)
 
 
 def answer_card(r):
@@ -1420,6 +1452,20 @@ def answer_card(r):
         for line in (r["steps"] or "").splitlines():
             st.markdown(eh(line))
         st.caption("Search terms: " + r["keywords"])
+
+
+def render_ai_answer(query, family=None):
+    """Compatibility wrapper that renders the real functional AI Assistant."""
+    safe = re.sub(r"[^A-Za-z0-9]+", "_", (family or "global")).strip("_").lower()
+    prefix = f"answer_{safe or 'global'}"
+    st.session_state[f"{prefix}_query"] = query
+    st.session_state[f"{prefix}_submitted"] = query
+    st.session_state[f"{prefix}_action"] = None
+    render_ai_assistant(
+        default_query=query,
+        family=family,
+        key_prefix=prefix,
+    )
 
 
 def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing issues?",
@@ -1803,13 +1849,13 @@ def render_bottom_strip():
 def render_home():
     render_hero()
 
+    # The hero search and the AI Assistant are the same workflow.
+    # A submitted hero query is injected into the real AI Assistant card.
     query = st.session_state.get("global_query", "").strip()
-
-    # Search results appear directly below the hero, before the six tiles.
     if query:
-        st.markdown('<div class="panel" style="margin-bottom:11px;">', unsafe_allow_html=True)
-        render_ai_answer(query)
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.session_state["home_ai_query"] = query
+        st.session_state["home_ai_submitted"] = query
+        st.session_state["home_ai_action"] = None
 
     render_family_cards()
 
@@ -1817,20 +1863,16 @@ def render_home():
 
     with left:
         render_ai_assistant(
-            default_query="How do I troubleshoot ClearPass licensing issues?",
+            default_query=query or "How do I troubleshoot ClearPass licensing issues?",
             key_prefix="home_ai",
         )
 
     with right:
-        # Intentionally left open.
-        # Featured Documents and Popular Topics were removed from the home
-        # screen because their content duplicates the product-family tiles
-        # above. Product-specific documents/topics remain available inside
-        # each product-family page.
+        # Deliberately empty: the product-family tiles are the primary
+        # navigation and Featured Documents / Popular Topics were removed
+        # because they duplicated those tiles.
         st.markdown(
-            """
-            <div style="height:100%; min-height:405px;"></div>
-            """,
+            '<div style="height:0; min-height:0; padding:0; margin:0;"></div>',
             unsafe_allow_html=True
         )
 
@@ -1849,6 +1891,10 @@ def render_group():
     data = PRODUCT_GROUPS[group]
 
     if st.button("← Back to Knowledge Base", key="back_group"):
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
         st.session_state.view = "home"
         st.rerun()
 
@@ -2050,11 +2096,102 @@ def render_document():
         st.text_area("Document text", content, height=620, label_visibility="collapsed")
 
 
+
 # ============================================================
-# ADMIN
-# Hidden from the visual reference on the home page.
-# Open by adding ?admin=1 to the app URL.
+# ADMIN ACCESS + SOP AUTHORING
 # ============================================================
+def get_admin_password():
+    """Read the admin password only from Streamlit secrets."""
+    try:
+        if "ADMIN_PASSWORD" in st.secrets:
+            return str(st.secrets["ADMIN_PASSWORD"])
+        if "ADMIN_PIN" in st.secrets:
+            return str(st.secrets["ADMIN_PIN"])
+    except Exception:
+        pass
+    return ""
+
+
+def admin_login():
+    """Password gate for the admin area. Password never lives in source code."""
+    with st.popover("⚙", help="Knowledge Base Admin"):
+        st.markdown("#### Admin")
+        st.caption("Enter the admin password configured in Streamlit Secrets.")
+
+        with st.form("admin_login_form"):
+            password = st.text_input(
+                "Password",
+                type="password",
+                autocomplete="current-password",
+                label_visibility="collapsed",
+                placeholder="Admin password"
+            )
+            login = st.form_submit_button("Sign in", use_container_width=True)
+
+        if login:
+            expected = get_admin_password()
+            if expected and password == expected:
+                st.session_state.admin_authenticated = True
+                st.session_state.view = "admin"
+                st.rerun()
+            elif not expected:
+                st.error("ADMIN_PASSWORD is not configured in Streamlit Secrets.")
+            else:
+                st.error("Incorrect admin password.")
+
+
+def create_ai_ready_sop(
+    family, product, topic, question, direct_answer,
+    prerequisites, steps, verification, escalation, keywords,
+    source_title="", source_url=""
+):
+    """
+    Store one atomic SOP record designed for deterministic AI retrieval.
+    The record is intentionally self-contained:
+    Question -> Direct Answer -> Steps -> Verification -> Escalation.
+    """
+    now = datetime.now().isoformat(timespec="seconds")
+    kb_id = f"SOP-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+
+    # Build a normalized searchable text field in the existing answer/steps
+    # columns without changing the database schema.
+    normalized_steps = steps.strip()
+    if prerequisites.strip():
+        normalized_steps = (
+            "Prerequisites:\n" + prerequisites.strip()
+            + "\n\nProcedure:\n" + normalized_steps
+        )
+    if verification.strip():
+        normalized_steps += "\n\nVerification:\n" + verification.strip()
+    if escalation.strip():
+        normalized_steps += "\n\nEscalation:\n" + escalation.strip()
+
+    source = source_title.strip() or "Admin-created SOP"
+    if source_url.strip():
+        source += f" | {source_url.strip()}"
+
+    conn = db()
+    conn.execute("""
+        INSERT INTO kb_records
+        (kb_id, family, topic, question, answer, steps, keywords, source, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        kb_id,
+        family,
+        f"{product} — {topic}",
+        question.strip(),
+        direct_answer.strip(),
+        normalized_steps,
+        ", ".join([x.strip() for x in keywords.split(",") if x.strip()]),
+        source,
+        now
+    ))
+    conn.commit()
+    conn.close()
+    search.clear()
+    return kb_id
+
+
 def render_admin():
     if st.button("← Back to Knowledge Base", key="admin_back"):
         st.session_state.view = "home"
@@ -2062,42 +2199,173 @@ def render_admin():
 
     st.markdown("""
     <div class="family-banner">
-      <h1>Knowledge Management</h1>
-      <p>Upload SOPs and PDFs into the HPE Knowledge Base.</p>
+      <h1>⚙ Knowledge Base Admin</h1>
+      <p>Create AI-ready SOPs or upload PDF source documents. Every SOP is stored as an atomic question-and-answer record for accurate retrieval.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        group = st.selectbox("Product Group", list(PRODUCT_GROUPS.keys()))
-    with c2:
-        topic = st.text_input("Topic", placeholder="e.g. ClearPass Licensing")
+    create_tab, upload_tab = st.tabs(["Create AI-Ready SOP", "Upload PDF"])
 
-    file = st.file_uploader("Upload PDF", type=["pdf"])
+    with create_tab:
+        st.markdown("""
+        <div class="panel" style="margin-bottom:12px;">
+          <div class="panel-title">AI Extraction Format</div>
+          <div class="panel-sub">
+            Use one question per SOP. Put the exact answer first, then prerequisites,
+            numbered steps, verification, escalation criteria, and search terms.
+            This structure keeps retrieval precise and prevents unrelated procedures
+            from being mixed into one answer.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    if file and st.button("Index PDF", type="primary"):
-        ok, msg = index_pdf(file, group, topic or "General")
-        if ok:
-            st.success(msg)
-            st.rerun()
-        else:
-            st.error(msg)
+        with st.form("create_sop_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                family = st.selectbox("Product Family", list(PRODUCT_GROUPS.keys()))
+                product = st.text_input("Product / Platform",
+                                        placeholder="e.g. Aruba ClearPass Policy Manager")
+                topic = st.text_input("Topic / Feature",
+                                      placeholder="e.g. RADIUS Authentication Failure")
+                question = st.text_input(
+                    "Exact User Question",
+                    placeholder="e.g. How do I troubleshoot a ClearPass RADIUS authentication failure?"
+                )
+            with c2:
+                source_title = st.text_input(
+                    "Source Title (optional)",
+                    placeholder="e.g. ClearPass RADIUS Troubleshooting SOP"
+                )
+                source_url = st.text_input(
+                    "Source URL (optional)",
+                    placeholder="https://..."
+                )
+                keywords = st.text_input(
+                    "Search Keywords",
+                    placeholder="ClearPass, RADIUS, authentication, timeout, Access Tracker"
+                )
 
-    st.markdown("### Indexed documents")
-    docs = load_documents()
-    if not docs:
-        st.info("No PDFs indexed yet.")
-    else:
-        for d in docs:
-            st.markdown(
-                f"""
-                <div class="search-result">
-                  <div class="result-q">{eh(d['title'])}</div>
-                  <div class="result-a">{eh(d['family'])} • {eh(d['topic'])} • {eh(d['created_at'])}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
+            direct_answer = st.text_area(
+                "Direct Answer — write the exact answer the AI should return",
+                height=130,
+                placeholder=(
+                    "State the answer directly and completely. Include scope or "
+                    "version limitations when they matter. Avoid introductions."
+                )
             )
+
+            prerequisites = st.text_area(
+                "Prerequisites / Required Information",
+                height=90,
+                placeholder=(
+                    "Example:\n"
+                    "• Identify the ClearPass server.\n"
+                    "• Record the request timestamp.\n"
+                    "• Have access to Access Tracker."
+                )
+            )
+
+            steps = st.text_area(
+                "Procedure — one step per line",
+                height=170,
+                placeholder=(
+                    "1. Open Access Tracker.\n"
+                    "2. Locate the affected authentication request.\n"
+                    "3. Confirm the selected service.\n"
+                    "4. Review the authentication failure reason.\n"
+                    "5. Correct the identified configuration issue.\n"
+                    "6. Retest the authentication request."
+                )
+            )
+
+            verification = st.text_area(
+                "Verification / Expected Result",
+                height=100,
+                placeholder=(
+                    "Describe exactly how the agent confirms the issue is resolved."
+                )
+            )
+
+            escalation = st.text_area(
+                "Escalation Criteria",
+                height=100,
+                placeholder=(
+                    "State when the case must be escalated and exactly what evidence "
+                    "must accompany the escalation."
+                )
+            )
+
+            submitted = st.form_submit_button(
+                "Create SOP & Add to AI Knowledge",
+                type="primary",
+                use_container_width=True
+            )
+
+        if submitted:
+            required = {
+                "Product / Platform": product,
+                "Topic / Feature": topic,
+                "Exact User Question": question,
+                "Direct Answer": direct_answer,
+                "Procedure": steps,
+            }
+            missing = [k for k, v in required.items() if not v.strip()]
+            if missing:
+                st.error("Complete these required fields: " + ", ".join(missing))
+            else:
+                kb_id = create_ai_ready_sop(
+                    family, product, topic, question, direct_answer,
+                    prerequisites, steps, verification, escalation,
+                    keywords, source_title, source_url
+                )
+                st.success(f"SOP created successfully: {kb_id}")
+                st.info("The new SOP is immediately searchable by the AI Assistant.")
+
+    with upload_tab:
+        c1, c2 = st.columns(2)
+        with c1:
+            upload_family = st.selectbox(
+                "Product Family",
+                list(PRODUCT_GROUPS.keys()),
+                key="admin_upload_family"
+            )
+        with c2:
+            upload_topic = st.text_input(
+                "Topic",
+                placeholder="e.g. ClearPass Licensing",
+                key="admin_upload_topic"
+            )
+
+        file = st.file_uploader(
+            "Upload PDF source document",
+            type=["pdf"],
+            help="PDF text is extracted and indexed into the Knowledge Base."
+        )
+
+        if file and st.button("Upload & Index PDF", type="primary", use_container_width=True):
+            ok, msg = index_pdf(file, upload_family, upload_topic or "General")
+            if ok:
+                st.success(msg)
+                st.rerun()
+            else:
+                st.error(msg)
+
+    st.markdown("### Current AI-ready SOPs")
+    conn = db()
+    sop_rows = conn.execute("""
+        SELECT kb_id, family, topic, question, source, created_at
+        FROM kb_records
+        ORDER BY id DESC
+    """).fetchall()
+    conn.close()
+
+    for r in sop_rows:
+        with st.expander(f"{r['kb_id']} — {r['question']}"):
+            st.write(f"**Family:** {r['family']}")
+            st.write(f"**Topic:** {r['topic']}")
+            st.write(f"**Source:** {r['source']}")
+            st.caption(r["created_at"])
+
 
 
 # ============================================================
@@ -2109,18 +2377,29 @@ for key, default in [
     ("selected_topic",None),
     ("selected_document",None),
     ("global_query",""),
+    ("admin_authenticated",False),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
 
-# Admin is intentionally absent from the screenshot UI.
-# Use ?admin=1 to enter the uploader without adding an extra
-# visible button that would break the reference layout.
+# Query parameters are used for tile navigation and as a fallback admin route.
 try:
+    family_param = st.query_params.get("family")
+    if family_param:
+        decoded_family = str(family_param).replace("%26", "&").replace("+", " ")
+        if decoded_family in PRODUCT_GROUPS:
+            st.session_state.selected_group = decoded_family
+            st.session_state.selected_topic = None
+            st.session_state.view = "group"
+
     if str(st.query_params.get("admin","")).lower() in {"1","true","yes"}:
-        st.session_state.view = "admin"
+        if st.session_state.get("admin_authenticated"):
+            st.session_state.view = "admin"
 except Exception:
     pass
+
+# Fixed admin gear. Authentication happens through the Streamlit Secrets password.
+admin_login()
 
 if st.session_state.view == "home":
     render_home()
@@ -2131,7 +2410,11 @@ elif st.session_state.view == "topic":
 elif st.session_state.view == "document":
     render_document()
 elif st.session_state.view == "admin":
-    render_admin()
+    if st.session_state.get("admin_authenticated"):
+        render_admin()
+    else:
+        st.session_state.view = "home"
+        st.rerun()
 else:
     st.session_state.view = "home"
     st.rerun()
