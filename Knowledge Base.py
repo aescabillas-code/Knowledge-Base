@@ -1371,7 +1371,8 @@ div.stButton > button {
   border:1px solid rgba(0,236,213,.65) !important;
   color:#ffffff !important;
   box-shadow:0 3px 12px rgba(0,0,0,.20) !important;
-  font-size:16px !important;
+  font-size:22px !important;
+  cursor:pointer !important;
 }
 .st-key-hero_admin_gear div[data-testid="stPopover"] > button:hover,
 .st-key-hero_admin_gear div[data-testid="stPopover"] > button:focus {
@@ -1426,6 +1427,143 @@ div.stButton > button {
   }
 }
 
+
+
+/* Functional family tiles: the Streamlit button is the actual navigation target. */
+.st-key-family_tile_0,
+.st-key-family_tile_1,
+.st-key-family_tile_2,
+.st-key-family_tile_3,
+.st-key-family_tile_4,
+.st-key-family_tile_5 {
+  position:relative !important;
+}
+[class*="st-key-family_tile_btn_"] button {
+  height:86px !important;
+  min-height:86px !important;
+  border-radius:15px !important;
+  border:1px solid #d5e4ea !important;
+  background:rgba(255,255,255,.94) !important;
+  color:#0a3154 !important;
+  text-align:left !important;
+  font-size:15px !important;
+  font-weight:800 !important;
+  padding:16px 48px 16px 18px !important;
+  box-shadow:0 5px 18px rgba(36,76,92,.07) !important;
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease !important;
+}
+[class*="st-key-family_tile_btn_"] button:hover {
+  transform:translateX(-2px) !important;
+  border-color:#8ed8cf !important;
+  box-shadow:0 9px 24px rgba(0,150,135,.15) !important;
+}
+[class*="st-key-family_tile_btn_"] button:focus-visible {
+  outline:3px solid rgba(0,191,165,.32) !important;
+  outline-offset:2px !important;
+}
+.family-tile-description {
+  position:absolute;
+  left:19px;
+  right:52px;
+  top:49px;
+  pointer-events:none;
+  color:#536f82;
+  font-size:9px;
+  line-height:12px;
+}
+.family-tile-arrow {
+  position:absolute;
+  right:13px;
+  top:29px;
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:17px;
+  font-weight:800;
+  pointer-events:none;
+}
+
+/* More readable exact answer presentation. */
+.exact-answer {
+  margin:9px 0 8px 12px;
+  padding:14px 16px 15px;
+  border:1px solid #cfe6e1;
+  border-left:4px solid #00bfa5;
+  border-radius:0 12px 12px 12px;
+  background:#f7fcfb;
+}
+.exact-answer-header {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding-bottom:10px;
+  margin-bottom:10px;
+  border-bottom:1px solid #dfecea;
+}
+.exact-answer-icon {
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  background:#08bda4;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  font-weight:800;
+}
+.exact-answer-label {
+  margin:0 !important;
+  color:#008f7b !important;
+  font-size:9px !important;
+  font-weight:800 !important;
+  letter-spacing:.7px !important;
+}
+.exact-answer-title {
+  margin-top:2px;
+  color:#173a56;
+  font-size:10px;
+  font-weight:700;
+}
+.exact-answer-body {
+  color:#243f55;
+  font-size:11px;
+  line-height:1.65;
+  white-space:normal;
+}
+.msg-label {
+  display:inline-block;
+  margin-right:8px;
+  color:#7890a0;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.5px;
+}
+
+@media (max-width:800px) {
+  .st-key-hero_admin_gear {
+    top:14px !important;
+    right:78px !important;
+  }
+  .st-key-hero_admin_gear div[data-testid="stPopover"] > button {
+    width:44px !important;
+    height:44px !important;
+    min-height:44px !important;
+    font-size:21px !important;
+  }
+  [class*="st-key-family_tile_btn_"] button {
+    height:76px !important;
+    min-height:76px !important;
+    font-size:14px !important;
+  }
+  .family-tile-description { top:45px; font-size:8px; }
+  .family-tile-arrow { top:23px; }
+  .exact-answer { margin-left:0; }
+  .exact-answer-body { font-size:11px; line-height:1.6; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1467,7 +1605,15 @@ def render_hero():
         with st.form("hero_search_form", clear_on_submit=False):
             c1, c2 = st.columns([0.93, 0.07], gap="small", vertical_alignment="center")
             with c1:
-                st.text_input("Global search", placeholder="Ask a question or search for a document...", key="global_query", label_visibility="collapsed")
+                pending_global_query = st.session_state.pop("global_query_pending", None)
+                if pending_global_query is not None:
+                    st.session_state["global_query"] = pending_global_query
+                st.text_input(
+                    "Global search",
+                    placeholder="Ask a question or search for a document...",
+                    key="global_query",
+                    label_visibility="collapsed"
+                )
             with c2:
                 submitted = st.form_submit_button("→", use_container_width=True)
         if submitted:
@@ -1501,31 +1647,32 @@ def open_group(group):
 
 
 def render_family_cards():
-    """Render clickable product-family tiles as a compact right-side stack."""
+    """Render fully clickable product-family tiles that navigate inside this app."""
     st.markdown(
         '<div class="family-stack-title">HPE & Aruba Product Families</div>',
         unsafe_allow_html=True
     )
-    for group, data in PRODUCT_GROUPS.items():
-        family_param = group.replace(" ", "+").replace("&", "%26")
-        st.markdown(
-            f"""
-            <a class="family-link" href="?family={family_param}"
-               aria-label="Open {eh(group)} product family">
-              <div class="family-card family-card-compact">
-                <div class="family-icon {data['class']}">{data['icon']}</div>
-                <div class="family-card-copy">
-                  <div class="family-name">{eh(group)}</div>
-                  <div class="family-desc">{eh(data['description'])}</div>
-                </div>
-                <div class="family-arrow arrow-{data['class']}">→</div>
-              </div>
-            </a>
-            """,
-            unsafe_allow_html=True
-        )
-
-
+    for i, (group, data) in enumerate(PRODUCT_GROUPS.items()):
+        with st.container(key=f"family_tile_{i}"):
+            if st.button(
+                f"{data['icon']}   {group}",
+                key=f"family_tile_btn_{i}",
+                use_container_width=True,
+                help=f"Open {group}: products, topics, SOPs and sources"
+            ):
+                st.session_state.selected_group = group
+                st.session_state.selected_topic = None
+                st.session_state.view = "group"
+                try:
+                    st.query_params["family"] = group
+                except Exception:
+                    pass
+                st.rerun()
+            st.markdown(
+                f'<div class="family-tile-description">{eh(data["description"])}</div>'
+                f'<div class="family-tile-arrow arrow-{data["class"]}">→</div>',
+                unsafe_allow_html=True
+            )
 
 def answer_card(r):
     st.markdown(
@@ -1602,7 +1749,7 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
             st.session_state[submitted_key] = value
             st.session_state[selected_key] = None
             st.session_state[action_key] = None
-            st.session_state.global_query = value
+            st.session_state.global_query_pending = value
             st.rerun()
 
     query = st.session_state[submitted_key].strip()
@@ -1654,10 +1801,16 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
 
     st.markdown(
         f"""
-        <div class="user-msg">♙ &nbsp; {eh(query)}</div>
-        <div class="ai-answer">
-          <div class="exact-answer-label">EXACT ANSWER</div>
-          {eh(selected['answer'])}
+        <div class="user-msg"><span class="msg-label">QUESTION</span>{eh(query)}</div>
+        <div class="exact-answer">
+          <div class="exact-answer-header">
+            <span class="exact-answer-icon">✓</span>
+            <div>
+              <div class="exact-answer-label">EXACT ANSWER</div>
+              <div class="exact-answer-title">{eh(selected["topic"])}</div>
+            </div>
+          </div>
+          <div class="exact-answer-body">{eh(selected["answer"])}</div>
         </div>
         """,
         unsafe_allow_html=True
@@ -1745,25 +1898,7 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
             unsafe_allow_html=True
         )
 
-    with st.form(f"{key_prefix}_followup_form", clear_on_submit=True):
-        f1, f2 = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
-        with f1:
-            follow = st.text_input(
-                "Follow-up question",
-                placeholder="Ask a follow-up question...",
-                label_visibility="collapsed",
-                help="Press Enter or select the arrow to submit your follow-up question."
-            )
-        with f2:
-            follow_submit = st.form_submit_button("→", use_container_width=True)
-
-    if follow_submit and follow.strip():
-        st.session_state[q_key] = follow.strip()
-        st.session_state[submitted_key] = follow.strip()
-        st.session_state[selected_key] = None
-        st.session_state[action_key] = None
-        st.session_state.global_query = follow.strip()
-        st.rerun()
+    # No follow-up input: the original question field remains the single active question entry.
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1829,7 +1964,7 @@ def render_featured():
                     unsafe_allow_html=True
                 )
                 if st.button("View", key=f"feature_{i}", use_container_width=True):
-                    st.session_state.global_query = title
+                    st.session_state.global_query_pending = title
                     st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -2034,7 +2169,7 @@ def render_group():
                   <div style="font-size:10px;font-weight:800;color:#173a56;">{eh(name)}</div>
                   <div class="small-muted">Official/public source</div>
                   <div style="height:7px"></div>
-                  <a href="{eh(url)}" target="_blank">Open source →</a>
+                  <a href="{eh(url)}" target="_self">Open source →</a>
                 </div>
                 """,
                 unsafe_allow_html=True
