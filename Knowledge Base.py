@@ -1767,34 +1767,35 @@ def open_group(group):
 
 
 def render_family_cards():
-    """Render compact in-app family tiles with large icons."""
+    """Render compact, fully clickable family tiles without a second button row."""
+    from urllib.parse import quote
+
     st.markdown(
         '<div class="family-stack-title">HPE & Aruba Product Families</div>',
         unsafe_allow_html=True
     )
-    for i, (group, data) in enumerate(PRODUCT_GROUPS.items()):
-        with st.container(key=f"family_tile_{i}"):
-            st.markdown(
-                f"""<div class="family-tile-visual">
-                    <div class="family-icon {data["class"]}">{data["icon"]}</div>
-                    <div class="family-tile-copy">
-                      <div class="family-name">{eh(group)}</div>
-                      <div class="family-desc">{eh(data["description"])}</div>
-                    </div>
-                    <div class="family-arrow arrow-{data["class"]}">→</div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-            if st.button(
-                f"Open {group}",
-                key=f"family_tile_btn_{i}",
-                use_container_width=True
-            ):
-                st.session_state.selected_group = group
-                st.session_state.selected_topic = None
-                st.session_state.view = "group"
-                st.query_params.clear()
-                st.rerun()
+
+    for group, data in PRODUCT_GROUPS.items():
+        # Use a normal in-app URL instead of a Streamlit button. This keeps the
+        # clickable hit area exactly on top of the visual tile and prevents the
+        # button from rendering as a separate white row underneath it.
+        family_param = quote(group, safe="")
+        st.markdown(
+            f"""
+            <a class="family-link" href="?family={family_param}"
+               aria-label="Open {eh(group)} product family">
+              <div class="family-card family-card-compact">
+                <div class="family-icon {data['class']}">{data['icon']}</div>
+                <div class="family-card-copy">
+                  <div class="family-name">{eh(group)}</div>
+                  <div class="family-desc">{eh(data['description'])}</div>
+                </div>
+                <div class="family-arrow arrow-{data['class']}">→</div>
+              </div>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
 
 def answer_card(r):
     st.markdown(
