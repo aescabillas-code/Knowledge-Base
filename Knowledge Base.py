@@ -1639,6 +1639,37 @@ div.stButton > button {
   line-height:1.65;
   white-space:normal;
 }
+.summary-paragraph {
+  color:#243f55;
+  font-size:10px;
+  line-height:1.7;
+  margin:0 0 8px;
+  padding:0;
+}
+.summary-subtitle {
+  color:#173a56;
+  font-size:9px;
+  font-weight:800;
+  margin:8px 0 4px;
+}
+.summary-bullet {
+  display:flex;
+  gap:7px;
+  color:#324e63;
+  font-size:9px;
+  line-height:1.5;
+  margin:4px 0;
+}
+.summary-bullet > span {
+  color:#00a991;
+  font-weight:900;
+  flex:0 0 auto;
+}
+.related-empty {
+  color:#7a8d99;
+  font-size:9px;
+  padding:8px 0 2px;
+}
 .msg-label {
   display:inline-block;
   margin-right:8px;
@@ -1726,18 +1757,6 @@ def render_hero():
             st.session_state.view = "home"
             st.rerun()
 
-        st.markdown('<div class="try-label">Try asking:</div>', unsafe_allow_html=True)
-        chips = ["How to renew a license?", "ClearPass troubleshooting", "iLO configuration", "Aruba switch setup", "Gen11 firmware update"]
-        chip_cols = st.columns(5, gap="small")
-        for i, chip in enumerate(chips):
-            with chip_cols[i]:
-                if st.button(chip, key=f"hero_chip_{i}", use_container_width=True):
-                    st.session_state.global_query = chip
-                    st.session_state["home_ai_query"] = chip
-                    st.session_state["home_ai_submitted"] = chip
-                    st.session_state["home_ai_action"] = None
-                    st.session_state.view = "home"
-                    st.rerun()
 
 
 def open_group(group):
@@ -1769,8 +1788,7 @@ def render_family_cards():
             if st.button(
                 f"Open {group}",
                 key=f"family_tile_btn_{i}",
-                use_container_width=True,
-                help=f"Open {group}: products, topics, SOPs and sources"
+                use_container_width=True
             ):
                 st.session_state.selected_group = group
                 st.session_state.selected_topic = None
@@ -1935,8 +1953,34 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
                 st.rerun()
 
         action = st.session_state[action_key]
-        show_steps = bool(selected.get("steps")) and action in (None, "steps")
-        if show_steps:
+
+        # The answer box defaults to the direct answer only. The three actions
+        # deliberately reveal their content inside the same answer container.
+        if action == "summary":
+            answer_text = (selected.get("answer") or "").strip()
+            step_lines = []
+            for line in (selected.get("steps") or "").splitlines():
+                clean = re.sub(r"^\s*\d+\.\s*", "", line).strip()
+                if clean:
+                    step_lines.append(clean)
+
+            # Keep the summary readable: one concise paragraph followed by
+            # only the most useful action points when the source contains steps.
+            summary_paragraph = re.sub(r"\s+", " ", answer_text).strip()
+            st.markdown('<div class="exact-section-title">SUMMARY</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="summary-paragraph">{eh(summary_paragraph)}</div>',
+                unsafe_allow_html=True
+            )
+            if step_lines:
+                st.markdown('<div class="summary-subtitle">Key points</div>', unsafe_allow_html=True)
+                for item in step_lines[:5]:
+                    st.markdown(
+                        f'<div class="summary-bullet"><span>•</span><div>{eh(item)}</div></div>',
+                        unsafe_allow_html=True
+                    )
+
+        elif action == "steps":
             st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
             for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
                 clean = re.sub(r"^\s*\d+\.\s*", "", line)
@@ -1947,14 +1991,10 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
                         unsafe_allow_html=True
                     )
 
-        if action == "summary":
-            st.markdown(
-                f'<div class="ai-answer" style="margin-top:8px;"><b>Summary</b><br><br>{eh(selected["answer"])}</div>',
-                unsafe_allow_html=True
-            )
+        elif action == "related":
+            st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
 
-        if action == "related":
-            st.markdown('<div class="chatbot-related-label">Related knowledge</div>', unsafe_allow_html=True)
+            # Related KB records
             for r in records[1:5]:
                 st.markdown(
                     f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
@@ -1964,27 +2004,26 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
                     unsafe_allow_html=True
                 )
 
-        if docs:
-            d = docs[0]
-            st.markdown(
-                f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
-                f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(d["title"])}</div>'
-                f'<div style="font-size:8px;color:#8a9aa5;">⌁ PDF • Indexed • {eh(d["family"])}</div>'
-                f'</div></div>',
-                unsafe_allow_html=True
-            )
-            if st.button("↗ View source document", key=f"{key_prefix}_view_source", use_container_width=True):
-                st.session_state.selected_document = d["id"]
-                st.session_state.view = "document"
-                st.rerun()
-        else:
-            st.markdown(
-                f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
-                f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(selected["topic"])} — HPE Knowledge Article</div>'
-                f'<div style="font-size:8px;color:#8a9aa5;">AI Knowledge • {eh(selected["kb_id"])}</div>'
-                f'</div></div>',
-                unsafe_allow_html=True
-            )
+            # PDFs belong ONLY to Related knowledge; they are no longer
+            # rendered underneath the default exact answer.
+            if docs:
+                for d in docs[:4]:
+                    st.markdown(
+                        f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
+                        f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(d["title"])}</div>'
+                        f'<div style="font-size:8px;color:#8a9aa5;">⌁ PDF • Indexed • {eh(d["family"])}</div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True
+                    )
+                    if st.button("↗ View source document", key=f"{key_prefix}_view_source_{d['id']}", use_container_width=True):
+                        st.session_state.selected_document = d["id"]
+                        st.session_state.view = "document"
+                        st.rerun()
+            elif len(records) <= 1:
+                st.markdown(
+                    '<div class="related-empty">No additional PDF source was indexed for this answer yet.</div>',
+                    unsafe_allow_html=True
+                )
 
     # No follow-up input: the original question field remains the single active question entry.
 
