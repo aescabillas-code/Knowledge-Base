@@ -610,6 +610,7 @@ html, body, [class*="css"] { font-family:Inter,Arial,sans-serif !important; }
 header[data-testid="stHeader"] { display:none; }
 
 .block-container {
+  position:relative !important;
   max-width:1536px !important;
   padding:0 22px 18px !important;
 }
@@ -824,6 +825,12 @@ div[data-testid="stToolbar"] { display:none !important; }
 
 
 
+.family-stack-title {
+  color:#0a3154;
+  font-size:12px;
+  font-weight:800;
+  margin:0 0 7px 2px;
+}
 .family-link {
   display:block !important;
   text-decoration:none !important;
@@ -841,7 +848,7 @@ div[data-testid="stToolbar"] { display:none !important; }
   transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
 }
 .family-link:hover .family-card {
-  transform:translateY(-2px);
+  transform:translateX(-2px);
   border-color:#9edfd8;
   box-shadow:0 8px 24px rgba(0,150,135,.15);
 }
@@ -849,10 +856,52 @@ div[data-testid="stToolbar"] { display:none !important; }
   outline:3px solid rgba(0,191,165,.28);
   outline-offset:2px;
 }
+.family-card-compact {
+  height:58px !important;
+  min-height:58px !important;
+  padding:8px 10px !important;
+  margin-bottom:7px !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:9px !important;
+  border-radius:12px !important;
+}
+.family-card-compact .family-icon {
+  width:34px !important;
+  height:34px !important;
+  min-width:34px !important;
+  border-radius:9px !important;
+  margin:0 !important;
+  font-size:17px !important;
+}
+.family-card-compact .family-card-copy {
+  min-width:0;
+  flex:1;
+}
+.family-card-compact .family-name {
+  font-size:12px !important;
+  line-height:14px !important;
+}
+.family-card-compact .family-desc {
+  font-size:8px !important;
+  line-height:10px !important;
+  margin-top:2px !important;
+  padding-right:0 !important;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.family-card-compact .family-arrow {
+  position:static !important;
+  flex:0 0 26px;
+  width:26px !important;
+  height:26px !important;
+  font-size:15px !important;
+}
 
 .main-grid {
   display:grid;
-  grid-template-columns:1.02fr .98fr;
+  grid-template-columns:1fr;
   gap:12px;
 }
 
@@ -1305,26 +1354,29 @@ div.stButton > button {
    No standalone "Ask this question" button is rendered. */
 
 
-/* Admin gear: compact, keyboard accessible and touch friendly. */
-div[data-testid="stPopover"] > button {
-  position:fixed !important;
-  top:12px !important;
-  right:18px !important;
-  z-index:9999 !important;
-  width:38px !important;
-  height:38px !important;
-  min-height:38px !important;
+/* Admin gear: inside the teal hero, above Accelerating text. */
+.st-key-hero_admin_gear {
+  position:absolute !important;
+  top:17px !important;
+  right:29px !important;
+  z-index:1000 !important;
+}
+.st-key-hero_admin_gear div[data-testid="stPopover"] > button {
+  width:36px !important;
+  height:36px !important;
+  min-height:36px !important;
   border-radius:50% !important;
   padding:0 !important;
-  background:rgba(255,255,255,.92) !important;
-  border:1px solid #cfe4e8 !important;
-  color:#244c67 !important;
-  box-shadow:0 4px 14px rgba(26,73,88,.12) !important;
-  font-size:17px !important;
+  background:#00bfa5 !important;
+  border:1px solid rgba(0,236,213,.65) !important;
+  color:#ffffff !important;
+  box-shadow:0 3px 12px rgba(0,0,0,.20) !important;
+  font-size:16px !important;
 }
-div[data-testid="stPopover"] > button:hover {
-  border-color:#00bfa5 !important;
-  color:#008f7b !important;
+.st-key-hero_admin_gear div[data-testid="stPopover"] > button:hover,
+.st-key-hero_admin_gear div[data-testid="stPopover"] > button:focus {
+  background:#00d7bd !important;
+  color:#ffffff !important;
 }
 .ai-panel {
   min-height:0 !important;
@@ -1332,6 +1384,46 @@ div[data-testid="stPopover"] > button:hover {
 }
 .ai-panel .ai-head {
   margin-bottom:6px !important;
+}
+
+
+.chatbot-prompt {
+  margin:9px 0 6px 12px;
+  color:#526c7d;
+  font-size:9px;
+  font-weight:600;
+}
+.chatbot-related-label {
+  margin:8px 0 5px 12px;
+  color:#173a56;
+  font-size:9px;
+  font-weight:800;
+}
+.exact-answer-label {
+  display:inline-block;
+  margin-bottom:6px;
+  color:#008f7b;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.5px;
+}
+
+
+@media (max-width:800px){
+  .st-key-hero_admin_gear {
+    top:13px !important;
+    right:14px !important;
+  }
+  .family-card-compact {
+    height:62px !important;
+    min-height:62px !important;
+  }
+  .family-card-compact .family-desc {
+    white-space:normal !important;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+  }
 }
 
 </style>
@@ -1367,6 +1459,9 @@ def render_hero():
       </div>
     </div>
     """, unsafe_allow_html=True)
+
+    with st.container(key="hero_admin_gear"):
+        admin_login()
 
     with st.container(key="hero_search_area"):
         with st.form("hero_search_form", clear_on_submit=False):
@@ -1406,35 +1501,30 @@ def open_group(group):
 
 
 def render_family_cards():
-    """
-    The entire product-family tile is a real navigation link.
-    There is deliberately NO Streamlit button underneath the tile.
-    The family is passed in the URL so the navigation also works reliably
-    on mobile and after a refresh.
-    """
-    names = list(PRODUCT_GROUPS.keys())
-    cols = st.columns(6, gap="small")
-
-    for i, group in enumerate(names):
-        data = PRODUCT_GROUPS[group]
-        # URL-safe query value without requiring an extra dependency.
+    """Render clickable product-family tiles as a compact right-side stack."""
+    st.markdown(
+        '<div class="family-stack-title">HPE & Aruba Product Families</div>',
+        unsafe_allow_html=True
+    )
+    for group, data in PRODUCT_GROUPS.items():
         family_param = group.replace(" ", "+").replace("&", "%26")
+        st.markdown(
+            f"""
+            <a class="family-link" href="?family={family_param}"
+               aria-label="Open {eh(group)} product family">
+              <div class="family-card family-card-compact">
+                <div class="family-icon {data['class']}">{data['icon']}</div>
+                <div class="family-card-copy">
+                  <div class="family-name">{eh(group)}</div>
+                  <div class="family-desc">{eh(data['description'])}</div>
+                </div>
+                <div class="family-arrow arrow-{data['class']}">→</div>
+              </div>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
 
-        with cols[i]:
-            st.markdown(
-                f"""
-                <a class="family-link" href="?family={family_param}"
-                   aria-label="Open {eh(group)} product family">
-                  <div class="family-card">
-                    <div class="family-icon {data['class']}">{data['icon']}</div>
-                    <div class="family-name">{eh(group)}</div>
-                    <div class="family-desc">{eh(data['description'])}</div>
-                    <div class="family-arrow arrow-{data['class']}">→</div>
-                  </div>
-                </a>
-                """,
-                unsafe_allow_html=True
-            )
 
 
 def answer_card(r):
@@ -1470,43 +1560,29 @@ def render_ai_answer(query, family=None):
 
 def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing issues?",
                          family=None, key_prefix="home_ai"):
-    """
-    Fully functional AI Assistant card.
-
-    Every visible control in the reference card is a real Streamlit control:
-    - question field + arrow submit
-    - summary
-    - troubleshooting steps
-    - related documents
-    - follow-up question
-    """
+    """Option-based HPE AI chatbot with exact-answer retrieval."""
     q_key = f"{key_prefix}_query"
     submitted_key = f"{key_prefix}_submitted"
+    selected_key = f"{key_prefix}_selected"
     action_key = f"{key_prefix}_action"
 
-    if q_key not in st.session_state:
-        st.session_state[q_key] = default_query
+    st.session_state.setdefault(q_key, default_query)
+    st.session_state.setdefault(submitted_key, default_query)
+    st.session_state.setdefault(selected_key, None)
+    st.session_state.setdefault(action_key, None)
 
-    if submitted_key not in st.session_state:
-        st.session_state[submitted_key] = default_query
-
-    if action_key not in st.session_state:
-        st.session_state[action_key] = None
-
-    # Header
     st.markdown("""
     <div class="panel ai-panel">
       <div class="ai-head">
         <div class="robot">🤖</div>
         <div>
           <div class="panel-title">HPE AI Assistant <span class="beta">BETA</span></div>
-          <div class="panel-sub">Get instant answers from HPE documentation.</div>
+          <div class="panel-sub">Ask a question. Choose the closest result. Get the exact answer.</div>
         </div>
         <div class="powered">✦ Powered by HPE Knowledge</div>
       </div>
     """, unsafe_allow_html=True)
 
-    # REAL question input. Enter or the arrow submits the form.
     with st.form(f"{key_prefix}_question_form", clear_on_submit=False):
         c1, c2 = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
         with c1:
@@ -1515,7 +1591,7 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
                 key=q_key,
                 placeholder="Ask a question...",
                 label_visibility="collapsed",
-                help="Type your question and press Enter, or select the arrow to submit.",
+                help="Type your question and press Enter, or select the arrow to submit."
             )
         with c2:
             submit = st.form_submit_button("→", use_container_width=True)
@@ -1524,166 +1600,151 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
         value = st.session_state[q_key].strip()
         if value:
             st.session_state[submitted_key] = value
+            st.session_state[selected_key] = None
             st.session_state[action_key] = None
             st.session_state.global_query = value
             st.rerun()
 
     query = st.session_state[submitted_key].strip()
     records, docs = search(query, family=family, limit=6)
-    best = records[0] if records else None
 
-    if not best and docs:
-        # PDF-only result: give the user a useful extract instead of a dead card.
+    if not records and docs:
         d = docs[0]
-        excerpt = d["content"][:900].replace("\n", " ")
-        best = {
+        excerpt = d["content"][:1200].replace("\n", " ")
+        records = [{
             "kb_id": f"DOC-{d['id']}",
             "family": d["family"],
             "topic": d["topic"],
             "question": query,
-            "answer": excerpt + ("…" if len(d["content"]) > 900 else ""),
+            "answer": excerpt + ("…" if len(d["content"]) > 1200 else ""),
             "steps": "",
             "keywords": query,
-        }
+            "source": d["title"],
+        }]
 
-    if not best:
+    if not records:
         st.warning(
-            "No matching knowledge was found. Try the product name, feature, "
-            "model, version, or exact error message."
+            "I couldn't find a confident answer. Try adding the product name, "
+            "feature, model, version, or exact error message."
         )
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    # User question + exact answer
+    options = records[:3]
+    selected_id = st.session_state.get(selected_key)
+    selected = next((r for r in options if r["kb_id"] == selected_id), None)
+
+    if len(options) > 1 and selected is None:
+        st.markdown(
+            '<div class="chatbot-prompt">I found these possible answers. Choose the one that best matches your question:</div>',
+            unsafe_allow_html=True
+        )
+        for i, r in enumerate(options):
+            if st.button(
+                r["question"],
+                key=f"{key_prefix}_option_{i}_{r['kb_id']}",
+                use_container_width=True
+            ):
+                st.session_state[selected_key] = r["kb_id"]
+                st.session_state[action_key] = None
+                st.rerun()
+        selected = options[0]
+    else:
+        selected = selected or options[0]
+
     st.markdown(
         f"""
         <div class="user-msg">♙ &nbsp; {eh(query)}</div>
         <div class="ai-answer">
-          <b>Here is the most relevant answer from HPE Knowledge:</b><br><br>
-          {eh(best['answer'])}
+          <div class="exact-answer-label">EXACT ANSWER</div>
+          {eh(selected['answer'])}
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # Action buttons are actual buttons.
+    if len(options) > 1:
+        others = [r for r in options if r["kb_id"] != selected["kb_id"]]
+        st.markdown(
+            '<div class="chatbot-related-label">Other relevant answers</div>',
+            unsafe_allow_html=True
+        )
+        other_cols = st.columns(min(2, len(others)), gap="small")
+        for j, r in enumerate(others):
+            with other_cols[j % len(other_cols)]:
+                if st.button(
+                    f"View: {r['question']}",
+                    key=f"{key_prefix}_alt_{j}_{r['kb_id']}",
+                    use_container_width=True
+                ):
+                    st.session_state[selected_key] = r["kb_id"]
+                    st.session_state[action_key] = None
+                    st.rerun()
+
     a1, a2, a3 = st.columns(3, gap="small")
     with a1:
-        if st.button("✦ Summarize this document", key=f"{key_prefix}_summary",
-                     use_container_width=True):
+        if st.button("✦ Summarize", key=f"{key_prefix}_summary", use_container_width=True):
             st.session_state[action_key] = "summary"
             st.rerun()
     with a2:
-        if st.button("⌕ Show troubleshooting steps", key=f"{key_prefix}_steps",
-                     use_container_width=True):
+        if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
             st.session_state[action_key] = "steps"
             st.rerun()
     with a3:
-        if st.button("▤ List related documents", key=f"{key_prefix}_related",
-                     use_container_width=True):
+        if st.button("▤ Related knowledge", key=f"{key_prefix}_related", use_container_width=True):
             st.session_state[action_key] = "related"
             st.rerun()
 
     action = st.session_state[action_key]
-
-    # The screenshot's numbered steps are shown by default when available.
-    show_steps = bool(best.get("steps")) and action in (None, "steps")
-
+    show_steps = bool(selected.get("steps")) and action in (None, "steps")
     if show_steps:
-        steps = (best["steps"] or "").splitlines()
-        for i, line in enumerate(steps, 1):
+        for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
             clean = re.sub(r"^\s*\d+\.\s*", "", line)
             st.markdown(
-                f"""
-                <div style="margin:3px 0 0 25px;">
-                  <div class="ai-step">
-                    <div class="ai-num">{i}</div>
-                    <div style="font-size:9px;color:#324e63;padding-top:3px;">
-                      {eh(clean)}
-                    </div>
-                  </div>
-                </div>
-                """,
+                f'<div class="ai-step"><div class="ai-num">{i}</div>'
+                f'<div style="font-size:9px;color:#324e63;padding-top:3px;">{eh(clean)}</div></div>',
                 unsafe_allow_html=True
             )
 
     if action == "summary":
-        summary = best["answer"]
         st.markdown(
-            f"""
-            <div class="ai-answer" style="margin-top:8px;">
-              <b>Document summary</b><br><br>{eh(summary)}
-            </div>
-            """,
+            f'<div class="ai-answer" style="margin-top:8px;"><b>Summary</b><br><br>{eh(selected["answer"])}</div>',
             unsafe_allow_html=True
         )
 
     if action == "related":
-        st.markdown(
-            '<div style="font-size:10px;font-weight:800;color:#173a56;margin:8px 0 4px 12px;">Related knowledge</div>',
-            unsafe_allow_html=True
-        )
-        for r in records[1:4]:
+        st.markdown('<div class="chatbot-related-label">Related knowledge</div>', unsafe_allow_html=True)
+        for r in records[1:5]:
             st.markdown(
-                f"""
-                <div class="ai-doc">
-                  <div class="pdf-icon">▤</div>
-                  <div style="flex:1;">
-                    <div style="font-size:9px;font-weight:800;color:#173a56;">
-                      {eh(r['question'])}
-                    </div>
-                    <div style="font-size:8px;color:#8a9aa5;">
-                      {eh(r['family'])} • {eh(r['topic'])} • {eh(r['kb_id'])}
-                    </div>
-                  </div>
-                </div>
-                """,
+                f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
+                f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(r["question"])}</div>'
+                f'<div style="font-size:8px;color:#8a9aa5;">{eh(r["family"])} • {eh(r["topic"])} • {eh(r["kb_id"])}</div>'
+                f'</div></div>',
                 unsafe_allow_html=True
             )
 
-    # Source card is functional: clicking View opens the indexed PDF.
     if docs:
         d = docs[0]
         st.markdown(
-            f"""
-            <div class="ai-doc">
-              <div class="pdf-icon">▤</div>
-              <div style="flex:1;">
-                <div style="font-size:9px;font-weight:800;color:#173a56;">
-                  {eh(d['title'])}
-                </div>
-                <div style="font-size:8px;color:#8a9aa5;">
-                  ⌁ PDF • Indexed • {eh(d['family'])}
-                </div>
-              </div>
-            </div>
-            """,
+            f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
+            f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(d["title"])}</div>'
+            f'<div style="font-size:8px;color:#8a9aa5;">⌁ PDF • Indexed • {eh(d["family"])}</div>'
+            f'</div></div>',
             unsafe_allow_html=True
         )
-        if st.button("↗ View source document", key=f"{key_prefix}_view_source",
-                     use_container_width=True):
+        if st.button("↗ View source document", key=f"{key_prefix}_view_source", use_container_width=True):
             st.session_state.selected_document = d["id"]
             st.session_state.view = "document"
             st.rerun()
     else:
         st.markdown(
-            f"""
-            <div class="ai-doc">
-              <div class="pdf-icon">▤</div>
-              <div style="flex:1;">
-                <div style="font-size:9px;font-weight:800;color:#173a56;">
-                  {eh(best['topic'])} — HPE Knowledge Article
-                </div>
-                <div style="font-size:8px;color:#8a9aa5;">
-                  AI Knowledge • {eh(best['kb_id'])}
-                </div>
-              </div>
-            </div>
-            """,
+            f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
+            f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(selected["topic"])} — HPE Knowledge Article</div>'
+            f'<div style="font-size:8px;color:#8a9aa5;">AI Knowledge • {eh(selected["kb_id"])}</div>'
+            f'</div></div>',
             unsafe_allow_html=True
         )
 
-    # Real follow-up form. It searches from the current answer context.
     with st.form(f"{key_prefix}_followup_form", clear_on_submit=True):
         f1, f2 = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
         with f1:
@@ -1691,7 +1752,7 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
                 "Follow-up question",
                 placeholder="Ask a follow-up question...",
                 label_visibility="collapsed",
-                help="Press Enter or select the arrow to submit your follow-up question.",
+                help="Press Enter or select the arrow to submit your follow-up question."
             )
         with f2:
             follow_submit = st.form_submit_button("→", use_container_width=True)
@@ -1699,11 +1760,13 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
     if follow_submit and follow.strip():
         st.session_state[q_key] = follow.strip()
         st.session_state[submitted_key] = follow.strip()
+        st.session_state[selected_key] = None
         st.session_state[action_key] = None
         st.session_state.global_query = follow.strip()
         st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
+
 
 
 def render_documents(docs):
@@ -1849,17 +1912,13 @@ def render_bottom_strip():
 def render_home():
     render_hero()
 
-    # The hero search and the AI Assistant are the same workflow.
-    # A submitted hero query is injected into the real AI Assistant card.
     query = st.session_state.get("global_query", "").strip()
     if query:
         st.session_state["home_ai_query"] = query
         st.session_state["home_ai_submitted"] = query
         st.session_state["home_ai_action"] = None
 
-    render_family_cards()
-
-    left, right = st.columns([1.02, .98], gap="small")
+    left, right = st.columns([1.72, 0.78], gap="medium")
 
     with left:
         render_ai_assistant(
@@ -1868,15 +1927,11 @@ def render_home():
         )
 
     with right:
-        # Deliberately empty: the product-family tiles are the primary
-        # navigation and Featured Documents / Popular Topics were removed
-        # because they duplicated those tiles.
-        st.markdown(
-            '<div style="height:0; min-height:0; padding:0; margin:0;"></div>',
-            unsafe_allow_html=True
-        )
+        render_family_cards()
 
     render_bottom_strip()
+
+
 
 
 # ============================================================
@@ -2398,8 +2453,6 @@ try:
 except Exception:
     pass
 
-# Fixed admin gear. Authentication happens through the Streamlit Secrets password.
-admin_login()
 
 if st.session_state.view == "home":
     render_home()
