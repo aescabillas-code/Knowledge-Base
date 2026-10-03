@@ -427,8 +427,42 @@ def db():
     return conn
 
 
+def _table_columns(conn, table_name):
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+
+def _ensure_column(conn, table_name, column_name, definition):
+    columns = _table_columns(conn, table_name)
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
 def init_db():
+    """
+    One-time database reset for the new Knowledge Base schema.
+
+    IMPORTANT:
+    - The old knowledge_base.db is deleted only once.
+    - A marker file prevents Streamlit reruns/reconnects from deleting
+      the newly created database again.
+    - Existing PDF files in knowledge_base_data/pdfs are NOT deleted.
+    - The fresh database is automatically recreated and seeded.
+    """
+    # Delete the OLD database only once.
+    # This prevents the database from being wiped on every Streamlit rerun.
+    if not RESET_MARKER.exists() and DB_PATH.exists():
+        try:
+            DB_PATH.unlink()
+        except PermissionError:
+            # Windows/local development: close any old SQLite connection
+            # before rerunning the application.
+            raise RuntimeError(
+                "The old knowledge_base.db could not be deleted because it "
+                "is currently in use. Stop the previous Streamlit process, "
+                "then start the app again."
+            )
+
     conn = db()
+
+    # Fresh schema for this version of the Knowledge Base.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -442,6 +476,7 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS kb_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -456,25 +491,54 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+
     conn.commit()
 
-    count = conn.execute("SELECT COUNT(*) AS c FROM kb_records").fetchone()["c"]
+    # Seed the new database with the built-in AI-ready knowledge.
+    count = conn.execute(
+        "SELECT COUNT(*) AS c FROM kb_records"
+    ).fetchone()["c"]
+
     if count == 0:
         now = datetime.now().isoformat(timespec="seconds")
+
         for r in SEED_KB:
             conn.execute("""
                 INSERT OR IGNORE INTO kb_records
                 (kb_id, family, topic, question, answer, steps, keywords, source, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                r["kb_id"], r["family"], r["topic"], r["question"],
-                r["answer"], r["steps"], r["keywords"], "Built-in AI Knowledge", now
+                r["kb_id"],
+                r["family"],
+                r["topic"],
+                r["question"],
+                r["answer"],
+                r["steps"],
+                r["keywords"],
+                "Built-in AI Knowledge",
+                now
             ))
+
         conn.commit()
+
     conn.close()
+
+    # Mark the one-time reset as complete AFTER the new database exists.
+    try:
+        RESET_MARKER.write_text(
+            "HPE Knowledge Base v2 database reset completed.\n",
+            encoding="utf-8"
+        )
+    except Exception:
+        # The app can still function if the marker cannot be written.
+        pass
 
 
 init_db()
+
+if "db_reset_notice" not in st.session_state:
+    st.session_state.db_reset_notice = RESET_MARKER.exists()
+
 
 
 # ============================================================
@@ -1004,12 +1068,51 @@ def load_records():
 
 
 def load_documents():
+    """Load documents from both the new schema and the previous KB schema.
+
+    The previous app stores PDF text in the chunks table instead of a content
+    column. This compatibility layer reconstructs the searchable text without
+    deleting or rebuilding the user's existing database.
+    """
     conn = db()
-    rows = conn.execute(
-        "SELECT id, title, filename, family, topic, source_url, content, doc_type, created_at FROM documents ORDER BY id DESC"
-    ).fetchall()
+    columns = _table_columns(conn, "documents")
+
+    if {"title", "filename", "family", "topic", "source_url", "content", "doc_type", "created_at"}.issubset(columns):
+        rows = conn.execute(
+            "SELECT id, title, filename, family, topic, source_url, content, doc_type, created_at FROM documents ORDER BY id DESC"
+        ).fetchall()
+        result = [dict(r) for r in rows]
+    else:
+        # Legacy database from the earlier Knowledge Base script.
+        rows = conn.execute("SELECT * FROM documents ORDER BY id DESC").fetchall()
+        result = []
+        chunk_columns = _table_columns(conn, "chunks") if "chunks" in {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()} else set()
+        for row in rows:
+            d = dict(row)
+            doc_id = d.get("id")
+            content = ""
+            if "chunks" in chunk_columns or chunk_columns:
+                try:
+                    chunk_rows = conn.execute(
+                        "SELECT text FROM chunks WHERE document_id=? ORDER BY page_number, chunk_index",
+                        (doc_id,)
+                    ).fetchall()
+                    content = "\n\n".join((x[0] or "") for x in chunk_rows)
+                except sqlite3.Error:
+                    content = ""
+            result.append({
+                "id": doc_id,
+                "title": d.get("title") or d.get("filename") or "Untitled document",
+                "filename": d.get("filename") or "",
+                "family": d.get("family") or d.get("category") or "Services & Support",
+                "topic": d.get("topic") or d.get("category") or "General",
+                "source_url": d.get("source_url") or "",
+                "content": d.get("content") or content,
+                "doc_type": d.get("doc_type") or "PDF",
+                "created_at": d.get("created_at") or d.get("uploaded_at") or "",
+            })
     conn.close()
-    return [dict(r) for r in rows]
+    return result
 
 
 def all_search_text(r):
@@ -1110,38 +1213,84 @@ def save_uploaded_pdf(uploaded_file, family, topic):
     if fitz is None:
         return False, "PyMuPDF is not installed. Install pymupdf first."
 
+    import hashlib
     safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", uploaded_file.name)
     path = PDF_DIR / safe_name
-    path.write_bytes(uploaded_file.getbuffer())
+    raw = uploaded_file.getvalue()
+    path.write_bytes(raw)
+    file_hash = hashlib.sha256(raw).hexdigest()
 
     try:
         pdf = fitz.open(path)
-        text_parts = []
-        for page in pdf:
-            text_parts.append(page.get_text("text"))
-        content = "\n".join(text_parts).strip()
+        pages = [page.get_text("text") for page in pdf]
+        content = "\n\n".join(pages).strip()
+        page_count = len(pages)
         pdf.close()
 
         conn = db()
-        conn.execute("""
-            INSERT INTO documents
-            (title, filename, family, topic, source_url, content, doc_type, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            uploaded_file.name.rsplit(".", 1)[0],
-            uploaded_file.name,
-            family,
-            topic,
-            "",
-            content,
-            "PDF",
-            datetime.now().isoformat(timespec="seconds")
-        ))
+        columns = _table_columns(conn, "documents")
+        now = datetime.now().isoformat(timespec="seconds")
+
+        # If the existing database is the legacy Knowledge Base database,
+        # preserve its required fields and also populate the new metadata.
+        if "stored_path" in columns and "file_hash" in columns:
+            try:
+                cur = conn.execute("""
+                    INSERT INTO documents
+                    (filename, stored_path, file_hash, category, page_count, file_size, uploaded_at, indexed_at, status, title, family, topic, source_url, content, doc_type, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    uploaded_file.name, str(path), file_hash, family, page_count, len(raw),
+                    now, now, "Indexed", uploaded_file.name.rsplit(".",1)[0],
+                    family, topic or "General", "", content, "PDF", now
+                ))
+            except sqlite3.IntegrityError:
+                # Same file already exists; update its searchable metadata instead.
+                conn.execute("""
+                    UPDATE documents SET category=?, page_count=?, file_size=?,
+                    indexed_at=?, status=?, title=?, family=?, topic=?, content=?, doc_type=?, created_at=?
+                    WHERE file_hash=?
+                """, (
+                    family, page_count, len(raw), now, "Indexed",
+                    uploaded_file.name.rsplit(".",1)[0], family, topic or "General",
+                    content, "PDF", now, file_hash
+                ))
+                cur = conn.execute("SELECT id FROM documents WHERE file_hash=?", (file_hash,))
+
+            document_id = cur.lastrowid
+            if not document_id:
+                document_id = conn.execute("SELECT id FROM documents WHERE file_hash=?", (file_hash,)).fetchone()[0]
+
+            # Re-index chunks so the legacy application and this UI can both use the PDF.
+            if "chunks" in {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+                conn.execute("DELETE FROM chunks WHERE document_id=?", (document_id,))
+                for page_no, page_text in enumerate(pages, 1):
+                    chunks = [page_text[i:i+2200] for i in range(0, len(page_text), 2200)] or [""]
+                    for idx, chunk in enumerate(chunks):
+                        conn.execute(
+                            "INSERT INTO chunks(document_id,page_number,chunk_index,text) VALUES (?,?,?,?)",
+                            (document_id, page_no, idx, chunk)
+                        )
+        else:
+            cur = conn.execute("""
+                INSERT INTO documents
+                (title, filename, family, topic, source_url, content, doc_type, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                uploaded_file.name.rsplit(".",1)[0], uploaded_file.name, family,
+                topic or "General", "", content, "PDF", now
+            ))
+
         conn.commit()
         conn.close()
         st.cache_data.clear()
         return True, f"Indexed {uploaded_file.name}"
     except Exception as e:
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
         return False, str(e)
 
 
