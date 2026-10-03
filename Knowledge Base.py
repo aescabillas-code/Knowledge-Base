@@ -715,49 +715,17 @@ div[data-testid="stToolbar"] { display:none !important; }
   margin-bottom:13px;
 }
 
-.hero-search {
-  max-width:820px;
-  margin:auto;
-}
+.hero-search { max-width:820px; margin:auto; }
 
-div[data-testid="stTextInput"] { margin:0 !important; }
-div[data-testid="stTextInput"] label { display:none !important; }
-div[data-testid="stTextInput"] input {
-  height:52px !important;
-  border-radius:28px !important;
-  border:2px solid rgba(0,205,190,.38) !important;
-  background:#fff !important;
-  color:#36526a !important;
-  font-size:14px !important;
-  padding:0 48px 0 42px !important;
-  box-shadow:0 7px 20px rgba(0,30,50,.15) !important;
-}
-
-.hero-search-icon {
-  position:absolute;
-  z-index:5;
-  margin:15px 0 0 17px;
-  color:#153b59;
-  font-size:22px;
-}
-
-.try {
-  margin-top:9px;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  gap:7px;
-  color:#e3f5f5;
-  font-size:9px;
-}
-
-.try-chip {
-  padding:6px 12px;
-  border:1px solid rgba(255,255,255,.32);
-  border-radius:18px;
-  background:rgba(255,255,255,.10);
-  color:white;
-}
+.st-key-hero_search_area { position:relative; z-index:20; margin:-102px auto 8px !important; max-width:830px; }
+.st-key-hero_search_area form { background:transparent !important; border:0 !important; padding:0 !important; }
+.st-key-hero_search_area div[data-testid="stTextInput"] { margin:0 !important; }
+.st-key-hero_search_area div[data-testid="stTextInput"] label { display:none !important; }
+.st-key-hero_search_area div[data-testid="stTextInput"] input { height:54px !important; border-radius:29px !important; border:2px solid rgba(0,205,190,.40) !important; background:#fff !important; color:#36526a !important; font-size:14px !important; padding:0 20px 0 22px !important; box-shadow:0 7px 20px rgba(0,30,50,.20) !important; }
+.st-key-hero_search_area div[data-testid="stFormSubmitButton"] button { width:52px !important; height:52px !important; min-height:52px !important; padding:0 !important; margin-top:0 !important; border-radius:50% !important; border:0 !important; background:#08bca3 !important; color:white !important; box-shadow:0 4px 12px rgba(0,160,140,.25) !important; font-size:25px !important; line-height:1 !important; }
+.st-key-hero_search_area .try-label { text-align:left; display:inline-block; color:#e5f6f5; font-size:10px; font-weight:600; margin:6px 0 0; text-shadow:0 1px 3px rgba(0,0,0,.25); }
+.st-key-hero_search_area div[data-testid="stButton"] button { height:34px !important; min-height:34px !important; padding:3px 8px !important; margin-top:3px !important; border-radius:18px !important; border:1px solid rgba(255,255,255,.34) !important; background:rgba(255,255,255,.11) !important; color:white !important; font-size:9px !important; font-weight:500 !important; box-shadow:none !important; white-space:nowrap !important; }
+.st-key-hero_search_area div[data-testid="stButton"] button:hover { background:rgba(255,255,255,.20) !important; border-color:rgba(255,255,255,.60) !important; }
 
 .hero-right {
   text-align:right;
@@ -1281,24 +1249,9 @@ div.stButton > button {
   padding:2px 8px !important;
 }
 
-@media (max-width: 1100px) {
-  .hero-grid { grid-template-columns:160px 1fr 120px; }
-  .hero-title { font-size:34px; }
-  .family-card { height:145px; }
-  .main-grid { grid-template-columns:1fr; }
-}
-
-@media (max-width: 800px) {
-  .hero { height:auto; min-height:350px; }
-  .hero-grid { grid-template-columns:1fr; }
-  .hero-right { display:none; }
-  .brand { text-align:center; }
-  .brand-rule { margin-left:auto;margin-right:auto; }
-  .hero-title { margin-top:10px; }
-  .family-row { grid-template-columns:repeat(2,1fr); }
-  .doc-grid { grid-template-columns:repeat(2,1fr); }
-  .topic-grid { grid-template-columns:1fr; }
-}
+@media (max-width:1100px){ .hero-grid{grid-template-columns:170px 1fr 120px}.hero-title{font-size:35px;line-height:40px}.hero-sub{font-size:13px}.family-card{height:145px}.main-grid{grid-template-columns:1fr}.st-key-hero_search_area{max-width:760px}.st-key-hero_search_area div[data-testid="stButton"] button{font-size:8px !important} }
+@media (max-width:800px){ .block-container{padding:0 10px 14px !important}.hero{height:340px;min-height:340px;margin:0 -10px;padding:14px 16px 12px}.hero-grid{grid-template-columns:1fr;height:auto;text-align:center}.brand{text-align:center}.hpe-logo{margin-left:auto;margin-right:auto}.brand-rule{margin-left:auto;margin-right:auto}.brand-copy{font-size:9px}.hero-center{margin-top:14px}.hero-title{font-size:29px;line-height:33px;letter-spacing:-1px;padding:0 8px}.hero-sub{font-size:11px;line-height:15px;padding:0 15px;margin-top:5px}.hero-right{display:none}.st-key-hero_search_area{width:calc(100% - 20px) !important;max-width:none !important;margin:-110px auto 10px !important}.st-key-hero_search_area div[data-testid="stTextInput"] input{height:50px !important;font-size:12px !important;padding:0 13px !important}.st-key-hero_search_area div[data-testid="stFormSubmitButton"] button{width:48px !important;height:48px !important;min-height:48px !important;font-size:22px !important}.st-key-hero_search_area .try-label{display:block;text-align:center;margin-top:7px;font-size:9px}.st-key-hero_search_area div[data-testid="stHorizontalBlock"]{gap:4px !important}.st-key-hero_search_area div[data-testid="stButton"] button{height:auto !important;min-height:31px !important;font-size:7px !important;padding:4px !important;white-space:normal !important;line-height:9px !important}.family-card{height:142px}.doc-grid{grid-template-columns:repeat(2,1fr)}.topic-grid{grid-template-columns:1fr}.main-grid{display:block}.panel{padding:12px;border-radius:14px}.bottom-strip{grid-template-columns:repeat(2,1fr);height:auto;padding:7px 0}.stat{min-height:48px;border-right:0}.stat:last-child{grid-column:1 / -1} }
+@media (max-width:480px){ .hero{height:360px;min-height:360px}.hero-title{font-size:25px;line-height:29px}.hero-sub{font-size:10px}.st-key-hero_search_area{margin-top:-116px !important}.family-card{height:136px;padding:11px 10px}.family-name{font-size:14px}.family-desc{font-size:9px;line-height:12px}.family-icon{width:34px;height:34px;font-size:18px}.doc-grid{grid-template-columns:1fr}.topic-grid{grid-template-columns:1fr} }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1321,33 +1274,10 @@ def render_hero():
           <div class="brand-rule"></div>
           <div class="brand-copy">Find answers. Solve faster.<br>Power your support with HPE knowledge.</div>
         </div>
-
         <div class="hero-center">
           <div class="hero-title">How can we help you <span>today?</span></div>
           <div class="hero-sub">Search HPE documentation, guides, and solutions with AI.</div>
-          <div class="hero-search">
-            <div class="hero-search-icon">⌕</div>
-    """, unsafe_allow_html=True)
-
-    st.text_input(
-        "Global search",
-        placeholder="Ask a question or search for a document...",
-        key="global_query",
-        label_visibility="collapsed",
-    )
-
-    st.markdown("""
-          </div>
-          <div class="try">
-            <b>Try asking:</b>
-            <span class="try-chip">How to renew a license?</span>
-            <span class="try-chip">ClearPass troubleshooting</span>
-            <span class="try-chip">iLO configuration</span>
-            <span class="try-chip">Aruba switch setup</span>
-            <span class="try-chip">Gen11 firmware update</span>
-          </div>
         </div>
-
         <div class="hero-right">
           Accelerating<br>what's next<br><span class="next">together</span>
           <div class="dash">—</div>
@@ -1355,6 +1285,27 @@ def render_hero():
       </div>
     </div>
     """, unsafe_allow_html=True)
+
+    with st.container(key="hero_search_area"):
+        with st.form("hero_search_form", clear_on_submit=False):
+            c1, c2 = st.columns([0.93, 0.07], gap="small", vertical_alignment="center")
+            with c1:
+                st.text_input("Global search", placeholder="Ask a question or search for a document...", key="global_query", label_visibility="collapsed")
+            with c2:
+                submitted = st.form_submit_button("→", use_container_width=True)
+        if submitted:
+            st.session_state.view = "home"
+            st.rerun()
+
+        st.markdown('<div class="try-label">Try asking:</div>', unsafe_allow_html=True)
+        chips = ["How to renew a license?", "ClearPass troubleshooting", "iLO configuration", "Aruba switch setup", "Gen11 firmware update"]
+        chip_cols = st.columns(5, gap="small")
+        for i, chip in enumerate(chips):
+            with chip_cols[i]:
+                if st.button(chip, key=f"hero_chip_{i}", use_container_width=True):
+                    st.session_state.global_query = chip
+                    st.session_state.view = "home"
+                    st.rerun()
 
 
 def open_group(group):
