@@ -1723,6 +1723,87 @@ div.stButton > button {
   .exact-answer { margin-left:0; }
   .exact-answer-body { font-size:11px; line-height:1.6; }
 }
+
+/* ============================================================
+   EXACT ANSWER / AI RESPONSE — READABLE REFERENCE SCALE
+   Keep the typography visually consistent across the entire
+   answer section shown in the supplied reference image.
+   ============================================================ */
+.st-key-home_ai_exact_answer_box .user-msg,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .user-msg {
+  font-size:10px !important;
+  line-height:1.5 !important;
+}
+.st-key-home_ai_exact_answer_box .msg-label,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .msg-label {
+  font-size:8px !important;
+}
+.st-key-home_ai_exact_answer_box .exact-answer-label,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .exact-answer-label {
+  font-size:9px !important;
+}
+.st-key-home_ai_exact_answer_box .exact-answer-title,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .exact-answer-title {
+  font-size:10px !important;
+  line-height:1.35 !important;
+}
+.st-key-home_ai_exact_answer_box .exact-answer-body,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .exact-answer-body {
+  font-size:11px !important;
+  line-height:1.6 !important;
+}
+.st-key-home_ai_exact_answer_box .exact-section-title,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .exact-section-title {
+  font-size:9px !important;
+  line-height:1.4 !important;
+}
+.st-key-home_ai_exact_answer_box .summary-paragraph,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .summary-paragraph {
+  font-size:10px !important;
+  line-height:1.6 !important;
+}
+.st-key-home_ai_exact_answer_box .summary-subtitle,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .summary-subtitle {
+  font-size:10px !important;
+}
+.st-key-home_ai_exact_answer_box .summary-bullet,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .summary-bullet {
+  font-size:10px !important;
+  line-height:1.5 !important;
+}
+.st-key-home_ai_exact_answer_box .ai-step,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-step {
+  font-size:10px !important;
+}
+.st-key-home_ai_exact_answer_box .ai-step > div:last-child,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-step > div:last-child {
+  font-size:10px !important;
+  line-height:1.5 !important;
+}
+.st-key-home_ai_exact_answer_box .ai-num,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-num {
+  font-size:9px !important;
+}
+.st-key-home_ai_exact_answer_box .ai-doc,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-doc {
+  font-size:10px !important;
+}
+.st-key-home_ai_exact_answer_box .ai-doc div[style*="font-size:9px"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-doc div[style*="font-size:9px"] {
+  font-size:10px !important;
+}
+.st-key-home_ai_exact_answer_box .ai-doc div[style*="font-size:8px"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-doc div[style*="font-size:8px"] {
+  font-size:9px !important;
+}
+
+/* Keep the three action controls readable without making them oversized. */
+.st-key-home_ai_exact_answer_box ~ div div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] ~ div div[data-testid="stButton"] button {
+  font-size:10px !important;
+  min-height:30px !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
