@@ -879,12 +879,12 @@ div[data-testid="stToolbar"] { display:none !important; }
   flex:1;
 }
 .family-card-compact .family-name {
-  font-size:12px !important;
-  line-height:14px !important;
+  font-size:13px !important;
+  line-height:16px !important;
 }
 .family-card-compact .family-desc {
-  font-size:8px !important;
-  line-height:10px !important;
+  font-size:9px !important;
+  line-height:11px !important;
   margin-top:2px !important;
   padding-right:0 !important;
   white-space:nowrap;
@@ -1189,8 +1189,34 @@ div[data-testid="stToolbar"] { display:none !important; }
   gap:8px;
 }
 
+.topic-link {
+  display:block;
+  text-decoration:none !important;
+  color:inherit !important;
+  -webkit-tap-highlight-color:transparent;
+  margin-bottom:8px;
+}
+.topic-link:hover,
+.topic-link:focus,
+.topic-link:active {
+  text-decoration:none !important;
+  color:inherit !important;
+}
+.topic-link .topic-card {
+  cursor:pointer;
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.topic-link:hover .topic-card {
+  transform:translateY(-1px);
+  border-color:#9edfd8;
+  box-shadow:0 6px 18px rgba(0,150,135,.12);
+}
+.topic-link:focus-visible .topic-card {
+  outline:3px solid rgba(0,191,165,.28);
+  outline-offset:2px;
+}
 .topic-card {
-  min-height:49px;
+  min-height:58px;
   border:1px solid #dbe7ec;
   background:white;
   border-radius:9px;
@@ -1213,13 +1239,13 @@ div[data-testid="stToolbar"] { display:none !important; }
 
 .topic-name {
   color:#173a56;
-  font-size:9px;
+  font-size:12px;
   font-weight:700;
 }
 
 .topic-count {
-  color:#91a0aa;
-  font-size:7px;
+  color:#7b8f9d;
+  font-size:9px;
   margin-top:1px;
 }
 
@@ -1305,6 +1331,7 @@ div[data-testid="stToolbar"] { display:none !important; }
   border-radius:12px;
   padding:12px;
   margin-bottom:9px;
+  font-size:12px !important;
 }
 
 .source-card {
@@ -1432,11 +1459,11 @@ div.stButton > button {
 }
 .exact-answer-label {
   display:inline-block;
-  margin-bottom:6px;
+  margin-bottom:7px;
   color:#008f7b;
-  font-size:8px;
+  font-size:10px;
   font-weight:800;
-  letter-spacing:.5px;
+  letter-spacing:.6px;
 }
 
 
@@ -1635,28 +1662,28 @@ div.stButton > button {
 }
 .exact-answer-body {
   color:#243f55;
-  font-size:11px;
+  font-size:13px;
   line-height:1.65;
   white-space:normal;
 }
 .summary-paragraph {
   color:#243f55;
-  font-size:10px;
+  font-size:12px;
   line-height:1.7;
   margin:0 0 8px;
   padding:0;
 }
 .summary-subtitle {
   color:#173a56;
-  font-size:9px;
+  font-size:11px;
   font-weight:800;
   margin:8px 0 4px;
 }
 .summary-bullet {
   display:flex;
-  gap:7px;
+  gap:8px;
   color:#324e63;
-  font-size:9px;
+  font-size:11px;
   line-height:1.5;
   margin:4px 0;
 }
@@ -2226,58 +2253,38 @@ def render_group():
         unsafe_allow_html=True
     )
 
-    # If a topic was selected from Popular Topics, focus it.
-    selected_topic = st.session_state.get("selected_topic")
-
-    st.markdown(
-        f"""
-        <div class="panel" style="margin-bottom:10px;">
-          <div class="panel-title">Product Families</div>
-          <div class="panel-sub">All major HPE and Aruba products mapped to this product group.</div>
-          <div style="height:8px"></div>
-          <div class="topic-grid">
-        """,
-        unsafe_allow_html=True
-    )
-
-    for product in data["products"]:
-        st.markdown(
-            f"""
-            <div class="topic-directory">
-              <div style="font-size:10px;font-weight:800;color:#153954;">{eh(product)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    st.markdown("</div></div>", unsafe_allow_html=True)
-
+    # Product directory cards were intentionally removed from this page.
+    # Topics are the primary drill-down navigation and each tile is clickable.
     st.markdown("""
     <div class="panel" style="margin-bottom:10px;">
       <div class="panel-title">Topics & Solutions</div>
-      <div class="panel-sub">Click a topic to view its related AI answers and sources.</div>
+      <div class="panel-sub">Select a topic to view its related AI answers and sources.</div>
       <div style="height:8px"></div>
     """, unsafe_allow_html=True)
 
+    from urllib.parse import quote
     topic_cols = st.columns(3, gap="small")
+    family_param = quote(group, safe="")
     for i, topic in enumerate(data["topics"]):
         with topic_cols[i % 3]:
+            topic_param = quote(topic, safe="")
             st.markdown(
                 f"""
-                <div class="topic-card">
-                  <div class="topic-icon">{eh(data['icon'])}</div>
-                  <div style="flex:1">
-                    <div class="topic-name">{eh(topic)}</div>
-                    <div class="topic-count">View related knowledge</div>
+                <a class="topic-link"
+                   href="?family={family_param}&topic={topic_param}"
+                   aria-label="Open {eh(topic)}">
+                  <div class="topic-card">
+                    <div class="topic-icon">{eh(data['icon'])}</div>
+                    <div style="flex:1;min-width:0">
+                      <div class="topic-name">{eh(topic)}</div>
+                      <div class="topic-count">View related knowledge</div>
+                    </div>
+                    <div style="color:#6b8191;font-size:18px;line-height:1;">›</div>
                   </div>
-                  <div style="color:#6b8191;">›</div>
-                </div>
+                </a>
                 """,
                 unsafe_allow_html=True
             )
-            if st.button("Open", key=f"group_topic_{group}_{i}", use_container_width=True):
-                st.session_state.selected_topic = topic
-                st.session_state.view = "topic"
-                st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2703,12 +2710,19 @@ for key, default in [
 # Query parameters are used for tile navigation and as a fallback admin route.
 try:
     family_param = st.query_params.get("family")
+    topic_param = st.query_params.get("topic")
     if family_param:
-        decoded_family = str(family_param).replace("%26", "&").replace("+", " ")
+        from urllib.parse import unquote_plus
+        decoded_family = unquote_plus(str(family_param))
+        decoded_topic = unquote_plus(str(topic_param)) if topic_param else None
         if decoded_family in PRODUCT_GROUPS:
             st.session_state.selected_group = decoded_family
-            st.session_state.selected_topic = None
-            st.session_state.view = "group"
+            if decoded_topic and decoded_topic in PRODUCT_GROUPS[decoded_family]["topics"]:
+                st.session_state.selected_topic = decoded_topic
+                st.session_state.view = "topic"
+            else:
+                st.session_state.selected_topic = None
+                st.session_state.view = "group"
 
     if str(st.query_params.get("admin","")).lower() in {"1","true","yes"}:
         if st.session_state.get("admin_authenticated"):
