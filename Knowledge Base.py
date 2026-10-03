@@ -1354,30 +1354,60 @@ div.stButton > button {
    No standalone "Ask this question" button is rendered. */
 
 
-/* Admin gear: inside the teal hero, above Accelerating text. */
+/* Admin gear: visually anchored INSIDE the dark-teal hero, directly above
+   the “Accelerating what's next together” message. The Streamlit popover
+   remains the real accessible/password-protected control. */
 .st-key-hero_admin_gear {
   position:absolute !important;
-  top:17px !important;
-  right:29px !important;
+  top:18px !important;
+  right:18px !important;
+  width:48px !important;
+  min-width:48px !important;
+  max-width:48px !important;
+  height:48px !important;
+  margin:0 !important;
+  padding:0 !important;
   z-index:1000 !important;
 }
-.st-key-hero_admin_gear div[data-testid="stPopover"] > button {
-  width:36px !important;
-  height:36px !important;
-  min-height:36px !important;
-  border-radius:50% !important;
+.st-key-hero_admin_gear > div,
+.st-key-hero_admin_gear [data-testid="stVerticalBlock"] {
+  width:48px !important;
+  min-width:48px !important;
   padding:0 !important;
+  margin:0 !important;
+}
+.st-key-hero_admin_gear div[data-testid="stPopover"] {
+  width:48px !important;
+}
+.st-key-hero_admin_gear div[data-testid="stPopover"] > button {
+  width:46px !important;
+  height:46px !important;
+  min-width:46px !important;
+  min-height:46px !important;
+  padding:0 !important;
+  margin:0 !important;
+  border-radius:50% !important;
   background:#00bfa5 !important;
-  border:1px solid rgba(0,236,213,.65) !important;
+  border:2px solid rgba(0,238,216,.72) !important;
   color:#ffffff !important;
-  box-shadow:0 3px 12px rgba(0,0,0,.20) !important;
-  font-size:22px !important;
+  box-shadow:0 4px 14px rgba(0,0,0,.25) !important;
+  font-size:25px !important;
+  line-height:1 !important;
   cursor:pointer !important;
 }
 .st-key-hero_admin_gear div[data-testid="stPopover"] > button:hover,
-.st-key-hero_admin_gear div[data-testid="stPopover"] > button:focus {
+.st-key-hero_admin_gear div[data-testid="stPopover"] > button:focus-visible {
   background:#00d7bd !important;
+  border-color:#55f2df !important;
   color:#ffffff !important;
+  outline:3px solid rgba(0,230,210,.28) !important;
+  outline-offset:3px !important;
+}
+.st-key-hero_admin_gear [data-testid="stPopoverBody"] {
+  right:0 !important;
+  left:auto !important;
+  top:54px !important;
+  z-index:2000 !important;
 }
 .ai-panel {
   min-height:0 !important;
@@ -1429,7 +1459,7 @@ div.stButton > button {
 
 
 
-/* Functional family tiles: the Streamlit button is the actual navigation target. */
+/* Functional family tiles: compact tiles with LARGE icons, not large tiles. */
 .st-key-family_tile_0,
 .st-key-family_tile_1,
 .st-key-family_tile_2,
@@ -1437,55 +1467,130 @@ div.stButton > button {
 .st-key-family_tile_4,
 .st-key-family_tile_5 {
   position:relative !important;
+  margin:0 !important;
+  padding:0 !important;
 }
-[class*="st-key-family_tile_btn_"] button {
-  height:86px !important;
-  min-height:86px !important;
-  border-radius:15px !important;
-  border:1px solid #d5e4ea !important;
-  background:rgba(255,255,255,.94) !important;
-  color:#0a3154 !important;
-  text-align:left !important;
-  font-size:15px !important;
-  font-weight:800 !important;
-  padding:16px 48px 16px 18px !important;
-  box-shadow:0 5px 18px rgba(36,76,92,.07) !important;
-  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease !important;
-}
-[class*="st-key-family_tile_btn_"] button:hover {
-  transform:translateX(-2px) !important;
-  border-color:#8ed8cf !important;
-  box-shadow:0 9px 24px rgba(0,150,135,.15) !important;
-}
-[class*="st-key-family_tile_btn_"] button:focus-visible {
-  outline:3px solid rgba(0,191,165,.32) !important;
-  outline-offset:2px !important;
-}
-.family-tile-description {
-  position:absolute;
-  left:19px;
-  right:52px;
-  top:49px;
-  pointer-events:none;
-  color:#536f82;
-  font-size:9px;
-  line-height:12px;
-}
-.family-tile-arrow {
-  position:absolute;
-  right:13px;
-  top:29px;
-  width:30px;
-  height:30px;
-  border-radius:50%;
+.st-key-family_tile_0 > div,
+.st-key-family_tile_1 > div,
+.st-key-family_tile_2 > div,
+.st-key-family_tile_3 > div,
+.st-key-family_tile_4 > div,
+.st-key-family_tile_5 > div { position:relative !important; }
+.family-tile-visual {
+  position:relative;
+  height:60px;
+  min-height:60px;
+  width:100%;
+  border:1px solid #d5e4ea;
+  border-radius:12px;
+  background:rgba(255,255,255,.95);
+  box-shadow:0 4px 14px rgba(36,76,92,.06);
   display:flex;
   align-items:center;
-  justify-content:center;
-  font-size:17px;
-  font-weight:800;
+  gap:12px;
+  padding:7px 42px 7px 12px;
   pointer-events:none;
 }
+.family-tile-visual .family-icon {
+  width:38px !important;
+  height:38px !important;
+  min-width:38px !important;
+  border-radius:10px !important;
+  margin:0 !important;
+  font-size:24px !important;
+  line-height:1 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+}
+.family-tile-copy { min-width:0; flex:1; }
+.family-tile-visual .family-name {
+  font-size:13px !important;
+  line-height:16px !important;
+  font-weight:800 !important;
+  color:#0a3154 !important;
+}
+.family-tile-visual .family-desc {
+  margin-top:2px !important;
+  padding:0 !important;
+  font-size:8px !important;
+  line-height:10px !important;
+  color:#536f82 !important;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.family-tile-visual .family-arrow {
+  position:absolute !important;
+  right:11px !important;
+  top:17px !important;
+  width:27px !important;
+  height:27px !important;
+  border-radius:50% !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  font-size:16px !important;
+  font-weight:800 !important;
+}
+[class*="st-key-family_tile_btn_"] {
+  position:absolute !important;
+  inset:0 !important;
+  z-index:5 !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+[class*="st-key-family_tile_btn_"] button {
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:60px !important;
+  min-height:60px !important;
+  margin:0 !important;
+  padding:0 !important;
+  border-radius:12px !important;
+  border:2px solid transparent !important;
+  background:transparent !important;
+  color:transparent !important;
+  box-shadow:none !important;
+  font-size:0 !important;
+  line-height:0 !important;
+}
+[class*="st-key-family_tile_btn_"] button:hover {
+  background:rgba(0,191,165,.025) !important;
+  border-color:#8ed8cf !important;
+  box-shadow:0 7px 20px rgba(0,150,135,.10) !important;
+  transform:none !important;
+}
+[class*="st-key-family_tile_btn_"] button:focus-visible {
+  outline:3px solid rgba(0,191,165,.35) !important;
+  outline-offset:2px !important;
+}
+@media (max-width:800px) {
+  .family-tile-visual { height:60px; min-height:60px; padding:7px 39px 7px 10px; gap:10px; }
+  .family-tile-visual .family-icon { width:38px !important; height:38px !important; min-width:38px !important; font-size:24px !important; }
+  .family-tile-visual .family-name { font-size:12px !important; line-height:14px !important; }
+  .family-tile-visual .family-desc { font-size:7px !important; line-height:9px !important; }
+  [class*="st-key-family_tile_btn_"] button { height:60px !important; min-height:60px !important; }
+}
 
+.st-key-home_ai_exact_answer_box,
+[class*="st-key-answer_"][class*="_exact_answer_box"] {
+  margin:9px 0 8px 12px !important;
+  padding:0 14px 12px !important;
+  border:1px solid #cfe6e1 !important;
+  border-left:4px solid #00bfa5 !important;
+  border-radius:0 12px 12px 12px !important;
+  background:#f7fcfb !important;
+  box-shadow:0 2px 9px rgba(0,130,115,.04) !important;
+}
+.exact-section-title {
+  margin:12px 0 5px;
+  color:#008f7b;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.65px;
+}
 /* More readable exact answer presentation. */
 .exact-answer {
   margin:9px 0 8px 12px;
@@ -1545,22 +1650,18 @@ div.stButton > button {
 
 @media (max-width:800px) {
   .st-key-hero_admin_gear {
-    top:14px !important;
-    right:78px !important;
+    top:12px !important;
+    right:12px !important;
+    width:48px !important;
+    min-width:48px !important;
   }
   .st-key-hero_admin_gear div[data-testid="stPopover"] > button {
     width:44px !important;
     height:44px !important;
+    min-width:44px !important;
     min-height:44px !important;
-    font-size:21px !important;
+    font-size:23px !important;
   }
-  [class*="st-key-family_tile_btn_"] button {
-    height:76px !important;
-    min-height:76px !important;
-    font-size:14px !important;
-  }
-  .family-tile-description { top:45px; font-size:8px; }
-  .family-tile-arrow { top:23px; }
   .exact-answer { margin-left:0; }
   .exact-answer-body { font-size:11px; line-height:1.6; }
 }
@@ -1647,15 +1748,26 @@ def open_group(group):
 
 
 def render_family_cards():
-    """Render fully clickable product-family tiles that navigate inside this app."""
+    """Render compact in-app family tiles with large icons."""
     st.markdown(
         '<div class="family-stack-title">HPE & Aruba Product Families</div>',
         unsafe_allow_html=True
     )
     for i, (group, data) in enumerate(PRODUCT_GROUPS.items()):
         with st.container(key=f"family_tile_{i}"):
+            st.markdown(
+                f"""<div class="family-tile-visual">
+                    <div class="family-icon {data["class"]}">{data["icon"]}</div>
+                    <div class="family-tile-copy">
+                      <div class="family-name">{eh(group)}</div>
+                      <div class="family-desc">{eh(data["description"])}</div>
+                    </div>
+                    <div class="family-arrow arrow-{data["class"]}">→</div>
+                </div>""",
+                unsafe_allow_html=True
+            )
             if st.button(
-                f"{data['icon']}   {group}",
+                f"Open {group}",
                 key=f"family_tile_btn_{i}",
                 use_container_width=True,
                 help=f"Open {group}: products, topics, SOPs and sources"
@@ -1663,16 +1775,8 @@ def render_family_cards():
                 st.session_state.selected_group = group
                 st.session_state.selected_topic = None
                 st.session_state.view = "group"
-                try:
-                    st.query_params["family"] = group
-                except Exception:
-                    pass
+                st.query_params.clear()
                 st.rerun()
-            st.markdown(
-                f'<div class="family-tile-description">{eh(data["description"])}</div>'
-                f'<div class="family-tile-arrow arrow-{data["class"]}">→</div>',
-                unsafe_allow_html=True
-            )
 
 def answer_card(r):
     st.markdown(
@@ -1799,104 +1903,88 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
     else:
         selected = selected or options[0]
 
-    st.markdown(
-        f"""
-        <div class="user-msg"><span class="msg-label">QUESTION</span>{eh(query)}</div>
-        <div class="exact-answer">
-          <div class="exact-answer-header">
-            <span class="exact-answer-icon">✓</span>
-            <div>
-              <div class="exact-answer-label">EXACT ANSWER</div>
-              <div class="exact-answer-title">{eh(selected["topic"])}</div>
-            </div>
-          </div>
-          <div class="exact-answer-body">{eh(selected["answer"])}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    if len(options) > 1:
-        others = [r for r in options if r["kb_id"] != selected["kb_id"]]
+    # Keep the complete answer experience inside one bordered answer box.
+    with st.container(key=f"{key_prefix}_exact_answer_box"):
         st.markdown(
-            '<div class="chatbot-related-label">Other relevant answers</div>',
+            f"""
+            <div class="user-msg"><span class="msg-label">QUESTION</span>{eh(query)}</div>
+            <div class="exact-answer-header">
+              <span class="exact-answer-icon">✓</span>
+              <div>
+                <div class="exact-answer-label">EXACT ANSWER</div>
+                <div class="exact-answer-title">{eh(selected["topic"])}</div>
+              </div>
+            </div>
+            <div class="exact-answer-body">{eh(selected["answer"])}</div>
+            """,
             unsafe_allow_html=True
         )
-        other_cols = st.columns(min(2, len(others)), gap="small")
-        for j, r in enumerate(others):
-            with other_cols[j % len(other_cols)]:
-                if st.button(
-                    f"View: {r['question']}",
-                    key=f"{key_prefix}_alt_{j}_{r['kb_id']}",
-                    use_container_width=True
-                ):
-                    st.session_state[selected_key] = r["kb_id"]
-                    st.session_state[action_key] = None
-                    st.rerun()
 
-    a1, a2, a3 = st.columns(3, gap="small")
-    with a1:
-        if st.button("✦ Summarize", key=f"{key_prefix}_summary", use_container_width=True):
-            st.session_state[action_key] = "summary"
-            st.rerun()
-    with a2:
-        if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
-            st.session_state[action_key] = "steps"
-            st.rerun()
-    with a3:
-        if st.button("▤ Related knowledge", key=f"{key_prefix}_related", use_container_width=True):
-            st.session_state[action_key] = "related"
-            st.rerun()
+        a1, a2, a3 = st.columns(3, gap="small")
+        with a1:
+            if st.button("✦ Summarize", key=f"{key_prefix}_summary", use_container_width=True):
+                st.session_state[action_key] = "summary"
+                st.rerun()
+        with a2:
+            if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
+                st.session_state[action_key] = "steps"
+                st.rerun()
+        with a3:
+            if st.button("▤ Related knowledge", key=f"{key_prefix}_related", use_container_width=True):
+                st.session_state[action_key] = "related"
+                st.rerun()
 
-    action = st.session_state[action_key]
-    show_steps = bool(selected.get("steps")) and action in (None, "steps")
-    if show_steps:
-        for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
-            clean = re.sub(r"^\s*\d+\.\s*", "", line)
+        action = st.session_state[action_key]
+        show_steps = bool(selected.get("steps")) and action in (None, "steps")
+        if show_steps:
+            st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
+            for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
+                clean = re.sub(r"^\s*\d+\.\s*", "", line)
+                if clean.strip():
+                    st.markdown(
+                        f'<div class="ai-step"><div class="ai-num">{i}</div>'
+                        f'<div style="font-size:9px;color:#324e63;padding-top:3px;line-height:1.45;">{eh(clean)}</div></div>',
+                        unsafe_allow_html=True
+                    )
+
+        if action == "summary":
             st.markdown(
-                f'<div class="ai-step"><div class="ai-num">{i}</div>'
-                f'<div style="font-size:9px;color:#324e63;padding-top:3px;">{eh(clean)}</div></div>',
+                f'<div class="ai-answer" style="margin-top:8px;"><b>Summary</b><br><br>{eh(selected["answer"])}</div>',
                 unsafe_allow_html=True
             )
 
-    if action == "summary":
-        st.markdown(
-            f'<div class="ai-answer" style="margin-top:8px;"><b>Summary</b><br><br>{eh(selected["answer"])}</div>',
-            unsafe_allow_html=True
-        )
+        if action == "related":
+            st.markdown('<div class="chatbot-related-label">Related knowledge</div>', unsafe_allow_html=True)
+            for r in records[1:5]:
+                st.markdown(
+                    f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
+                    f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(r["question"])}</div>'
+                    f'<div style="font-size:8px;color:#8a9aa5;">{eh(r["family"])} • {eh(r["topic"])} • {eh(r["kb_id"])}</div>'
+                    f'</div></div>',
+                    unsafe_allow_html=True
+                )
 
-    if action == "related":
-        st.markdown('<div class="chatbot-related-label">Related knowledge</div>', unsafe_allow_html=True)
-        for r in records[1:5]:
+        if docs:
+            d = docs[0]
             st.markdown(
                 f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
-                f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(r["question"])}</div>'
-                f'<div style="font-size:8px;color:#8a9aa5;">{eh(r["family"])} • {eh(r["topic"])} • {eh(r["kb_id"])}</div>'
+                f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(d["title"])}</div>'
+                f'<div style="font-size:8px;color:#8a9aa5;">⌁ PDF • Indexed • {eh(d["family"])}</div>'
                 f'</div></div>',
                 unsafe_allow_html=True
             )
-
-    if docs:
-        d = docs[0]
-        st.markdown(
-            f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
-            f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(d["title"])}</div>'
-            f'<div style="font-size:8px;color:#8a9aa5;">⌁ PDF • Indexed • {eh(d["family"])}</div>'
-            f'</div></div>',
-            unsafe_allow_html=True
-        )
-        if st.button("↗ View source document", key=f"{key_prefix}_view_source", use_container_width=True):
-            st.session_state.selected_document = d["id"]
-            st.session_state.view = "document"
-            st.rerun()
-    else:
-        st.markdown(
-            f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
-            f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(selected["topic"])} — HPE Knowledge Article</div>'
-            f'<div style="font-size:8px;color:#8a9aa5;">AI Knowledge • {eh(selected["kb_id"])}</div>'
-            f'</div></div>',
-            unsafe_allow_html=True
-        )
+            if st.button("↗ View source document", key=f"{key_prefix}_view_source", use_container_width=True):
+                st.session_state.selected_document = d["id"]
+                st.session_state.view = "document"
+                st.rerun()
+        else:
+            st.markdown(
+                f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
+                f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(selected["topic"])} — HPE Knowledge Article</div>'
+                f'<div style="font-size:8px;color:#8a9aa5;">AI Knowledge • {eh(selected["kb_id"])}</div>'
+                f'</div></div>',
+                unsafe_allow_html=True
+            )
 
     # No follow-up input: the original question field remains the single active question entry.
 
