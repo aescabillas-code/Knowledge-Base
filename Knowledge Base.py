@@ -823,18 +823,37 @@ div[data-testid="stToolbar"] { display:none !important; }
 .arrow-slate{background:#e8eef3;color:#516c83}
 
 .family-click {
-  margin-top:-42px !important;
   position:relative;
-  z-index:10;
+  z-index:20;
+  height:0;
+}
+
+.family-click div.stButton {
+  position:relative !important;
+  top:-137px !important;
+  height:137px !important;
+  margin-bottom:-137px !important;
 }
 
 .family-click div.stButton > button {
-  height:44px !important;
-  min-height:44px !important;
+  height:137px !important;
+  min-height:137px !important;
+  width:100% !important;
   opacity:0 !important;
   cursor:pointer !important;
   border:0 !important;
   background:transparent !important;
+  padding:0 !important;
+  margin:0 !important;
+}
+
+.family-click div.stButton > button:hover,
+.family-click div.stButton > button:focus,
+.family-click div.stButton > button:active {
+  opacity:0 !important;
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
 }
 
 .main-grid {
@@ -852,6 +871,49 @@ div[data-testid="stToolbar"] { display:none !important; }
 }
 
 .ai-panel { min-height:405px; }
+
+.ai-panel div[data-testid="stTextInput"] {
+  margin:7px 0 4px !important;
+}
+.ai-panel div[data-testid="stTextInput"] input {
+  height:34px !important;
+  min-height:34px !important;
+  border-radius:9px !important;
+  border:1px solid #d7e4e8 !important;
+  background:#eef3f6 !important;
+  color:#243f55 !important;
+  font-size:10px !important;
+  padding:0 10px !important;
+  box-shadow:none !important;
+}
+.ai-panel div[data-testid="stFormSubmitButton"] button,
+.ai-panel button[kind="secondaryFormSubmit"] {
+  height:34px !important;
+  min-height:34px !important;
+  width:34px !important;
+  padding:0 !important;
+  border-radius:50% !important;
+  border:0 !important;
+  background:#08bda4 !important;
+  color:white !important;
+  font-size:15px !important;
+  font-weight:800 !important;
+}
+.ai-panel div[data-testid="stFormSubmitButton"] button:hover {
+  background:#009f8d !important;
+  color:white !important;
+}
+.ai-panel div[data-testid="stButton"] button {
+  min-height:26px !important;
+  padding:3px 7px !important;
+  border-radius:16px !important;
+  font-size:7.5px !important;
+  white-space:nowrap !important;
+}
+.ai-panel .stForm {
+  border:0 !important;
+  padding:0 !important;
+}
 .docs-panel { min-height:255px; }
 .topics-panel { min-height:139px; }
 
@@ -1252,6 +1314,10 @@ div.stButton > button {
 @media (max-width:1100px){ .hero-grid{grid-template-columns:170px 1fr 120px}.hero-title{font-size:35px;line-height:40px}.hero-sub{font-size:13px}.family-card{height:145px}.main-grid{grid-template-columns:1fr}.st-key-hero_search_area{max-width:760px}.st-key-hero_search_area div[data-testid="stButton"] button{font-size:8px !important} }
 @media (max-width:800px){ .block-container{padding:0 10px 14px !important}.hero{height:340px;min-height:340px;margin:0 -10px;padding:14px 16px 12px}.hero-grid{grid-template-columns:1fr;height:auto;text-align:center}.brand{text-align:center}.hpe-logo{margin-left:auto;margin-right:auto}.brand-rule{margin-left:auto;margin-right:auto}.brand-copy{font-size:9px}.hero-center{margin-top:14px}.hero-title{font-size:29px;line-height:33px;letter-spacing:-1px;padding:0 8px}.hero-sub{font-size:11px;line-height:15px;padding:0 15px;margin-top:5px}.hero-right{display:none}.st-key-hero_search_area{width:calc(100% - 20px) !important;max-width:none !important;margin:-110px auto 10px !important}.st-key-hero_search_area div[data-testid="stTextInput"] input{height:50px !important;font-size:12px !important;padding:0 13px !important}.st-key-hero_search_area div[data-testid="stFormSubmitButton"] button{width:48px !important;height:48px !important;min-height:48px !important;font-size:22px !important}.st-key-hero_search_area .try-label{display:block;text-align:center;margin-top:7px;font-size:9px}.st-key-hero_search_area div[data-testid="stHorizontalBlock"]{gap:4px !important}.st-key-hero_search_area div[data-testid="stButton"] button{height:auto !important;min-height:31px !important;font-size:7px !important;padding:4px !important;white-space:normal !important;line-height:9px !important}.family-card{height:142px}.doc-grid{grid-template-columns:repeat(2,1fr)}.topic-grid{grid-template-columns:1fr}.main-grid{display:block}.panel{padding:12px;border-radius:14px}.bottom-strip{grid-template-columns:repeat(2,1fr);height:auto;padding:7px 0}.stat{min-height:48px;border-right:0}.stat:last-child{grid-column:1 / -1} }
 @media (max-width:480px){ .hero{height:360px;min-height:360px}.hero-title{font-size:25px;line-height:29px}.hero-sub{font-size:10px}.st-key-hero_search_area{margin-top:-116px !important}.family-card{height:136px;padding:11px 10px}.family-name{font-size:14px}.family-desc{font-size:9px;line-height:12px}.family-icon{width:34px;height:34px;font-size:18px}.doc-grid{grid-template-columns:1fr}.topic-grid{grid-template-columns:1fr} }
+
+/* The AI Assistant uses form submission only.
+   No standalone "Ask this question" button is rendered. */
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1334,7 +1400,7 @@ def render_family_cards():
                 unsafe_allow_html=True
             )
             st.markdown('<div class="family-click">', unsafe_allow_html=True)
-            if st.button("Open family", key=f"family_{group}", use_container_width=True):
+            if st.button(f"Open {group}", key=f"family_{group}", use_container_width=True, help=f"Open {group} topics and SOPs"):
                 open_group(group)
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1356,90 +1422,242 @@ def answer_card(r):
         st.caption("Search terms: " + r["keywords"])
 
 
-def render_ai_answer(query, family=None):
+def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing issues?",
+                         family=None, key_prefix="home_ai"):
+    """
+    Fully functional AI Assistant card.
+
+    Every visible control in the reference card is a real Streamlit control:
+    - question field + arrow submit
+    - summary
+    - troubleshooting steps
+    - related documents
+    - follow-up question
+    """
+    q_key = f"{key_prefix}_query"
+    submitted_key = f"{key_prefix}_submitted"
+    action_key = f"{key_prefix}_action"
+
+    if q_key not in st.session_state:
+        st.session_state[q_key] = default_query
+
+    if submitted_key not in st.session_state:
+        st.session_state[submitted_key] = default_query
+
+    if action_key not in st.session_state:
+        st.session_state[action_key] = None
+
+    # Header
+    st.markdown("""
+    <div class="panel ai-panel">
+      <div class="ai-head">
+        <div class="robot">🤖</div>
+        <div>
+          <div class="panel-title">HPE AI Assistant <span class="beta">BETA</span></div>
+          <div class="panel-sub">Get instant answers from HPE documentation.</div>
+        </div>
+        <div class="powered">✦ Powered by HPE Knowledge</div>
+      </div>
+    """, unsafe_allow_html=True)
+
+    # REAL question input. Enter or the arrow submits the form.
+    with st.form(f"{key_prefix}_question_form", clear_on_submit=False):
+        c1, c2 = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
+        with c1:
+            st.text_input(
+                "Ask HPE AI",
+                key=q_key,
+                placeholder="Ask a question...",
+                label_visibility="collapsed",
+                help="Type your question and press Enter, or select the arrow to submit.",
+            )
+        with c2:
+            submit = st.form_submit_button("→", use_container_width=True)
+
+    if submit:
+        value = st.session_state[q_key].strip()
+        if value:
+            st.session_state[submitted_key] = value
+            st.session_state[action_key] = None
+            st.session_state.global_query = value
+            st.rerun()
+
+    query = st.session_state[submitted_key].strip()
     records, docs = search(query, family=family, limit=6)
-
-    if not records and not docs:
-        st.warning("No matching knowledge was found. Try the product name, feature, model, version, or exact error message.")
-        return
-
     best = records[0] if records else None
 
-    if best:
-        st.markdown(
-            f"""
-            <div class="panel ai-panel">
-              <div class="ai-head">
-                <div class="robot">🤖</div>
-                <div>
-                  <div class="panel-title">HPE AI Assistant <span class="beta">BETA</span></div>
-                  <div class="panel-sub">Get instant answers from HPE documentation.</div>
-                </div>
-                <div class="powered">✦ Powered by HPE Knowledge</div>
-              </div>
+    if not best and docs:
+        # PDF-only result: give the user a useful extract instead of a dead card.
+        d = docs[0]
+        excerpt = d["content"][:900].replace("\n", " ")
+        best = {
+            "kb_id": f"DOC-{d['id']}",
+            "family": d["family"],
+            "topic": d["topic"],
+            "question": query,
+            "answer": excerpt + ("…" if len(d["content"]) > 900 else ""),
+            "steps": "",
+            "keywords": query,
+        }
 
-              <div class="user-msg">♙ &nbsp; {eh(query)}</div>
-
-              <div class="ai-answer">
-                <b>Here is the most relevant answer from HPE Knowledge:</b><br><br>
-                {eh(best['answer'])}
-              </div>
-            """,
-            unsafe_allow_html=True
+    if not best:
+        st.warning(
+            "No matching knowledge was found. Try the product name, feature, "
+            "model, version, or exact error message."
         )
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
 
-        # Render exact steps like the screenshot.
+    # User question + exact answer
+    st.markdown(
+        f"""
+        <div class="user-msg">♙ &nbsp; {eh(query)}</div>
+        <div class="ai-answer">
+          <b>Here is the most relevant answer from HPE Knowledge:</b><br><br>
+          {eh(best['answer'])}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Action buttons are actual buttons.
+    a1, a2, a3 = st.columns(3, gap="small")
+    with a1:
+        if st.button("✦ Summarize this document", key=f"{key_prefix}_summary",
+                     use_container_width=True):
+            st.session_state[action_key] = "summary"
+            st.rerun()
+    with a2:
+        if st.button("⌕ Show troubleshooting steps", key=f"{key_prefix}_steps",
+                     use_container_width=True):
+            st.session_state[action_key] = "steps"
+            st.rerun()
+    with a3:
+        if st.button("▤ List related documents", key=f"{key_prefix}_related",
+                     use_container_width=True):
+            st.session_state[action_key] = "related"
+            st.rerun()
+
+    action = st.session_state[action_key]
+
+    # The screenshot's numbered steps are shown by default when available.
+    show_steps = bool(best.get("steps")) and action in (None, "steps")
+
+    if show_steps:
         steps = (best["steps"] or "").splitlines()
         for i, line in enumerate(steps, 1):
             clean = re.sub(r"^\s*\d+\.\s*", "", line)
             st.markdown(
                 f"""
-                <div style="margin-left:25px;margin-top:-2px;">
+                <div style="margin:3px 0 0 25px;">
                   <div class="ai-step">
                     <div class="ai-num">{i}</div>
-                    <div style="font-size:9px;color:#324e63;padding-top:3px;">{eh(clean)}</div>
+                    <div style="font-size:9px;color:#324e63;padding-top:3px;">
+                      {eh(clean)}
+                    </div>
                   </div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
 
+    if action == "summary":
+        summary = best["answer"]
         st.markdown(
             f"""
-              <div class="ai-doc">
-                <div class="pdf-icon">▤</div>
-                <div style="flex:1;">
-                  <div style="font-size:9px;font-weight:800;color:#173a56;">
-                    {eh(best['topic'])} — HPE Knowledge Article
+            <div class="ai-answer" style="margin-top:8px;">
+              <b>Document summary</b><br><br>{eh(summary)}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    if action == "related":
+        st.markdown(
+            '<div style="font-size:10px;font-weight:800;color:#173a56;margin:8px 0 4px 12px;">Related knowledge</div>',
+            unsafe_allow_html=True
+        )
+        for r in records[1:4]:
+            st.markdown(
+                f"""
+                <div class="ai-doc">
+                  <div class="pdf-icon">▤</div>
+                  <div style="flex:1;">
+                    <div style="font-size:9px;font-weight:800;color:#173a56;">
+                      {eh(r['question'])}
+                    </div>
+                    <div style="font-size:8px;color:#8a9aa5;">
+                      {eh(r['family'])} • {eh(r['topic'])} • {eh(r['kb_id'])}
+                    </div>
                   </div>
-                  <div style="font-size:8px;color:#8a9aa5;">AI Knowledge • {eh(best['kb_id'])}</div>
                 </div>
-                <div style="font-size:16px;color:#173a56;">↗</div>
-              </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-              <div class="ai-actions">
-                <span>✦ Summarize this document</span>
-                <span>⌕ Show troubleshooting steps</span>
-                <span>▤ List related documents</span>
+    # Source card is functional: clicking View opens the indexed PDF.
+    if docs:
+        d = docs[0]
+        st.markdown(
+            f"""
+            <div class="ai-doc">
+              <div class="pdf-icon">▤</div>
+              <div style="flex:1;">
+                <div style="font-size:9px;font-weight:800;color:#173a56;">
+                  {eh(d['title'])}
+                </div>
+                <div style="font-size:8px;color:#8a9aa5;">
+                  ⌁ PDF • Indexed • {eh(d['family'])}
+                </div>
               </div>
-
-              <div class="follow">
-                ♧ &nbsp; Ask a follow-up question...
-                <span class="follow-arrow">→</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        if st.button("↗ View source document", key=f"{key_prefix}_view_source",
+                     use_container_width=True):
+            st.session_state.selected_document = d["id"]
+            st.session_state.view = "document"
+            st.rerun()
+    else:
+        st.markdown(
+            f"""
+            <div class="ai-doc">
+              <div class="pdf-icon">▤</div>
+              <div style="flex:1;">
+                <div style="font-size:9px;font-weight:800;color:#173a56;">
+                  {eh(best['topic'])} — HPE Knowledge Article
+                </div>
+                <div style="font-size:8px;color:#8a9aa5;">
+                  AI Knowledge • {eh(best['kb_id'])}
+                </div>
               </div>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    if len(records) > 1:
-        st.markdown("### Related answers")
-        for r in records[1:]:
-            answer_card(r)
+    # Real follow-up form. It searches from the current answer context.
+    with st.form(f"{key_prefix}_followup_form", clear_on_submit=True):
+        f1, f2 = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
+        with f1:
+            follow = st.text_input(
+                "Follow-up question",
+                placeholder="Ask a follow-up question...",
+                label_visibility="collapsed",
+                help="Press Enter or select the arrow to submit your follow-up question.",
+            )
+        with f2:
+            follow_submit = st.form_submit_button("→", use_container_width=True)
 
-    if docs:
-        st.markdown("### Related documents")
-        render_documents(docs)
+    if follow_submit and follow.strip():
+        st.session_state[q_key] = follow.strip()
+        st.session_state[submitted_key] = follow.strip()
+        st.session_state[action_key] = None
+        st.session_state.global_query = follow.strip()
+        st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_documents(docs):
@@ -1598,76 +1816,23 @@ def render_home():
     left, right = st.columns([1.02, .98], gap="small")
 
     with left:
-        # Exact left-side AI panel proportions.
-        if not query:
-            st.markdown("""
-            <div class="panel ai-panel">
-              <div class="ai-head">
-                <div class="robot">🤖</div>
-                <div>
-                  <div class="panel-title">HPE AI Assistant <span class="beta">BETA</span></div>
-                  <div class="panel-sub">Get instant answers from HPE documentation.</div>
-                </div>
-                <div class="powered">✦ Powered by HPE Knowledge</div>
-              </div>
-
-              <div class="user-msg">♙ &nbsp; How do I troubleshoot ClearPass licensing issues?</div>
-
-              <div class="ai-answer">
-                <b>Here are the steps to troubleshoot ClearPass licensing issues based on HPE documentation:</b>
-              </div>
-
-              <div style="margin:8px 0 0 25px;">
-                <div class="ai-step"><div class="ai-num">1</div><div style="font-size:9px;color:#324e63;padding-top:3px;">Verify license status on the ClearPass Administration Portal.</div></div>
-                <div class="ai-step"><div class="ai-num">2</div><div style="font-size:9px;color:#324e63;padding-top:3px;">Check the license server connectivity.</div></div>
-                <div class="ai-step"><div class="ai-num">3</div><div style="font-size:9px;color:#324e63;padding-top:3px;">Ensure the correct license file is installed.</div></div>
-                <div class="ai-step"><div class="ai-num">4</div><div style="font-size:9px;color:#324e63;padding-top:3px;">Review logs for licensing errors.</div></div>
-                <div class="ai-step"><div class="ai-num">5</div><div style="font-size:9px;color:#324e63;padding-top:3px;">If the issue persists, refer to the relevant ClearPass licensing article.</div></div>
-              </div>
-
-              <div class="ai-doc">
-                <div class="pdf-icon">▤</div>
-                <div style="flex:1;">
-                  <div style="font-size:9px;font-weight:800;color:#173a56;">ARBSOP040 - HPE ClearPass Licensing Server Overview</div>
-                  <div style="font-size:8px;color:#8a9aa5;">⌁ PDF • 2.4 MB • Knowledge Source</div>
-                </div>
-                <div style="font-size:16px;color:#173a56;">↗</div>
-              </div>
-
-              <div class="ai-actions">
-                <span>✦ Summarize this document</span>
-                <span>⌕ Show troubleshooting steps</span>
-                <span>▤ List related documents</span>
-              </div>
-
-              <div class="follow">
-                ♧ &nbsp; Ask a follow-up question...
-                <span class="follow-arrow">→</span>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            if st.button("Ask this question", key="demo_question", use_container_width=False):
-                st.session_state.global_query = "How do I troubleshoot ClearPass licensing issues?"
-                st.rerun()
-        else:
-            # Search already rendered above; leave the visual position clean.
-            st.markdown("""
-            <div class="panel ai-panel">
-              <div class="ai-head">
-                <div class="robot">🤖</div>
-                <div>
-                  <div class="panel-title">HPE AI Assistant <span class="beta">BETA</span></div>
-                  <div class="panel-sub">Ask another question from the search bar above.</div>
-                </div>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
+        render_ai_assistant(
+            default_query="How do I troubleshoot ClearPass licensing issues?",
+            key_prefix="home_ai",
+        )
 
     with right:
-        render_featured()
-        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-        render_popular_topics()
+        # Intentionally left open.
+        # Featured Documents and Popular Topics were removed from the home
+        # screen because their content duplicates the product-family tiles
+        # above. Product-specific documents/topics remain available inside
+        # each product-family page.
+        st.markdown(
+            """
+            <div style="height:100%; min-height:405px;"></div>
+            """,
+            unsafe_allow_html=True
+        )
 
     render_bottom_strip()
 
