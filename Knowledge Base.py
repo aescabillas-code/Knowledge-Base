@@ -36,6 +36,7 @@ st.set_page_config(
 BASE_DIR = Path("knowledge_base_data")
 PDF_DIR = BASE_DIR / "pdfs"
 DB_PATH = BASE_DIR / "knowledge_base.db"
+RESET_MARKER = BASE_DIR / ".knowledge_base_v2_reset_complete"
 BASE_DIR.mkdir(exist_ok=True)
 PDF_DIR.mkdir(exist_ok=True)
 
