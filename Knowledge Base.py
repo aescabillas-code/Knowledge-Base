@@ -495,6 +495,13 @@ def index_pdf(uploaded_file, family, topic):
 # ============================================================
 @st.cache_data(ttl=30, show_spinner=False)
 def search(query, family=None, limit=8):
+    """Search only when the query has meaningful evidence in the KB.
+
+    Important retrieval rule: a generic word such as ``onboarding`` must not
+    make an unrelated article win simply because it appears somewhere in the
+    answer corpus. Product/model/acronym anchors in the user's query are
+    treated as required anchors when present.
+    """
     records = load_records()
     documents = load_documents()
 
@@ -502,13 +509,29 @@ def search(query, family=None, limit=8):
         records = [r for r in records if r["family"] == family]
 
     q = query.strip().lower()
-
     if not q:
         return records[:limit], []
 
-    lexical = []
-    tokens = re.findall(r"[a-z0-9][a-z0-9\-]+", q)
+    raw_tokens = re.findall(r"[a-z0-9][a-z0-9\-]+", q)
+    stopwords = {
+        "what", "when", "where", "which", "who", "whom", "whose", "how",
+        "why", "can", "could", "would", "should", "does", "do", "did",
+        "is", "are", "was", "were", "the", "a", "an", "and", "or", "to",
+        "for", "of", "in", "on", "with", "from", "my", "our", "your", "this",
+        "that", "it", "be", "i", "me", "please", "guide", "issue", "problem",
+        "check", "need", "help", "show", "tell", "about"
+    }
+    tokens = [t for t in raw_tokens if len(t) >= 3 and t not in stopwords]
 
+    # Product/model/acronym anchors are especially important. If the user
+    # types an acronym such as NSP, an article must actually contain NSP.
+    original_words = re.findall(r"[A-Za-z0-9][A-Za-z0-9\-]+", query)
+    acronym_anchors = [
+        w.lower() for w in original_words
+        if 2 <= len(w) <= 8 and w.isupper() and w.lower() not in stopwords
+    ]
+
+    lexical = []
     for r in records:
         question = r["question"].lower()
         keywords = r["keywords"].lower()
@@ -516,6 +539,23 @@ def search(query, family=None, limit=8):
             r["family"], r["topic"], r["question"],
             r["answer"], r["steps"], r["keywords"]
         ]).lower()
+
+        # Never allow an acronym/product anchor to disappear during ranking.
+        if acronym_anchors and not all(a in full for a in acronym_anchors):
+            continue
+
+        matched_tokens = [t for t in tokens if t in full]
+        if tokens and not matched_tokens:
+            continue
+
+        # If several meaningful query terms are present, require at least
+        # half of them to occur in the candidate. This prevents a single
+        # generic term such as "onboarding" from selecting CPPM for an NSP
+        # question.
+        if len(tokens) >= 2:
+            required = max(1, (len(tokens) + 1) // 2)
+            if len(set(matched_tokens)) < required:
+                continue
 
         score = 0
         if q in question:
@@ -529,8 +569,7 @@ def search(query, family=None, limit=8):
                 score += 4
             elif t in full:
                 score += 1
-        if score:
-            lexical.append((score, r))
+        lexical.append((score, r))
 
     merged = []
 
@@ -549,8 +588,23 @@ def search(query, family=None, limit=8):
             sims = cosine_similarity(qv, matrix)[0]
 
             for i, sim in enumerate(sims):
-                if sim > 0:
-                    merged.append((float(sim) * 25, records[i]))
+                r = records[i]
+                full = " ".join([
+                    r["family"], r["topic"], r["question"],
+                    r["answer"], r["steps"], r["keywords"]
+                ]).lower()
+                if acronym_anchors and not all(a in full for a in acronym_anchors):
+                    continue
+                matched_tokens = [t for t in tokens if t in full]
+                if tokens and not matched_tokens:
+                    continue
+                if len(tokens) >= 2 and len(set(matched_tokens)) < max(1, (len(tokens) + 1) // 2):
+                    continue
+                # Ignore weak semantic similarity. The old implementation
+                # accepted any sim > 0, which is why unrelated CPPM content
+                # could answer an NSP question.
+                if sim >= 0.18:
+                    merged.append((float(sim) * 25, r))
         except Exception:
             pass
 
@@ -564,13 +618,16 @@ def search(query, family=None, limit=8):
     ordered = sorted(unique.items(), key=lambda x: x[1], reverse=True)
     result_records = [record_map[k] for k, _ in ordered[:limit]]
 
-    # PDF text search
+    # PDF text search remains available for Related Knowledge, but it does
+    # not create an AI exact answer by itself.
     doc_scored = []
     for d in documents:
         if family and d["family"] != family:
             continue
         body = (d["content"] or "").lower()
         hits = sum(1 for t in tokens if t in body)
+        if acronym_anchors and not all(a in body for a in acronym_anchors):
+            continue
         if q in body:
             hits += 20
         if hits:
@@ -2411,6 +2468,69 @@ div.stButton > button {
   font-size:10px;
   font-weight:600;
   text-align:center;
+}
+
+
+/* ============================================================
+   FINAL SUGGESTED-ANSWER SPACING / PROMPT VISIBILITY FIX
+   Keep the explanatory prompt fully readable, then place exactly
+   2px between each of the three suggested-answer buttons.
+   ============================================================ */
+[class*="st-key-home_ai_question_box"] .chatbot-prompt,
+[class*="st-key-answer_"][class*="_question_box"] .chatbot-prompt {
+  display:block !important;
+  position:relative !important;
+  height:auto !important;
+  min-height:18px !important;
+  max-height:none !important;
+  margin:8px 0 7px !important;
+  padding:2px 0 !important;
+  overflow:visible !important;
+  line-height:1.45 !important;
+  white-space:normal !important;
+  transform:none !important;
+}
+
+[class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlock"] {
+  gap:0 !important;
+  row-gap:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]),
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]) {
+  margin-top:0 !important;
+  margin-bottom:2px !important;
+  padding-top:0 !important;
+  padding-bottom:0 !important;
+  min-height:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-of-type,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-of-type {
+  margin-bottom:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"],
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > div,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > div {
+  margin:0 !important;
+  padding:0 !important;
+  min-height:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > button {
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  width:100% !important;
+  height:28px !important;
+  min-height:28px !important;
+  margin:0 !important;
+  padding:3px 12px !important;
+  line-height:1.2 !important;
 }
 
 </style>
