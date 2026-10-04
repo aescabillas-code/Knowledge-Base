@@ -3753,6 +3753,153 @@ div.stButton > button {
    END FINAL FIX
    ============================================================ */
 
+
+/* ============================================================
+   FINAL UI FIX v2 — HARD CONNECTED TABS + NO TOP WHITE RULE
+   ============================================================ */
+
+/* Streamlit's decoration/header layers can reappear after a refresh and
+   create the unwanted white horizontal strip at the top of the viewport. */
+[data-testid="stDecoration"],
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stStatusWidget"],
+[data-testid="stBottomBlockContainer"],
+[data-testid="stSidebar"] + div {
+  border-top:0 !important;
+}
+[data-testid="stDecoration"] {
+  display:none !important;
+  height:0 !important;
+  min-height:0 !important;
+  max-height:0 !important;
+  background:transparent !important;
+}
+header[data-testid="stHeader"] {
+  display:none !important;
+  height:0 !important;
+  min-height:0 !important;
+  max-height:0 !important;
+  border:0 !important;
+  box-shadow:none !important;
+}
+html, body, .stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stAppViewBlockContainer"],
+section.main, section.main > div,
+.block-container {
+  margin-top:0 !important;
+  padding-top:0 !important;
+  border-top:0 !important;
+  box-shadow:none !important;
+}
+
+/* The AI tab row is one uninterrupted flex strip. There is deliberately no
+   Streamlit column gap, column padding, or independent baseline. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] {
+  display:flex !important;
+  flex-wrap:nowrap !important;
+  gap:0 !important;
+  column-gap:0 !important;
+  row-gap:0 !important;
+  width:100% !important;
+  margin:0 !important;
+  padding:0 !important;
+  border-bottom:1px solid #00bfa5 !important;
+  align-items:stretch !important;
+  overflow:visible !important;
+}
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+  flex:1 1 0 !important;
+  width:33.333333% !important;
+  min-width:0 !important;
+  max-width:none !important;
+  padding:0 !important;
+  margin:0 !important;
+  gap:0 !important;
+  border:0 !important;
+}
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] + div[data-testid="column"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] + div[data-testid="column"] {
+  margin-left:-1px !important;
+}
+
+/* Container-key state is the visual source of truth. This avoids relying on
+   Streamlit's internal button DOM state and guarantees first-click feedback. */
+[class*="st-key-home_ai_tab_answer_active"] button,
+[class*="st-key-home_ai_tab_steps_active"] button,
+[class*="st-key-home_ai_tab_files_active"] button,
+[class*="st-key-answer_"][class*="_tab_answer_active"] button,
+[class*="st-key-answer_"][class*="_tab_steps_active"] button,
+[class*="st-key-answer_"][class*="_tab_files_active"] button {
+  background:#ffffff !important;
+  color:#007f70 !important;
+  -webkit-text-fill-color:#007f70 !important;
+  border:1px solid #00bfa5 !important;
+  border-bottom:1px solid #ffffff !important;
+  border-radius:12px 12px 0 0 !important;
+  margin:0 0 -1px 0 !important;
+  box-shadow:none !important;
+  position:relative !important;
+  z-index:10 !important;
+}
+[class*="st-key-home_ai_tab_answer_active"] button p,
+[class*="st-key-home_ai_tab_steps_active"] button p,
+[class*="st-key-home_ai_tab_files_active"] button p,
+[class*="st-key-answer_"][class*="_tab_answer_active"] button p,
+[class*="st-key-answer_"][class*="_tab_steps_active"] button p,
+[class*="st-key-answer_"][class*="_tab_files_active"] button p {
+  color:#007f70 !important;
+}
+[class*="st-key-home_ai_tab_answer_inactive"] button,
+[class*="st-key-home_ai_tab_steps_inactive"] button,
+[class*="st-key-home_ai_tab_files_inactive"] button,
+[class*="st-key-answer_"][class*="_tab_answer_inactive"] button,
+[class*="st-key-answer_"][class*="_tab_steps_inactive"] button,
+[class*="st-key-answer_"][class*="_tab_files_inactive"] button {
+  background:#d9f7f2 !important;
+  color:#008f7b !important;
+  -webkit-text-fill-color:#008f7b !important;
+  border:1px solid #8fd8cf !important;
+  border-bottom:1px solid #00bfa5 !important;
+  border-radius:12px 12px 0 0 !important;
+  margin:0 !important;
+  box-shadow:none !important;
+  position:relative !important;
+  z-index:4 !important;
+}
+[class*="st-key-home_ai_tab_answer_inactive"] button p,
+[class*="st-key-home_ai_tab_steps_inactive"] button p,
+[class*="st-key-home_ai_tab_files_inactive"] button p,
+[class*="st-key-answer_"][class*="_tab_answer_inactive"] button p,
+[class*="st-key-answer_"][class*="_tab_steps_inactive"] button p,
+[class*="st-key-answer_"][class*="_tab_files_inactive"] button p {
+  color:#008f7b !important;
+}
+
+/* Make the body start exactly under the tab baseline. The active white tab
+   masks the one-pixel baseline only beneath itself. */
+[class*="st-key-home_ai_tab_content"],
+[class*="st-key-answer_"][class*="_tab_content"] {
+  margin:0 !important;
+  padding:16px 18px 20px !important;
+  border-top:0 !important;
+  border-left:1px solid #00bfa5 !important;
+  border-right:1px solid #00bfa5 !important;
+  border-bottom:1px solid #00bfa5 !important;
+  border-radius:0 0 12px 12px !important;
+  background:#ffffff !important;
+  box-shadow:none !important;
+  outline:0 !important;
+}
+[class*="st-key-home_ai_tab_content"] > div,
+[class*="st-key-answer_"][class*="_tab_content"] > div {
+  margin-top:0 !important;
+  padding-top:0 !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -4017,34 +4164,37 @@ def render_ai_assistant(default_query="",
             # before the fragment redraws. This removes the old one-click-behind
             # nth-child CSS behavior that made users click twice.
             current_action = st.session_state.get(action_key) or "answer"
-            a1, a2, a3 = st.columns(3, gap="small")
+            a1, a2, a3 = st.columns(3, gap=None)
             with a1:
-                st.button(
-                    "✦ Answer",
-                    key=f"{key_prefix}_answer",
-                    use_container_width=True,
-                    type="primary" if current_action == "answer" else "secondary",
-                    on_click=_set_ai_tab,
-                    args=(action_key, "answer"),
-                )
+                with st.container(key=f"{key_prefix}_tab_answer_{'active' if current_action == 'answer' else 'inactive'}"):
+                    st.button(
+                        "✦ Answer",
+                        key=f"{key_prefix}_answer",
+                        use_container_width=True,
+                        type="secondary",
+                        on_click=_set_ai_tab,
+                        args=(action_key, "answer"),
+                    )
             with a2:
-                st.button(
-                    "⌕ Troubleshooting steps",
-                    key=f"{key_prefix}_steps",
-                    use_container_width=True,
-                    type="primary" if current_action == "steps" else "secondary",
-                    on_click=_set_ai_tab,
-                    args=(action_key, "steps"),
-                )
+                with st.container(key=f"{key_prefix}_tab_steps_{'active' if current_action == 'steps' else 'inactive'}"):
+                    st.button(
+                        "⌕ Troubleshooting steps",
+                        key=f"{key_prefix}_steps",
+                        use_container_width=True,
+                        type="secondary",
+                        on_click=_set_ai_tab,
+                        args=(action_key, "steps"),
+                    )
             with a3:
-                st.button(
-                    "▤ Related knowledge",
-                    key=f"{key_prefix}_files",
-                    use_container_width=True,
-                    type="primary" if current_action == "files" else "secondary",
-                    on_click=_set_ai_tab,
-                    args=(action_key, "files"),
-                )
+                with st.container(key=f"{key_prefix}_tab_files_{'active' if current_action == 'files' else 'inactive'}"):
+                    st.button(
+                        "▤ Related knowledge",
+                        key=f"{key_prefix}_files",
+                        use_container_width=True,
+                        type="secondary",
+                        on_click=_set_ai_tab,
+                        args=(action_key, "files"),
+                    )
 
             # The callback runs before this fragment redraw, so this is already
             # the newly selected tab on the very first click.
