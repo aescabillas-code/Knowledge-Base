@@ -74,6 +74,80 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ============================================================
+# CRITICAL FIRST-PAINT SHELL FIX
+# These rules must be injected BEFORE any custom component is rendered.
+# The persistent browser-access bridge runs on a fresh page load and can
+# otherwise reserve a small blank block above the first visible surface.
+# ============================================================
+st.markdown("""
+<style>
+/* Remove Streamlit shell/header space before the first paint. */
+html, body, .stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stAppViewBlockContainer"],
+[data-testid="stMain"],
+section.main,
+section.main > div,
+.block-container {
+    margin:0 !important;
+    padding-top:0 !important;
+    border-top:0 !important;
+    box-shadow:none !important;
+}
+
+[data-testid="stDecoration"],
+[data-testid="stHeader"],
+header[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stStatusWidget"] {
+    display:none !important;
+    visibility:hidden !important;
+    height:0 !important;
+    min-height:0 !important;
+    max-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    border:0 !important;
+    box-shadow:none !important;
+}
+
+/* The streamlit-js-eval authorization bridge must not create a visible
+   layout row. Keep it mounted so its JavaScript still executes. */
+[data-testid="stElementContainer"]:has(iframe[title*="streamlit_js_eval"]),
+[data-testid="stElementContainer"]:has(iframe[src*="streamlit_js_eval"]) {
+    height:0 !important;
+    min-height:0 !important;
+    max-height:0 !important;
+    width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    border:0 !important;
+    line-height:0 !important;
+}
+[data-testid="stElementContainer"]:has(iframe[title*="streamlit_js_eval"]) iframe,
+[data-testid="stElementContainer"]:has(iframe[src*="streamlit_js_eval"]) iframe {
+    width:0 !important;
+    height:0 !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:0 !important;
+    max-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    border:0 !important;
+    display:block !important;
+}
+
+/* Do not use a negative hero margin. The shell is zeroed above instead. */
+.hero {
+    margin-top:0 !important;
+    border-top:0 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 BASE_DIR = Path("knowledge_base_data")
 PDF_DIR = BASE_DIR / "pdfs"
 IMAGE_DIR = BASE_DIR / "images"
@@ -3901,6 +3975,65 @@ section.main, section.main > div,
 }
 
 \n\n/* ============================================================\n   FINAL STRUCTURAL FIX v3 — NO COLUMN SEAMS / TRUE ACTIVE TAB\n   ============================================================ */\n\n/* The tab row is a single flex surface. Do not style it as a\n   Streamlit column grid: there are no columns in v3. */\n[class*="st-key-home_ai_tab_row"],\n[class*="st-key-answer_"][class*="_tab_row"] {\n  display:flex !important;\n  flex-direction:row !important;\n  flex-wrap:nowrap !important;\n  align-items:stretch !important;\n  width:100% !important;\n  max-width:100% !important;\n  gap:0 !important;\n  column-gap:0 !important;\n  row-gap:0 !important;\n  margin:0 !important;\n  padding:0 !important;\n  border:0 !important;\n  border-bottom:1px solid #00bfa5 !important;\n  background:transparent !important;\n  box-shadow:none !important;\n  overflow:visible !important;\n}\n\n/* Each keyed tab wrapper becomes exactly one third of the row. */\n[class*="st-key-home_ai_tab_row"] > div,\n[class*="st-key-answer_"][class*="_tab_row"] > div {\n  flex:1 1 0 !important;\n  width:33.333333% !important;\n  min-width:0 !important;\n  max-width:none !important;\n  margin:0 !important;\n  padding:0 !important;\n  border:0 !important;\n  gap:0 !important;\n  align-self:stretch !important;\n}\n\n/* Remove Streamlit's internal vertical-block spacing inside each tab. */\n[class*="st-key-home_ai_tab_row"] > div > div,\n[class*="st-key-answer_"][class*="_tab_row"] > div > div {\n  margin:0 !important;\n  padding:0 !important;\n  gap:0 !important;\n}\n\n/* Every tab button fills its wrapper. The wrapper's active/inactive key\n   is the state source, so refreshes cannot leave a stale visual state. */\n[class*="st-key-home_ai_tab_row"] button,\n[class*="st-key-answer_"][class*="_tab_row"] button {\n  display:block !important;\n  width:100% !important;\n  min-width:0 !important;\n  min-height:42px !important;\n  height:42px !important;\n  margin:0 !important;\n  padding:8px 10px !important;\n  box-sizing:border-box !important;\n  border-radius:12px 12px 0 0 !important;\n  border:1px solid #8fd8cf !important;\n  border-bottom:1px solid #00bfa5 !important;\n  background:#d9f7f2 !important;\n  color:#008f7b !important;\n  -webkit-text-fill-color:#008f7b !important;\n  box-shadow:none !important;\n  transform:none !important;\n  top:auto !important;\n  position:relative !important;\n  z-index:2 !important;\n}\n\n[class*="st-key-home_ai_tab_row"] button p,\n[class*="st-key-answer_"][class*="_tab_row"] button p {\n  color:#008f7b !important;\n  -webkit-text-fill-color:#008f7b !important;\n  margin:0 !important;\n}\n\n/* Selected tab: white face, teal text, and no bottom border.\n   Because the active/inactive state is encoded in the container key,\n   this works independently of Streamlit's primary/secondary DOM styling. */\n[class*="st-key-home_ai_tab_answer_active"] button,\n[class*="st-key-home_ai_tab_steps_active"] button,\n[class*="st-key-home_ai_tab_files_active"] button,\n[class*="st-key-answer_"][class*="_tab_answer_active"] button,\n[class*="st-key-answer_"][class*="_tab_steps_active"] button,\n[class*="st-key-answer_"][class*="_tab_files_active"] button {\n  background:#ffffff !important;\n  color:#007f70 !important;\n  -webkit-text-fill-color:#007f70 !important;\n  border:1px solid #00bfa5 !important;\n  border-bottom-color:#ffffff !important;\n  margin-bottom:-1px !important;\n  z-index:10 !important;\n}\n\n[class*="st-key-home_ai_tab_answer_active"] button p,\n[class*="st-key-home_ai_tab_steps_active"] button p,\n[class*="st-key-home_ai_tab_files_active"] button p,\n[class*="st-key-answer_"][class*="_tab_answer_active"] button p,\n[class*="st-key-answer_"][class*="_tab_steps_active"] button p,\n[class*="st-key-answer_"][class*="_tab_files_active"] button p {\n  color:#007f70 !important;\n  -webkit-text-fill-color:#007f70 !important;\n}\n\n/* The answer panel touches the row directly. No top border, no top gap,\n   and no white intermediary wrapper is allowed. */\n[class*="st-key-home_ai_tab_content"],\n[class*="st-key-answer_"][class*="_tab_content"] {\n  width:100% !important;\n  max-width:100% !important;\n  margin:0 !important;\n  padding:16px 18px 20px !important;\n  box-sizing:border-box !important;\n  border:1px solid #00bfa5 !important;\n  border-top:0 !important;\n  border-radius:0 0 12px 12px !important;\n  background:#ffffff !important;\n  box-shadow:none !important;\n  outline:0 !important;\n}\n\n[class*="st-key-home_ai_tab_content"] > div,\n[class*="st-key-answer_"][class*="_tab_content"] > div {\n  margin:0 !important;\n  padding-top:0 !important;\n  gap:0 !important;\n}\n\n/* Neutralize the old column-specific rules in the legacy CSS. */\n[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button),\n[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) {\n  border:0 !important;\n  margin:0 !important;\n  padding:0 !important;\n  gap:0 !important;\n  box-shadow:none !important;\n}\n\n/* Permanently remove the stray top white line/decorative rule from the\n   application shell. The hero begins at the top of the app viewport. */\nhtml, body, .stApp,\n[data-testid="stAppViewContainer"],\n[data-testid="stAppViewBlockContainer"],\nsection.main, section.main > div,\n.block-container,\n[data-testid="stDecoration"],\n[data-testid="stHeader"],\nheader[data-testid="stHeader"] {\n  border-top:0 !important;\n  box-shadow:none !important;\n}\n[data-testid="stDecoration"],\n[data-testid="stHeader"],\nheader[data-testid="stHeader"] {\n  display:none !important;\n  height:0 !important;\n  min-height:0 !important;\n  max-height:0 !important;\n  margin:0 !important;\n  padding:0 !important;\n}\n\n/* Do not allow the hidden Streamlit decoration to reserve a white strip. */\n[data-testid="stAppViewContainer"] > .main,\n[data-testid="stAppViewContainer"] > .main > div,\nsection.main > div:first-child {\n  margin-top:0 !important;\n  padding-top:0 !important;\n  border-top:0 !important;\n}\n\n/* The old brand rule is not part of the hero design anymore. */\n.brand-rule,\n.hero .brand-rule {\n  display:none !important;\n  height:0 !important;\n  margin:0 !important;\n}\n\n/* Keep the hero itself flush to the viewport; its pseudo-elements are\n   decorative only and cannot create an external horizontal rule. */\n.hero {\n  margin-top:0 !important;\n  border-top:0 !important;\n  box-shadow:none !important;\n}\n.hero:before, .hero:after {\n  pointer-events:none !important;\n}\n
+
+/* ============================================================
+   FINAL REFRESH FIX v9
+   The authorization component is rendered only when the Streamlit
+   session has to be restored after a browser refresh. It must remain
+   mounted for JS execution but must consume ZERO page layout space.
+   ============================================================ */
+[data-testid="stElementContainer"]:has(iframe[title*="streamlit_js_eval"]),
+[data-testid="stElementContainer"]:has(iframe[src*="streamlit_js_eval"]) {
+    display:block !important;
+    height:0 !important;
+    min-height:0 !important;
+    max-height:0 !important;
+    width:0 !important;
+    min-width:0 !important;
+    max-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    border:0 !important;
+}
+[data-testid="stElementContainer"]:has(iframe[title*="streamlit_js_eval"]) > div,
+[data-testid="stElementContainer"]:has(iframe[src*="streamlit_js_eval"]) > div {
+    height:0 !important;
+    min-height:0 !important;
+    max-height:0 !important;
+    width:0 !important;
+    min-width:0 !important;
+    max-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    border:0 !important;
+}
+[data-testid="stElementContainer"]:has(iframe[title*="streamlit_js_eval"]) iframe,
+[data-testid="stElementContainer"]:has(iframe[src*="streamlit_js_eval"]) iframe {
+    display:block !important;
+    width:0 !important;
+    height:0 !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:0 !important;
+    max-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    border:0 !important;
+}
+
+/* Never let the first visible app surface inherit a refresh-time top seam. */
+[data-testid="stMain"] > div:first-child,
+section.main > div:first-child,
+.block-container > div:first-child {
+    margin-top:0 !important;
+    padding-top:0 !important;
+    border-top:0 !important;
+}
+
+/* If Streamlit restores the app at a transient internal route, keep the
+   application shell visually flush; no custom app code writes this route. */
 </style>
 """, unsafe_allow_html=True)
 
