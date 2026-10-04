@@ -2533,6 +2533,163 @@ div.stButton > button {
   line-height:1.2 !important;
 }
 
+
+/* ============================================================
+   FINAL UI POLISH — PROMPT VISIBILITY + WHITE HPE TILES
+   ============================================================ */
+
+/* The explanatory text must occupy its own real layout row.
+   Streamlit can collapse the markdown element wrapper when the
+   surrounding vertical gap is aggressively reset. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(.chatbot-prompt),
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(.chatbot-prompt) {
+  display:block !important;
+  height:auto !important;
+  min-height:22px !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:visible !important;
+  flex:0 0 auto !important;
+}
+
+[class*="st-key-home_ai_question_box"] .chatbot-prompt,
+[class*="st-key-answer_"][class*="_question_box"] .chatbot-prompt {
+  display:block !important;
+  width:100% !important;
+  height:auto !important;
+  min-height:20px !important;
+  max-height:none !important;
+  margin:4px 0 4px !important;
+  padding:0 2px !important;
+  overflow:visible !important;
+  color:#526c7d !important;
+  font-size:9px !important;
+  font-weight:600 !important;
+  line-height:16px !important;
+  white-space:normal !important;
+  text-overflow:clip !important;
+}
+
+/* Suggested / Possible Answer buttons:
+   white tile surface with HPE teal + navy lining. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
+  height:28px !important;
+  min-height:28px !important;
+  margin:0 !important;
+  padding:3px 12px !important;
+  border:1px solid #00bfa5 !important;
+  border-radius:15px !important;
+  background:#ffffff !important;
+  color:#062a3a !important;
+  box-shadow:
+    0 0 0 1px rgba(6,42,58,.72),
+    inset 0 0 0 1px rgba(0,191,165,.28),
+    0 3px 8px rgba(6,42,58,.08) !important;
+  font-weight:700 !important;
+  line-height:1.2 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button p,
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button span,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button p,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button span {
+  color:#062a3a !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button:hover,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button:hover {
+  background:#f7fffd !important;
+  border-color:#00a991 !important;
+  color:#062a3a !important;
+}
+
+/* Exactly 2px visual separation between the three suggested answers. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]),
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]) {
+  margin:0 0 2px 0 !important;
+  padding:0 !important;
+  min-height:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-of-type,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-of-type {
+  margin-bottom:0 !important;
+}
+
+/* Summary / Troubleshooting Steps / Related Knowledge:
+   white buttons with the same HPE teal/navy lining. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button {
+  min-height:30px !important;
+  height:30px !important;
+  padding:4px 10px !important;
+  border:1px solid #00bfa5 !important;
+  border-radius:16px !important;
+  background:#ffffff !important;
+  color:#062a3a !important;
+  box-shadow:
+    0 0 0 1px rgba(6,42,58,.72),
+    inset 0 0 0 1px rgba(0,191,165,.28),
+    0 3px 9px rgba(6,42,58,.09) !important;
+  font-size:10px !important;
+  font-weight:700 !important;
+}
+
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] button p,
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] button span,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button p,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button span {
+  color:#062a3a !important;
+}
+
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] button:hover,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button:hover {
+  background:#f7fffd !important;
+  border-color:#00a991 !important;
+  color:#062a3a !important;
+}
+
+/* Product-family tiles:
+   white background, HPE teal/navy lining, original family icon colors retained. */
+.family-card-compact {
+  background:#ffffff !important;
+  border:1px solid #00bfa5 !important;
+  box-shadow:
+    0 0 0 1px rgba(6,42,58,.72),
+    inset 0 0 0 1px rgba(0,191,165,.24),
+    0 7px 18px rgba(6,42,58,.10) !important;
+}
+
+.family-card-compact .family-name {
+  color:#062a3a !important;
+  text-shadow:none !important;
+}
+
+.family-card-compact .family-desc {
+  color:#536f82 !important;
+  text-shadow:none !important;
+}
+
+.family-card-compact .family-arrow {
+  filter:none !important;
+}
+
+.family-link:hover .family-card-compact {
+  background:#f7fffd !important;
+  border-color:#00a991 !important;
+  box-shadow:
+    0 0 0 1px rgba(6,42,58,.82),
+    inset 0 0 0 1px rgba(0,191,165,.34),
+    0 9px 24px rgba(0,150,135,.16) !important;
+}
+
+/* Preserve the compact tile geometry while making the white surface clear. */
+.family-card-compact .family-icon {
+  flex:0 0 34px !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
