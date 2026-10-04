@@ -1347,7 +1347,12 @@ st.markdown("""
 }
 
 * { box-sizing:border-box; }
-html, body, [class*="css"] { font-family:Inter,Arial,sans-serif !important; }
+html, body, [class*="css"], button, input, textarea, select, option,
+[data-testid="stMarkdownContainer"], [data-testid="stTextInput"],
+[data-testid="stButton"], [data-testid="stFormSubmitButton"],
+[data-testid="stPopover"], [data-testid="stExpander"] {
+  font-family:Inter,Arial,sans-serif !important;
+}
 
 .stApp {
   background:
@@ -3958,7 +3963,7 @@ def render_ai_assistant(default_query="",
         return
 
     if not records:
-        with st.container(key=f"{key_prefix}_exact_answer_box", gap=None):
+        with st.container(key=f"{key_prefix}_exact_answer_box"):
             st.markdown(
                 '<div class="no-match-answer" aria-label="No matching information found">'
                 'No matching information found in the HPE Knowledge Base.'
@@ -4042,7 +4047,7 @@ def render_ai_assistant(default_query="",
             # The active tab is the top edge of this content page; the body shares
             # the active-tab background so the selected tab visibly connects to
             # the information displayed beneath it.
-            with st.container(key=f"{key_prefix}_tab_content", gap=None):
+            with st.container(key=f"{key_prefix}_tab_content"):
                 if action == "answer":
                     answer_text = (selected.get("answer") or "").strip()
                     st.markdown('<div class="exact-section-title">ANSWER</div>', unsafe_allow_html=True)
@@ -4531,8 +4536,6 @@ def render_group():
             )
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # The product-family page intentionally has no second AI search field.
-    # The global Knowledge Base search is the single AI entry point.
 
 
 # ============================================================
@@ -5859,79 +5862,6 @@ st.markdown("""
 }
 
 /* ============================================================
-   FINAL CLEAN TAB / NO-SEAM OVERRIDES
-   - no vertical gap between the tab row and answer body
-   - no horizontal rule/line between them
-   - the outer answer box owns the perimeter
-   - Streamlit divider elements are hidden for this UI
-   ============================================================ */
-.stApp hr,
-.stApp [data-testid="stDivider"] {
-  display:none !important;
-  height:0 !important;
-  min-height:0 !important;
-  margin:0 !important;
-  padding:0 !important;
-  border:0 !important;
-}
-
-[class*="st-key-home_ai_exact_answer_box"],
-[class*="st-key-answer_"][class*="_exact_answer_box"] {
-  gap:0 !important;
-  row-gap:0 !important;
-}
-
-[class*="st-key-home_ai_exact_answer_box"] > div[data-testid="stVerticalBlock"],
-[class*="st-key-answer_"][class*="_exact_answer_box"] > div[data-testid="stVerticalBlock"] {
-  gap:0 !important;
-  row-gap:0 !important;
-}
-
-/* Remove wrapper spacing immediately around the tab row and tab body. */
-[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button),
-[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) {
-  margin:0 !important;
-  padding:0 !important;
-  gap:0 !important;
-  row-gap:0 !important;
-}
-
-[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) > div[data-testid="column"],
-[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) > div[data-testid="column"] {
-  margin:0 !important;
-  padding:0 2px !important;
-}
-
-/* The body starts immediately at the bottom edge of the selected tab.
-   No top border means there cannot be a returned teal/white seam. */
-[class*="st-key-home_ai_exact_answer_box"] [class*="_tab_content"],
-[class*="st-key-answer_"][class*="_tab_content"] {
-  margin:0 !important;
-  padding:16px 18px 20px !important;
-  border:0 !important;
-  border-top:0 !important;
-  border-radius:0 0 10px 10px !important;
-  background:#ffffff !important;
-  box-shadow:none !important;
-  position:relative !important;
-  z-index:1 !important;
-}
-
-[class*="st-key-home_ai_exact_answer_box"] [class*="_tab_content"] > div[data-testid="stVerticalBlock"],
-[class*="st-key-answer_"][class*="_tab_content"] > div[data-testid="stVerticalBlock"] {
-  gap:0 !important;
-  row-gap:0 !important;
-}
-
-/* Selected tab touches the body: its lower border is removed and the
-   body supplies the continuous white surface underneath it. */
-[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button,
-[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
-  margin-bottom:0 !important;
-  box-shadow:none !important;
-}
-
-/* ============================================================
    FINAL AI TAB / CLEAN HERO OVERRIDES
    - remove the stray white hero rule
    - active tab + its content are one white connected surface
@@ -5983,26 +5913,78 @@ st.markdown("""
   margin-top:0 !important;
 }
 
-/* Final conflict breaker: these rules intentionally come after all
-   historical tab styles above so they remain authoritative. */
+/* ============================================================
+   FINAL UI CLEANUP — NO TAB SEAM / NO STRAY WHITE RULES / INTER
+   ============================================================ */
+/* Streamlit/markdown horizontal rules are not part of the intended UI. */
+hr, [data-testid="stMarkdownContainer"] hr {
+  display:none !important;
+  height:0 !important;
+  border:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+
+/* The tab row and answer body must touch with ZERO vertical gap. */
+[class*="st-key-home_ai_exact_answer_box"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] {
+  --ai-tab-border:#00bfa5;
+}
+[class*="st-key-home_ai_exact_answer_box"] > div[data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] > div[data-testid="stVerticalBlock"] {
+  gap:0 !important;
+  row-gap:0 !important;
+}
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] {
+  margin-bottom:0 !important;
+  padding-bottom:0 !important;
+}
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+  margin-bottom:0 !important;
+  padding-bottom:0 !important;
+}
+
+/* Remove the horizontal border that was returning across the top of the body. */
 [class*="st-key-home_ai_exact_answer_box"] [class*="_tab_content"],
 [class*="st-key-answer_"][class*="_tab_content"] {
   margin-top:0 !important;
-  margin-bottom:0 !important;
-  border-top:0 !important;
-  border-left:0 !important;
-  border-right:0 !important;
-  border-bottom:0 !important;
   padding-top:16px !important;
+  border-top:0 !important;
+  border-left:1px solid var(--ai-tab-border) !important;
+  border-right:1px solid var(--ai-tab-border) !important;
+  border-bottom:1px solid var(--ai-tab-border) !important;
+  border-radius:0 0 12px 12px !important;
+  background:#ffffff !important;
+  box-shadow:none !important;
 }
 
-[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button),
-[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button),
-[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) + div,
-[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) + div {
+/* Remove the selected-tab bottom seam so the tab is visually fused to the body. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div:nth-child(1) div[data-testid="stButton"] button[style*="background"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div:nth-child(1) div[data-testid="stButton"] button[style*="background"],
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stButton"] button[style*="background"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stButton"] button[style*="background"],
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div:nth-child(3) div[data-testid="stButton"] button[style*="background"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div:nth-child(3) div[data-testid="stButton"] button[style*="background"] {
+  border-bottom:0 !important;
   margin-bottom:0 !important;
+  box-shadow:none !important;
+}
+
+/* Remove any one-pixel wrapper seam immediately following the tab row. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] + div,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] + div {
   margin-top:0 !important;
-  padding-bottom:0 !important;
+  padding-top:0 !important;
+  border-top:0 !important;
+}
+
+/* Enforce Inter on Streamlit/BaseWeb controls too. */
+[class*="st-key-home_ai_exact_answer_box"] *,
+[class*="st-key-answer_"][class*="_exact_answer_box"] *,
+.stApp * {
+  font-family:Inter,Arial,sans-serif !important;
 }
 
 /* Access-token screen. */
