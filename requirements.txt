@@ -7,4 +7,4 @@ streamlit-cookies-controller==0.0.4
 bcrypt>=4.2
 pandas>=2.2
 reportlab
-extra-streamlit-components
+streamlit-js-eval
