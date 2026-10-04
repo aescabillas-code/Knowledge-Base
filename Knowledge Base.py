@@ -42,7 +42,7 @@ except Exception:
 # ============================================================
 # Use the user-supplied HPE logo as the in-app brand mark; Knowledge Base remains live text.
 # The logo and favicon are embedded so deployment does not depend on uploaded assets.
-HPE_KB_LOGO_B64 = "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"
+HPE_KB_LOGO_B64 = "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"
 HPE_FAVICON_B64 = "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"
 HPE_LOGO_PATH = Path("knowledge_base_data") / "hpe_kb_logo_v4.png"
 HPE_FAVICON_PATH = Path("knowledge_base_data") / "hpe_kb_favicon_v4.png"
@@ -2703,6 +2703,23 @@ div.stButton > button {
   color:#007f70 !important;
 }
 /* Selected state is injected by render_ai_assistant based on session state. */
+/* The selected tab and its content now form one continuous browser/Excel-style page. */
+[class*="st-key-answer_"][class*="_tab_content"],
+[class*="st-key-home_ai_tab_content"] {
+  background:#d9f7f2 !important;
+  border:1px solid #00bfa5 !important;
+  border-top:none !important;
+  border-radius:0 0 12px 12px !important;
+  padding:16px 18px 20px !important;
+  margin-top:-1px !important;
+  box-shadow:0 3px 12px rgba(0,150,135,.08) !important;
+  position:relative !important;
+  z-index:1 !important;
+}
+[class*="st-key-answer_"][class*="_tab_content"] .stMarkdown,
+[class*="st-key-home_ai_tab_content"] .stMarkdown {
+  background:transparent !important;
+}
 /* Keep the three action controls readable without making them oversized. */
 .st-key-home_ai_exact_answer_box ~ div div[data-testid="stButton"] button,
 [class*="st-key-answer_"][class*="_exact_answer_box"] ~ div div[data-testid="stButton"] button {
@@ -3859,6 +3876,7 @@ def render_ai_assistant(default_query="",
                 color:#007f70 !important;
                 border-color:#00bfa5 !important;
                 border-bottom-color:#d9f7f2 !important;
+                margin-bottom:-1px !important;
                 box-shadow:0 -1px 5px rgba(0,191,165,.10), inset 0 1px 0 rgba(255,255,255,.75) !important;
                 top:0 !important;
                 z-index:2 !important;
@@ -3884,148 +3902,152 @@ def render_ai_assistant(default_query="",
 
         action = st.session_state[action_key] or "answer"
 
-        if action == "answer":
-            answer_text = (selected.get("answer") or "").strip()
-            st.markdown('<div class="exact-section-title">ANSWER</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="summary-paragraph">{eh(answer_text)}</div>',
-                unsafe_allow_html=True
-            )
+        # The active tab is the top edge of this content page; the body shares
+        # the active-tab background so the selected tab visibly connects to
+        # the information displayed beneath it.
+        with st.container(key=f"{key_prefix}_tab_content"):
+            if action == "answer":
+                answer_text = (selected.get("answer") or "").strip()
+                st.markdown('<div class="exact-section-title">ANSWER</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="summary-paragraph">{eh(answer_text)}</div>',
+                    unsafe_allow_html=True
+                )
 
-            step_lines = []
-            for line in (selected.get("steps") or "").splitlines():
-                clean = re.sub(r"^\s*\d+\.\s*", "", line).strip()
-                if clean and not clean.lower().startswith(
-                    ("prerequisites:", "procedure:", "verification:", "escalation:")
-                ):
-                    step_lines.append(clean)
+                step_lines = []
+                for line in (selected.get("steps") or "").splitlines():
+                    clean = re.sub(r"^\s*\d+\.\s*", "", line).strip()
+                    if clean and not clean.lower().startswith(
+                        ("prerequisites:", "procedure:", "verification:", "escalation:")
+                    ):
+                        step_lines.append(clean)
 
-            if step_lines:
-                st.markdown('<div class="summary-subtitle">Key points</div>', unsafe_allow_html=True)
-                for item in step_lines[:5]:
+                if step_lines:
+                    st.markdown('<div class="summary-subtitle">Key points</div>', unsafe_allow_html=True)
+                    for item in step_lines[:5]:
+                        st.markdown(
+                            f'<div class="summary-bullet"><span>•</span><div>{eh(item)}</div></div>',
+                            unsafe_allow_html=True
+                        )
+
+                if sop_images or sop_videos:
                     st.markdown(
-                        f'<div class="summary-bullet"><span>•</span><div>{eh(item)}</div></div>',
+                        '<div class="exact-section-title">RELATED VISUALS & MEDIA</div>',
+                        unsafe_allow_html=True
+                    )
+                    if sop_images:
+                        image_cols = st.columns(min(3, len(sop_images)), gap="small")
+                        for image_index, image_record in enumerate(sop_images):
+                            with image_cols[image_index % len(image_cols)]:
+                                image_path = image_record.get("image_path")
+                                if image_path and Path(image_path).exists():
+                                    render_clickable_image(
+                                        image_path,
+                                        image_record.get("caption") or image_record.get("placement") or "",
+                                        max_height=180
+                                    )
+                    for video_record in sop_videos:
+                        video_path = video_record.get("video_path")
+                        if video_path and Path(video_path).exists():
+                            st.video(video_path)
+                            if video_record.get("caption"):
+                                st.caption(video_record["caption"])
+
+            elif action == "steps":
+                st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
+                step_images = {str(img.get("placement") or ""): img for img in sop_images}
+                step_videos = {str(video.get("placement") or ""): video for video in sop_videos}
+
+                for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
+                    clean = re.sub(r"^\s*\d+\.\s*", "", line)
+                    if not clean.strip():
+                        continue
+
+                    if i == 1 and "Before Step 1" in step_images:
+                        img = step_images["Before Step 1"]
+                        if Path(img["image_path"]).exists():
+                            render_clickable_image(img["image_path"], img.get("caption") or "SOP image — Before Step 1", max_height=180)
+                    if i == 1 and "Before Step 1" in step_videos:
+                        vid = step_videos["Before Step 1"]
+                        if Path(vid["video_path"]).exists():
+                            st.video(vid["video_path"])
+
+                    st.markdown(
+                        f'<div class="ai-step"><div class="ai-num">{i}</div>'
+                        f'<div style="font-size:9px;color:#324e63;padding-top:3px;line-height:1.45;">{eh(clean)}</div></div>',
                         unsafe_allow_html=True
                     )
 
-            if sop_images or sop_videos:
-                st.markdown(
-                    '<div class="exact-section-title">RELATED VISUALS & MEDIA</div>',
-                    unsafe_allow_html=True
-                )
-                if sop_images:
-                    image_cols = st.columns(min(3, len(sop_images)), gap="small")
-                    for image_index, image_record in enumerate(sop_images):
-                        with image_cols[image_index % len(image_cols)]:
-                            image_path = image_record.get("image_path")
-                            if image_path and Path(image_path).exists():
-                                render_clickable_image(
-                                    image_path,
-                                    image_record.get("caption") or image_record.get("placement") or "",
-                                    max_height=180
-                                )
-                for video_record in sop_videos:
-                    video_path = video_record.get("video_path")
-                    if video_path and Path(video_path).exists():
-                        st.video(video_path)
-                        if video_record.get("caption"):
-                            st.caption(video_record["caption"])
+                    placement_key = f"After Step {i}"
+                    if placement_key in step_images:
+                        img = step_images[placement_key]
+                        if Path(img["image_path"]).exists():
+                            render_clickable_image(img["image_path"], img.get("caption") or f"SOP image — {placement_key}", max_height=180)
+                    if placement_key in step_videos:
+                        vid = step_videos[placement_key]
+                        if Path(vid["video_path"]).exists():
+                            st.video(vid["video_path"])
 
-        elif action == "steps":
-            st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
-            step_images = {str(img.get("placement") or ""): img for img in sop_images}
-            step_videos = {str(video.get("placement") or ""): video for video in sop_videos}
-
-            for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
-                clean = re.sub(r"^\s*\d+\.\s*", "", line)
-                if not clean.strip():
-                    continue
-
-                if i == 1 and "Before Step 1" in step_images:
-                    img = step_images["Before Step 1"]
+                if "End of SOP" in step_images:
+                    img = step_images["End of SOP"]
                     if Path(img["image_path"]).exists():
-                        render_clickable_image(img["image_path"], img.get("caption") or "SOP image — Before Step 1", max_height=180)
-                if i == 1 and "Before Step 1" in step_videos:
-                    vid = step_videos["Before Step 1"]
+                        render_clickable_image(img["image_path"], img.get("caption") or "SOP image — End of SOP", max_height=180)
+                if "End of SOP" in step_videos:
+                    vid = step_videos["End of SOP"]
                     if Path(vid["video_path"]).exists():
                         st.video(vid["video_path"])
 
-                st.markdown(
-                    f'<div class="ai-step"><div class="ai-num">{i}</div>'
-                    f'<div style="font-size:9px;color:#324e63;padding-top:3px;line-height:1.45;">{eh(clean)}</div></div>',
-                    unsafe_allow_html=True
-                )
+            elif action == "files":
+                st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
 
-                placement_key = f"After Step {i}"
-                if placement_key in step_images:
-                    img = step_images[placement_key]
-                    if Path(img["image_path"]).exists():
-                        render_clickable_image(img["image_path"], img.get("caption") or f"SOP image — {placement_key}", max_height=180)
-                if placement_key in step_videos:
-                    vid = step_videos[placement_key]
-                    if Path(vid["video_path"]).exists():
-                        st.video(vid["video_path"])
+                if not related_files:
+                    st.markdown(
+                        '<div class="related-empty">No related PDF, Excel, Word, PowerPoint, or video file was found.</div>',
+                        unsafe_allow_html=True
+                    )
+                else:
+                    for file_index, d in enumerate(related_files[:8]):
+                        suffix = Path(d["filename"]).suffix.lower()
+                        file_type = SUPPORTED_KB_FILES.get(suffix, d.get("doc_type") or "File")
+                        icon = {
+                            "PDF": "▤",
+                            "Excel": "▦",
+                            "Word": "▤",
+                            "PowerPoint": "▥",
+                            "Video": "▶",
+                        }.get(file_type, "▤")
 
-            if "End of SOP" in step_images:
-                img = step_images["End of SOP"]
-                if Path(img["image_path"]).exists():
-                    render_clickable_image(img["image_path"], img.get("caption") or "SOP image — End of SOP", max_height=180)
-            if "End of SOP" in step_videos:
-                vid = step_videos["End of SOP"]
-                if Path(vid["video_path"]).exists():
-                    st.video(vid["video_path"])
-
-        elif action == "files":
-            st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
-
-            if not related_files:
-                st.markdown(
-                    '<div class="related-empty">No related PDF, Excel, Word, PowerPoint, or video file was found.</div>',
-                    unsafe_allow_html=True
-                )
-            else:
-                for file_index, d in enumerate(related_files[:8]):
-                    suffix = Path(d["filename"]).suffix.lower()
-                    file_type = SUPPORTED_KB_FILES.get(suffix, d.get("doc_type") or "File")
-                    icon = {
-                        "PDF": "▤",
-                        "Excel": "▦",
-                        "Word": "▤",
-                        "PowerPoint": "▥",
-                        "Video": "▶",
-                    }.get(file_type, "▤")
-
-                    if suffix == ".pdf":
-                        if st.button(
-                            f"{icon}  {d['filename']}",
-                            key=f"{key_prefix}_open_pdf_{file_index}_{d['id']}",
-                            use_container_width=True
-                        ):
-                            st.session_state.selected_document = d["id"]
-                            st.session_state.view = "document"
-                            st.rerun()
-                    else:
-                        path = BASE_DIR / "files" / file_type.lower().replace(" ", "_") / d["filename"]
-                        data_uri = file_data_uri(path)
-                        if data_uri:
-                            st.markdown(
-                                f"""
-                                <a class="related-file-link" href="{data_uri}" target="_blank" rel="noopener">
-                                  <span class="related-file-icon">{icon}</span>
-                                  <span>
-                                    <b>{eh(d["filename"])}</b>
-                                    <small>{eh(file_type)} • Click to open</small>
-                                  </span>
-                                  <span class="related-file-arrow">↗</span>
-                                </a>
-                                """,
-                                unsafe_allow_html=True
-                            )
+                        if suffix == ".pdf":
+                            if st.button(
+                                f"{icon}  {d['filename']}",
+                                key=f"{key_prefix}_open_pdf_{file_index}_{d['id']}",
+                                use_container_width=True
+                            ):
+                                st.session_state.selected_document = d["id"]
+                                st.session_state.view = "document"
+                                st.rerun()
                         else:
-                            st.markdown(
-                                f'<div class="related-empty">{eh(d["filename"])} could not be opened from the stored file.</div>',
-                                unsafe_allow_html=True
-                            )
+                            path = BASE_DIR / "files" / file_type.lower().replace(" ", "_") / d["filename"]
+                            data_uri = file_data_uri(path)
+                            if data_uri:
+                                st.markdown(
+                                    f"""
+                                    <a class="related-file-link" href="{data_uri}" target="_blank" rel="noopener">
+                                      <span class="related-file-icon">{icon}</span>
+                                      <span>
+                                        <b>{eh(d["filename"])}</b>
+                                        <small>{eh(file_type)} • Click to open</small>
+                                      </span>
+                                      <span class="related-file-arrow">↗</span>
+                                    </a>
+                                    """,
+                                    unsafe_allow_html=True
+                                )
+                            else:
+                                st.markdown(
+                                    f'<div class="related-empty">{eh(d["filename"])} could not be opened from the stored file.</div>',
+                                    unsafe_allow_html=True
+                                )
 
     # No second question field: the original AI field remains the single input.
 
