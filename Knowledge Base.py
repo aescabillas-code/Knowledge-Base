@@ -3994,194 +3994,200 @@ def render_ai_assistant(default_query="",
             unsafe_allow_html=True
         )
 
-        # Dynamic active-tab styling: only the selected tab is light teal.
-        selected_tab_index = {"answer": 1, "steps": 2, "files": 3}.get(
-            st.session_state.get(action_key), 1
-        )
-        st.markdown(
-            f"""
-            <style>
-            [class*="st-key-{key_prefix}_exact_answer_box"] div[data-testid="stHorizontalBlock"]
-              > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button,
-            .st-key-home_ai_exact_answer_box div[data-testid="stHorizontalBlock"]
-              > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button {{
-                background:#ffffff !important;
-                color:#007f70 !important;
-                border-color:#00bfa5 !important;
-                border-bottom-color:#ffffff !important;
-                margin-bottom:-1px !important;
-                box-shadow:0 -1px 5px rgba(0,191,165,.10), inset 0 1px 0 rgba(255,255,255,.75) !important;
-                top:0 !important;
-                z-index:2 !important;
-              }}
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+        # Keep tab interactions inside a Streamlit fragment. Clicking Answer /
+        # Troubleshooting / Related Knowledge should rerender only this section,
+        # not the entire Knowledge Base. This prevents expensive page-level work
+        # (auth checks, database setup, search preparation, media lookup, etc.)
+        # from running on every tab click.
+        @st.fragment
+        def _render_answer_tabs():
+            # Dynamic active-tab styling: only the selected tab is light teal.
+            selected_tab_index = {"answer": 1, "steps": 2, "files": 3}.get(
+                st.session_state.get(action_key), 1
+            )
+            st.markdown(
+                f"""
+                <style>
+                [class*="st-key-{key_prefix}_exact_answer_box"] div[data-testid="stHorizontalBlock"]
+                  > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button,
+                .st-key-home_ai_exact_answer_box div[data-testid="stHorizontalBlock"]
+                  > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button {{
+                    background:#ffffff !important;
+                    color:#007f70 !important;
+                    border-color:#00bfa5 !important;
+                    border-bottom-color:#ffffff !important;
+                    margin-bottom:-1px !important;
+                    box-shadow:0 -1px 5px rgba(0,191,165,.10), inset 0 1px 0 rgba(255,255,255,.75) !important;
+                    top:0 !important;
+                    z-index:2 !important;
+                  }}
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        a1, a2, a3 = st.columns(3, gap="small")
-        with a1:
-            if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
-                st.session_state[action_key] = "answer"
-                st.rerun()
-        with a2:
-            if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
-                st.session_state[action_key] = "steps"
-                st.rerun()
-        with a3:
-            if st.button("▤ Related knowledge", key=f"{key_prefix}_files", use_container_width=True):
-                st.session_state[action_key] = "files"
-                st.rerun()
+            a1, a2, a3 = st.columns(3, gap="small")
+            with a1:
+                if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
+                    st.session_state[action_key] = "answer"
+            with a2:
+                if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
+                    st.session_state[action_key] = "steps"
+            with a3:
+                if st.button("▤ Related knowledge", key=f"{key_prefix}_files", use_container_width=True):
+                    st.session_state[action_key] = "files"
 
-        action = st.session_state[action_key] or "answer"
+            action = st.session_state[action_key] or "answer"
 
-        # The active tab is the top edge of this content page; the body shares
-        # the active-tab background so the selected tab visibly connects to
-        # the information displayed beneath it.
-        with st.container(key=f"{key_prefix}_tab_content"):
-            if action == "answer":
-                answer_text = (selected.get("answer") or "").strip()
-                st.markdown('<div class="exact-section-title">ANSWER</div>', unsafe_allow_html=True)
-                st.markdown(
-                    f'<div class="summary-paragraph">{eh(answer_text)}</div>',
-                    unsafe_allow_html=True
-                )
+            # The active tab is the top edge of this content page; the body shares
+            # the active-tab background so the selected tab visibly connects to
+            # the information displayed beneath it.
+            with st.container(key=f"{key_prefix}_tab_content"):
+                if action == "answer":
+                    answer_text = (selected.get("answer") or "").strip()
+                    st.markdown('<div class="exact-section-title">ANSWER</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="summary-paragraph">{eh(answer_text)}</div>',
+                        unsafe_allow_html=True
+                    )
 
-                step_lines = []
-                for line in (selected.get("steps") or "").splitlines():
-                    clean = re.sub(r"^\s*\d+\.\s*", "", line).strip()
-                    if clean and not clean.lower().startswith(
-                        ("prerequisites:", "procedure:", "verification:", "escalation:")
-                    ):
-                        step_lines.append(clean)
+                    step_lines = []
+                    for line in (selected.get("steps") or "").splitlines():
+                        clean = re.sub(r"^\s*\d+\.\s*", "", line).strip()
+                        if clean and not clean.lower().startswith(
+                            ("prerequisites:", "procedure:", "verification:", "escalation:")
+                        ):
+                            step_lines.append(clean)
 
-                if step_lines:
-                    st.markdown('<div class="summary-subtitle">Key points</div>', unsafe_allow_html=True)
-                    for item in step_lines[:5]:
+                    if step_lines:
+                        st.markdown('<div class="summary-subtitle">Key points</div>', unsafe_allow_html=True)
+                        for item in step_lines[:5]:
+                            st.markdown(
+                                f'<div class="summary-bullet"><span>•</span><div>{eh(item)}</div></div>',
+                                unsafe_allow_html=True
+                            )
+
+                    if sop_images or sop_videos:
                         st.markdown(
-                            f'<div class="summary-bullet"><span>•</span><div>{eh(item)}</div></div>',
+                            '<div class="exact-section-title">RELATED VISUALS & MEDIA</div>',
+                            unsafe_allow_html=True
+                        )
+                        if sop_images:
+                            image_cols = st.columns(min(3, len(sop_images)), gap="small")
+                            for image_index, image_record in enumerate(sop_images):
+                                with image_cols[image_index % len(image_cols)]:
+                                    image_path = image_record.get("image_path")
+                                    if image_path and Path(image_path).exists():
+                                        render_clickable_image(
+                                            image_path,
+                                            image_record.get("caption") or image_record.get("placement") or "",
+                                            max_height=180
+                                        )
+                        for video_record in sop_videos:
+                            video_path = video_record.get("video_path")
+                            if video_path and Path(video_path).exists():
+                                st.video(video_path)
+                                if video_record.get("caption"):
+                                    st.caption(video_record["caption"])
+
+                elif action == "steps":
+                    st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
+                    step_images = {str(img.get("placement") or ""): img for img in sop_images}
+                    step_videos = {str(video.get("placement") or ""): video for video in sop_videos}
+
+                    for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
+                        clean = re.sub(r"^\s*\d+\.\s*", "", line)
+                        if not clean.strip():
+                            continue
+
+                        if i == 1 and "Before Step 1" in step_images:
+                            img = step_images["Before Step 1"]
+                            if Path(img["image_path"]).exists():
+                                render_clickable_image(img["image_path"], img.get("caption") or "SOP image — Before Step 1", max_height=180)
+                        if i == 1 and "Before Step 1" in step_videos:
+                            vid = step_videos["Before Step 1"]
+                            if Path(vid["video_path"]).exists():
+                                st.video(vid["video_path"])
+
+                        st.markdown(
+                            f'<div class="ai-step"><div class="ai-num">{i}</div>'
+                            f'<div style="font-size:9px;color:#324e63;padding-top:3px;line-height:1.45;">{eh(clean)}</div></div>',
                             unsafe_allow_html=True
                         )
 
-                if sop_images or sop_videos:
-                    st.markdown(
-                        '<div class="exact-section-title">RELATED VISUALS & MEDIA</div>',
-                        unsafe_allow_html=True
-                    )
-                    if sop_images:
-                        image_cols = st.columns(min(3, len(sop_images)), gap="small")
-                        for image_index, image_record in enumerate(sop_images):
-                            with image_cols[image_index % len(image_cols)]:
-                                image_path = image_record.get("image_path")
-                                if image_path and Path(image_path).exists():
-                                    render_clickable_image(
-                                        image_path,
-                                        image_record.get("caption") or image_record.get("placement") or "",
-                                        max_height=180
-                                    )
-                    for video_record in sop_videos:
-                        video_path = video_record.get("video_path")
-                        if video_path and Path(video_path).exists():
-                            st.video(video_path)
-                            if video_record.get("caption"):
-                                st.caption(video_record["caption"])
+                        placement_key = f"After Step {i}"
+                        if placement_key in step_images:
+                            img = step_images[placement_key]
+                            if Path(img["image_path"]).exists():
+                                render_clickable_image(img["image_path"], img.get("caption") or f"SOP image — {placement_key}", max_height=180)
+                        if placement_key in step_videos:
+                            vid = step_videos[placement_key]
+                            if Path(vid["video_path"]).exists():
+                                st.video(vid["video_path"])
 
-            elif action == "steps":
-                st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
-                step_images = {str(img.get("placement") or ""): img for img in sop_images}
-                step_videos = {str(video.get("placement") or ""): video for video in sop_videos}
-
-                for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
-                    clean = re.sub(r"^\s*\d+\.\s*", "", line)
-                    if not clean.strip():
-                        continue
-
-                    if i == 1 and "Before Step 1" in step_images:
-                        img = step_images["Before Step 1"]
+                    if "End of SOP" in step_images:
+                        img = step_images["End of SOP"]
                         if Path(img["image_path"]).exists():
-                            render_clickable_image(img["image_path"], img.get("caption") or "SOP image — Before Step 1", max_height=180)
-                    if i == 1 and "Before Step 1" in step_videos:
-                        vid = step_videos["Before Step 1"]
+                            render_clickable_image(img["image_path"], img.get("caption") or "SOP image — End of SOP", max_height=180)
+                    if "End of SOP" in step_videos:
+                        vid = step_videos["End of SOP"]
                         if Path(vid["video_path"]).exists():
                             st.video(vid["video_path"])
 
-                    st.markdown(
-                        f'<div class="ai-step"><div class="ai-num">{i}</div>'
-                        f'<div style="font-size:9px;color:#324e63;padding-top:3px;line-height:1.45;">{eh(clean)}</div></div>',
-                        unsafe_allow_html=True
-                    )
+                elif action == "files":
+                    st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
 
-                    placement_key = f"After Step {i}"
-                    if placement_key in step_images:
-                        img = step_images[placement_key]
-                        if Path(img["image_path"]).exists():
-                            render_clickable_image(img["image_path"], img.get("caption") or f"SOP image — {placement_key}", max_height=180)
-                    if placement_key in step_videos:
-                        vid = step_videos[placement_key]
-                        if Path(vid["video_path"]).exists():
-                            st.video(vid["video_path"])
+                    if not related_files:
+                        st.markdown(
+                            '<div class="related-empty">No related PDF, Excel, Word, PowerPoint, or video file was found.</div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        for file_index, d in enumerate(related_files[:8]):
+                            suffix = Path(d["filename"]).suffix.lower()
+                            file_type = SUPPORTED_KB_FILES.get(suffix, d.get("doc_type") or "File")
+                            icon = {
+                                "PDF": "▤",
+                                "Excel": "▦",
+                                "Word": "▤",
+                                "PowerPoint": "▥",
+                                "Video": "▶",
+                            }.get(file_type, "▤")
 
-                if "End of SOP" in step_images:
-                    img = step_images["End of SOP"]
-                    if Path(img["image_path"]).exists():
-                        render_clickable_image(img["image_path"], img.get("caption") or "SOP image — End of SOP", max_height=180)
-                if "End of SOP" in step_videos:
-                    vid = step_videos["End of SOP"]
-                    if Path(vid["video_path"]).exists():
-                        st.video(vid["video_path"])
-
-            elif action == "files":
-                st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
-
-                if not related_files:
-                    st.markdown(
-                        '<div class="related-empty">No related PDF, Excel, Word, PowerPoint, or video file was found.</div>',
-                        unsafe_allow_html=True
-                    )
-                else:
-                    for file_index, d in enumerate(related_files[:8]):
-                        suffix = Path(d["filename"]).suffix.lower()
-                        file_type = SUPPORTED_KB_FILES.get(suffix, d.get("doc_type") or "File")
-                        icon = {
-                            "PDF": "▤",
-                            "Excel": "▦",
-                            "Word": "▤",
-                            "PowerPoint": "▥",
-                            "Video": "▶",
-                        }.get(file_type, "▤")
-
-                        if suffix == ".pdf":
-                            if st.button(
-                                f"{icon}  {d['filename']}",
-                                key=f"{key_prefix}_open_pdf_{file_index}_{d['id']}",
-                                use_container_width=True
-                            ):
-                                st.session_state.selected_document = d["id"]
-                                st.session_state.view = "document"
-                                st.rerun()
-                        else:
-                            path = BASE_DIR / "files" / file_type.lower().replace(" ", "_") / d["filename"]
-                            data_uri = file_data_uri(path)
-                            if data_uri:
-                                st.markdown(
-                                    f"""
-                                    <a class="related-file-link" href="{data_uri}" target="_blank" rel="noopener">
-                                      <span class="related-file-icon">{icon}</span>
-                                      <span>
-                                        <b>{eh(d["filename"])}</b>
-                                        <small>{eh(file_type)} • Click to open</small>
-                                      </span>
-                                      <span class="related-file-arrow">↗</span>
-                                    </a>
-                                    """,
-                                    unsafe_allow_html=True
-                                )
+                            if suffix == ".pdf":
+                                if st.button(
+                                    f"{icon}  {d['filename']}",
+                                    key=f"{key_prefix}_open_pdf_{file_index}_{d['id']}",
+                                    use_container_width=True
+                                ):
+                                    st.session_state.selected_document = d["id"]
+                                    st.session_state.view = "document"
+                                    st.rerun()
                             else:
-                                st.markdown(
-                                    f'<div class="related-empty">{eh(d["filename"])} could not be opened from the stored file.</div>',
-                                    unsafe_allow_html=True
-                                )
+                                path = BASE_DIR / "files" / file_type.lower().replace(" ", "_") / d["filename"]
+                                data_uri = file_data_uri(path)
+                                if data_uri:
+                                    st.markdown(
+                                        f"""
+                                        <a class="related-file-link" href="{data_uri}" target="_blank" rel="noopener">
+                                          <span class="related-file-icon">{icon}</span>
+                                          <span>
+                                            <b>{eh(d["filename"])}</b>
+                                            <small>{eh(file_type)} • Click to open</small>
+                                          </span>
+                                          <span class="related-file-arrow">↗</span>
+                                        </a>
+                                        """,
+                                        unsafe_allow_html=True
+                                    )
+                                else:
+                                    st.markdown(
+                                        f'<div class="related-empty">{eh(d["filename"])} could not be opened from the stored file.</div>',
+                                        unsafe_allow_html=True
+                                    )
 
+
+        _render_answer_tabs()
     # No second question field: the original AI field remains the single input.
 
 def render_documents(docs):
