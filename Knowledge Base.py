@@ -44,7 +44,7 @@ except Exception:
 # Streamlit page favicon. The tiny PNG is embedded so deployment does not
 # depend on a separate uploaded asset.
 HPE_FAVICON_B64 = (
-    "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"
+    "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"
 )
 HPE_FAVICON_PATH = Path("knowledge_base_data") / "hpe_favicon.png"
 HPE_FAVICON_PATH.parent.mkdir(exist_ok=True)
@@ -1345,7 +1345,7 @@ div[data-testid="stToolbar"] { display:none !important; }
 
 .hero-search { max-width:820px; margin:auto; }
 
-.st-key-hero_search_area { position:relative; z-index:20; margin:-102px auto 8px !important; max-width:830px; }
+.st-key-hero_search_area { position:relative; z-index:20; margin:-130px auto 8px !important; max-width:830px; }
 .st-key-hero_search_area form { background:transparent !important; border:0 !important; padding:0 !important; }
 .st-key-hero_search_area div[data-testid="stTextInput"] { margin:0 !important; }
 .st-key-hero_search_area div[data-testid="stTextInput"] label { display:none !important; }
@@ -1583,7 +1583,18 @@ div[class*="_question_box"] [data-testid="stVerticalBlock"] {
 div[class*="_question_box"] div[data-testid="stButton"] {
   margin:0 0 5px 0 !important;
 }
-div[class*="_question_box"] div[data-testid="stButton"] button,
+div[class*="_question_box"] div[data-testid="stButton"] button {
+  background:rgba(255,255,255,.06) !important;
+  color:#ffffff !important;
+  border:1px solid rgba(255,255,255,.30) !important;
+  box-shadow:none !important;
+  font-weight:700 !important;
+}
+div[class*="_question_box"] div[data-testid="stButton"] button:hover {
+  background:rgba(255,255,255,.12) !important;
+  border-color:rgba(255,255,255,.62) !important;
+  color:#ffffff !important;
+}
 div[class*="_exact_answer_box"] div[data-testid="stButton"] button {
   background:#ffffff !important;
   color:#008f7b !important;
@@ -1591,7 +1602,6 @@ div[class*="_exact_answer_box"] div[data-testid="stButton"] button {
   box-shadow:none !important;
   font-weight:700 !important;
 }
-div[class*="_question_box"] div[data-testid="stButton"] button:hover,
 div[class*="_exact_answer_box"] div[data-testid="stButton"] button:hover {
   background:#f3fffd !important;
   border-color:#00bfa5 !important;
@@ -1686,14 +1696,6 @@ div[class*="_exact_answer_box"] div[data-testid="stButton"] button:hover {
   font-size:9px;
 }
 
-.user-msg {
-  margin:13px 0 7px 12px;
-  padding:9px 12px;
-  border-radius:9px;
-  background:#eef3f6;
-  color:#243f55;
-  font-size:10px;
-}
 
 .ai-answer {
   margin-left:12px;
@@ -2165,20 +2167,20 @@ div.stButton > button {
   padding:0 !important;
   margin:0 !important;
   border-radius:50% !important;
-  background:#00bfa5 !important;
-  border:2px solid rgba(0,238,216,.72) !important;
+  background:transparent !important;
+  border:1px solid rgba(255,255,255,.30) !important;
   color:#ffffff !important;
-  box-shadow:0 4px 14px rgba(0,0,0,.25) !important;
+  box-shadow:none !important;
   font-size:25px !important;
   line-height:1 !important;
   cursor:pointer !important;
 }
 .st-key-hero_admin_gear div[data-testid="stPopover"] > button:hover,
 .st-key-hero_admin_gear div[data-testid="stPopover"] > button:focus-visible {
-  background:#00d7bd !important;
-  border-color:#55f2df !important;
+  background:rgba(255,255,255,.08) !important;
+  border-color:rgba(255,255,255,.55) !important;
   color:#ffffff !important;
-  outline:3px solid rgba(0,230,210,.28) !important;
+  outline:3px solid rgba(255,255,255,.12) !important;
   outline-offset:3px !important;
 }
 .st-key-hero_admin_gear [data-testid="stPopoverBody"] {
@@ -3636,7 +3638,7 @@ def render_ai_assistant(default_query="",
     docs = []
 
     if query:
-        records, docs = search(query, family=family, limit=8)
+        records, docs = search(query, family=family, limit=10)
 
     with st.container(key=f"{key_prefix}_question_box"):
         with st.form(f"{key_prefix}_question_form", clear_on_submit=False):
@@ -3661,7 +3663,7 @@ def render_ai_assistant(default_query="",
                 st.rerun()
 
         if query and records:
-            options = records[:3]
+            options = records
             selected_id = st.session_state.get(selected_key)
             selected = next((r for r in options if r["kb_id"] == selected_id), None)
 
@@ -3693,7 +3695,7 @@ def render_ai_assistant(default_query="",
             )
         return
 
-    options = records[:3]
+    options = records
     selected_id = st.session_state.get(selected_key)
     selected = next((r for r in options if r["kb_id"] == selected_id), None)
     selected = selected or options[0]
@@ -3709,7 +3711,6 @@ def render_ai_assistant(default_query="",
     with st.container(key=f"{key_prefix}_exact_answer_box"):
         st.markdown(
             f"""
-            <div class="user-msg"><span class="msg-label">QUESTION</span>{eh(query)}</div>
             <div class="exact-answer-header">
               <span class="exact-answer-icon">✓</span>
               <div>
