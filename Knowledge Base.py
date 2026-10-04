@@ -1918,6 +1918,56 @@ div.stButton > button {
     font-size:12px !important;
   }
 }
+
+/* ============================================================
+   COMPACT AI QUESTION / SUGGESTED ANSWERS
+   ============================================================ */
+[class*="st-key-home_ai_question_box"],
+[class*="st-key-answer_"][class*="_question_box"] {
+  margin:0 0 9px 0 !important;
+  padding:7px 12px 6px !important;
+}
+
+[class*="st-key-home_ai_question_box"] .chatbot-prompt,
+[class*="st-key-answer_"][class*="_question_box"] .chatbot-prompt {
+  margin:4px 0 3px !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
+  height:28px !important;
+  min-height:28px !important;
+  margin:1px 0 !important;
+  padding:2px 8px !important;
+  line-height:1.05 !important;
+}
+
+/* Equal top and bottom breathing room around the exact-answer block. */
+.st-key-home_ai_exact_answer_box,
+[class*="st-key-answer_"][class*="_exact_answer_box"] {
+  margin:9px 0 9px 12px !important;
+}
+
+@media (max-width:800px) {
+  [class*="st-key-home_ai_question_box"],
+  [class*="st-key-answer_"][class*="_question_box"] {
+    padding:6px 10px 5px !important;
+    margin-bottom:8px !important;
+  }
+
+  [class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
+  [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
+    height:27px !important;
+    min-height:27px !important;
+    margin:1px 0 !important;
+  }
+
+  .st-key-home_ai_exact_answer_box,
+  [class*="st-key-answer_"][class*="_exact_answer_box"] {
+    margin:8px 0 8px 0 !important;
+  }
+}
+
 </style>
 """, unsafe_allow_html=True)
 
