@@ -2009,18 +2009,21 @@ def render_ai_assistant(default_query="",
     selected_key = f"{key_prefix}_selected"
     action_key = f"{key_prefix}_action"
 
-    # Start with an empty question field. Clear the previous demo question
-    # from an already-running Streamlit session as well.
-    previous_demo = "How do I troubleshoot ClearPass licensing issues?"
+    # The assistant starts blank on the home page. A non-empty default_query
+    # is only used by an explicit programmatic call such as render_ai_answer().
     if q_key not in st.session_state:
         st.session_state[q_key] = default_query or ""
-    elif st.session_state.get(q_key) == previous_demo and not default_query:
-        st.session_state[q_key] = ""
 
     if submitted_key not in st.session_state:
         st.session_state[submitted_key] = default_query or ""
-    elif st.session_state.get(submitted_key) == previous_demo and not default_query:
-        st.session_state[submitted_key] = ""
+
+    # Never resurrect the old demo question if it exists in a stale session.
+    previous_demo = "How do I troubleshoot ClearPass licensing issues?"
+    if not default_query:
+        if st.session_state.get(q_key) == previous_demo:
+            st.session_state[q_key] = ""
+        if st.session_state.get(submitted_key) == previous_demo:
+            st.session_state[submitted_key] = ""
 
     st.session_state.setdefault(selected_key, None)
     st.session_state.setdefault(action_key, None)
@@ -2366,9 +2369,16 @@ def render_home():
     render_hero()
 
     query = st.session_state.get("global_query", "").strip()
-    if query:
+    # Sync a NEW global-search query into the AI assistant, but do not
+    # overwrite the selected action on every Streamlit rerun.  Previously,
+    # clicking Summarize / Troubleshooting steps / Related knowledge set
+    # home_ai_action and then render_home immediately reset it to None,
+    # making the buttons appear non-functional.
+    current_ai_query = st.session_state.get("home_ai_submitted", "").strip()
+    if query and query != current_ai_query:
         st.session_state["home_ai_query"] = query
         st.session_state["home_ai_submitted"] = query
+        st.session_state["home_ai_selected"] = None
         st.session_state["home_ai_action"] = None
 
     left, right = st.columns([1.72, 0.78], gap="medium")
