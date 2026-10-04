@@ -950,8 +950,16 @@ div[data-testid="stToolbar"] { display:none !important; }
   min-height:26px !important;
   padding:3px 7px !important;
   border-radius:16px !important;
-  font-size:7.5px !important;
+  font-size:8px !important;
+  line-height:1.1 !important;
   white-space:nowrap !important;
+}
+
+.ai-panel div[data-testid="stButton"] button p,
+.ai-panel div[data-testid="stButton"] button span {
+  font-size:8px !important;
+  line-height:1.1 !important;
+  margin:0 !important;
 }
 .ai-panel .stForm {
   border:0 !important;
@@ -1376,6 +1384,23 @@ div.stButton > button {
 @media (max-width:1100px){ .hero-grid{grid-template-columns:170px 1fr 120px}.hero-title{font-size:35px;line-height:40px}.hero-sub{font-size:13px}.family-card{height:145px}.main-grid{grid-template-columns:1fr}.st-key-hero_search_area{max-width:760px}.st-key-hero_search_area div[data-testid="stButton"] button{font-size:8px !important} }
 @media (max-width:800px){ .block-container{padding:0 10px 14px !important}.hero{height:340px;min-height:340px;margin:0 -10px;padding:14px 16px 12px}.hero-grid{grid-template-columns:1fr;height:auto;text-align:center}.brand{text-align:center}.hpe-logo{margin-left:auto;margin-right:auto}.brand-rule{margin-left:auto;margin-right:auto}.brand-copy{font-size:9px}.hero-center{margin-top:14px}.hero-title{font-size:29px;line-height:33px;letter-spacing:-1px;padding:0 8px}.hero-sub{font-size:11px;line-height:15px;padding:0 15px;margin-top:5px}.hero-right{display:none}.st-key-hero_search_area{width:calc(100% - 20px) !important;max-width:none !important;margin:-110px auto 10px !important}.st-key-hero_search_area div[data-testid="stTextInput"] input{height:50px !important;font-size:12px !important;padding:0 13px !important}.st-key-hero_search_area div[data-testid="stFormSubmitButton"] button{width:48px !important;height:48px !important;min-height:48px !important;font-size:22px !important}.st-key-hero_search_area .try-label{display:block;text-align:center;margin-top:7px;font-size:9px}.st-key-hero_search_area div[data-testid="stHorizontalBlock"]{gap:4px !important}.st-key-hero_search_area div[data-testid="stButton"] button{height:auto !important;min-height:31px !important;font-size:7px !important;padding:4px !important;white-space:normal !important;line-height:9px !important}.family-card{height:142px}.doc-grid{grid-template-columns:repeat(2,1fr)}.topic-grid{grid-template-columns:1fr}.main-grid{display:block}.panel{padding:12px;border-radius:14px}.bottom-strip{grid-template-columns:repeat(2,1fr);height:auto;padding:7px 0}.stat{min-height:48px;border-right:0}.stat:last-child{grid-column:1 / -1} }
 @media (max-width:480px){ .hero{height:360px;min-height:360px}.hero-title{font-size:25px;line-height:29px}.hero-sub{font-size:10px}.st-key-hero_search_area{margin-top:-116px !important}.family-card{height:136px;padding:11px 10px}.family-name{font-size:14px}.family-desc{font-size:9px;line-height:12px}.family-icon{width:34px;height:34px;font-size:18px}.doc-grid{grid-template-columns:1fr}.topic-grid{grid-template-columns:1fr} }
+
+/* Smaller answer-choice text — keeps long suggested questions compact. */
+.ai-panel div[data-testid="stButton"] button,
+.ai-panel div[data-testid="stButton"] button p,
+.ai-panel div[data-testid="stButton"] button span {
+  font-size:8px !important;
+  line-height:1.1 !important;
+}
+
+@media (max-width:800px) {
+  .ai-panel div[data-testid="stButton"] button,
+  .ai-panel div[data-testid="stButton"] button p,
+  .ai-panel div[data-testid="stButton"] button span {
+    font-size:7px !important;
+    line-height:1.05 !important;
+  }
+}
 
 /* The AI Assistant uses form submission only.
    No standalone "Ask this question" button is rendered. */
