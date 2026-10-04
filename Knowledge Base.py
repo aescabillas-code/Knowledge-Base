@@ -42,7 +42,7 @@ except Exception:
 # ============================================================
 # Use the user-supplied HPE logo as the in-app brand mark; Knowledge Base remains live text.
 # The logo and favicon are embedded so deployment does not depend on uploaded assets.
-HPE_KB_LOGO_B64 = "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"
+HPE_KB_LOGO_B64 = "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"
 HPE_FAVICON_B64 = "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"
 HPE_LOGO_PATH = Path("knowledge_base_data") / "hpe_kb_logo_v4.png"
 HPE_FAVICON_PATH = Path("knowledge_base_data") / "hpe_kb_favicon_v4.png"
@@ -2967,6 +2967,58 @@ div.stButton > button {
   color:#ffffff !important;
 }
 
+/* ============================================================
+   USER REQUESTED TAB + LOGO READABILITY OVERRIDES
+   - Selected Answer / Troubleshooting / Related Knowledge tab:
+     light HPE teal background.
+   - Inactive tabs remain white.
+   - The teal portion of the HPE E has a black outline for readability.
+   ============================================================ */
+
+/* Selected action tab */
+[class*="_tab_answer_active"] div[data-testid="stButton"] button,
+[class*="_tab_steps_active"] div[data-testid="stButton"] button,
+[class*="_tab_files_active"] div[data-testid="stButton"] button {
+  background:#dff8f4 !important;
+  border:1px solid #00bfa5 !important;
+  color:#007f70 !important;
+  box-shadow:inset 0 0 0 1px rgba(0,191,165,.08) !important;
+}
+
+[class*="_tab_answer_active"] div[data-testid="stButton"] button p,
+[class*="_tab_answer_active"] div[data-testid="stButton"] button span,
+[class*="_tab_steps_active"] div[data-testid="stButton"] button p,
+[class*="_tab_steps_active"] div[data-testid="stButton"] button span,
+[class*="_tab_files_active"] div[data-testid="stButton"] button p,
+[class*="_tab_files_active"] div[data-testid="stButton"] button span {
+  color:#007f70 !important;
+}
+
+/* Inactive action tabs */
+[class*="_tab_answer_inactive"] div[data-testid="stButton"] button,
+[class*="_tab_steps_inactive"] div[data-testid="stButton"] button,
+[class*="_tab_files_inactive"] div[data-testid="stButton"] button {
+  background:#ffffff !important;
+  border:1px solid #9edfd8 !important;
+  color:#008f7b !important;
+}
+
+[class*="_tab_answer_inactive"] div[data-testid="stButton"] button:hover,
+[class*="_tab_steps_inactive"] div[data-testid="stButton"] button:hover,
+[class*="_tab_files_inactive"] div[data-testid="stButton"] button:hover {
+  background:#eefcf9 !important;
+  border-color:#00bfa5 !important;
+  color:#007f70 !important;
+}
+
+/* Keep the action-tab wrappers visually seamless. */
+[class*="_tab_answer_"],
+[class*="_tab_steps_"],
+[class*="_tab_files_"] {
+  margin:0 !important;
+  padding:0 !important;
+}
+
 /* Product-family tiles: solid HPE teal, while the individual icon colors
    and arrow colors remain exactly as defined by their existing classes. */
 .family-card-compact {
@@ -3769,21 +3821,24 @@ def render_ai_assistant(default_query="",
             unsafe_allow_html=True
         )
 
+        action = st.session_state[action_key] or "answer"
+
         a1, a2, a3 = st.columns(3, gap="small")
         with a1:
-            if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
-                st.session_state[action_key] = "answer"
-                st.rerun()
+            with st.container(key=f"{key_prefix}_tab_answer_{'active' if action == 'answer' else 'inactive'}"):
+                if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
+                    st.session_state[action_key] = "answer"
+                    st.rerun()
         with a2:
-            if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
-                st.session_state[action_key] = "steps"
-                st.rerun()
+            with st.container(key=f"{key_prefix}_tab_steps_{'active' if action == 'steps' else 'inactive'}"):
+                if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
+                    st.session_state[action_key] = "steps"
+                    st.rerun()
         with a3:
-            if st.button("▤ Related knowledge", key=f"{key_prefix}_files", use_container_width=True):
-                st.session_state[action_key] = "files"
-                st.rerun()
-
-        action = st.session_state[action_key] or "answer"
+            with st.container(key=f"{key_prefix}_tab_files_{'active' if action == 'files' else 'inactive'}"):
+                if st.button("▤ Related knowledge", key=f"{key_prefix}_files", use_container_width=True):
+                    st.session_state[action_key] = "files"
+                    st.rerun()
 
         if action == "answer":
             answer_text = (selected.get("answer") or "").strip()
