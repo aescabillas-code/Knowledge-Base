@@ -442,10 +442,10 @@ def db():
 
     # Improve reliability when Streamlit reruns overlap.
     conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 
+@st.cache_resource(show_spinner=False)
 def init_db():
     """
     Initialize the SQLite schema safely.
@@ -458,6 +458,7 @@ def init_db():
     conn = db()
 
     try:
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -610,6 +611,7 @@ def init_db():
         pass
 
 
+@st.cache_resource(show_spinner=False)
 def ensure_hpe_kb_usage_sop():
     """Add the built-in Knowledge Base usage SOP without disturbing existing data."""
     now = datetime.now().isoformat(timespec="seconds")
@@ -658,13 +660,14 @@ def ensure_hpe_kb_usage_sop():
     return kb_id
 
 
-init_db()
-ensure_hpe_kb_usage_sop()
+# Database initialization is performed after browser authorization so the
+# access screen stays fast and unauthenticated sessions do not initialize the DB.
 
 
 # ============================================================
 # DATA
 # ============================================================
+@st.cache_data(ttl=30, show_spinner=False)
 def load_records():
     conn = db()
     rows = conn.execute("""
@@ -675,6 +678,7 @@ def load_records():
     return [dict(x) for x in rows]
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def load_documents():
     conn = db()
     rows = conn.execute("""
@@ -771,7 +775,7 @@ def index_pdf(uploaded_file, family, topic):
         conn.close()
         pdf.close()
 
-        search.clear()
+        clear_search_cache()
         return True, (
             f"Indexed {uploaded_file.name}"
             f"{f' and extracted {len(extracted_images)} image(s)' if extracted_images else ''}"
@@ -999,7 +1003,7 @@ def update_ai_ready_sop(
 
     image_count = save_sop_images(kb_id, uploaded_images or [], image_placements or [])
     video_count = save_sop_videos(kb_id, uploaded_videos or [], video_placements or [])
-    search.clear()
+    clear_search_cache()
     return image_count, video_count
 
 
@@ -1010,7 +1014,7 @@ def delete_ai_ready_sop(kb_id):
     conn.execute("DELETE FROM kb_records WHERE kb_id=?", (kb_id,))
     conn.commit()
     conn.close()
-    search.clear()
+    clear_search_cache()
 
 
 def extract_office_text(uploaded_file, suffix):
@@ -1083,7 +1087,7 @@ def index_supported_file(uploaded_file, family, topic):
     ))
     conn.commit()
     conn.close()
-    search.clear()
+    clear_search_cache()
     return True, f"Indexed {uploaded_file.name} as {doc_type}."
 
 
@@ -1143,6 +1147,7 @@ def render_clickable_image(path, caption="", max_height=190):
 # ============================================================
 # BUILT-IN VISUALS FOR THE KNOWLEDGE BASE USER-GUIDE SOP
 # ============================================================
+@st.cache_resource(show_spinner=False)
 def ensure_builtin_usage_visuals():
     """Create bundled UI reference images and attach them to KB-USE-001."""
     visuals = [
@@ -1174,7 +1179,7 @@ def ensure_builtin_usage_visuals():
     conn.close()
 
 
-ensure_builtin_usage_visuals()
+# Built-in visuals are initialized after authorization (see router).
 
 
 # ============================================================
@@ -3742,6 +3747,16 @@ div.stButton > button {
 """, unsafe_allow_html=True)
 
 
+
+def clear_search_cache():
+    """Invalidate the lightweight search/read caches after knowledge changes."""
+    for fn in (search, load_records, load_documents):
+        try:
+            fn.clear()
+        except Exception:
+            pass
+
+
 # ============================================================
 # UI HELPERS
 # ============================================================
@@ -3990,10 +4005,10 @@ def render_ai_assistant(default_query="",
               > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button,
             .st-key-home_ai_exact_answer_box div[data-testid="stHorizontalBlock"]
               > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button {{
-                background:#d9f7f2 !important;
+                background:#ffffff !important;
                 color:#007f70 !important;
                 border-color:#00bfa5 !important;
-                border-bottom-color:#d9f7f2 !important;
+                border-bottom-color:#ffffff !important;
                 margin-bottom:-1px !important;
                 box-shadow:0 -1px 5px rgba(0,191,165,.10), inset 0 1px 0 rgba(255,255,255,.75) !important;
                 top:0 !important;
@@ -4726,7 +4741,7 @@ def create_ai_ready_sop(
         video_placements or []
     )
 
-    search.clear()
+    clear_search_cache()
     return kb_id, image_count, video_count
 
 
@@ -5339,11 +5354,19 @@ def browser_is_authorized():
 
 
 def authorize_browser():
+    """Authorize immediately and persist the token in browser localStorage.
+
+    The JS bridge may not synchronously return its write result on the same
+    Streamlit rerun. The previous implementation treated that timing as a
+    failed login, which is why the access code could be required twice.
+    """
     token = create_browser_token()
     if not token:
         return False
-    if not _save_browser_token(token):
-        return False
+
+    # Fire the browser-storage write, but do not make the current login depend
+    # on the component echoing the result before Streamlit reruns.
+    _save_browser_token(token)
     st.session_state["access_authorized"] = True
     st.session_state["access_granted"] = True
     return True
@@ -5433,10 +5456,7 @@ def access_token_gate():
         if hmac.compare_digest(entered.strip(), access_code):
             if authorize_browser():
                 st.rerun()
-            st.error(
-                "Unable to save browser authorization. Make sure "
-                "streamlit-js-eval is installed and the app has been redeployed."
-            )
+            st.error("Unable to create browser authorization. Check TOKEN_SECRET in Streamlit Secrets.")
         else:
             st.error("Invalid access code.")
 
@@ -5466,6 +5486,13 @@ def render_access_controls():
 # The access gate runs before router/page rendering so no knowledge-base
 # content is exposed before authorization.
 access_token_gate()
+
+# Expensive initialization happens only after authorization and is cached
+# globally, so normal UI reruns do not reopen/seed the database or decode the
+# bundled visual assets.
+init_db()
+ensure_hpe_kb_usage_sop()
+ensure_builtin_usage_visuals()
 
 for key, default in [
     ("view","home"),
@@ -5830,6 +5857,58 @@ st.markdown("""
   position:relative !important;
   z-index:6 !important;
   margin-bottom:-1px !important;
+}
+
+/* ============================================================
+   FINAL AI TAB / CLEAN HERO OVERRIDES
+   - remove the stray white hero rule
+   - active tab + its content are one white connected surface
+   - inactive tabs remain lightly tinted
+   ============================================================ */
+.brand-rule {
+  display:none !important;
+}
+
+[class*="st-key-home_ai_exact_answer_box"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] {
+  background:#ffffff !important;
+}
+
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
+  background:#d9f7f2 !important;
+  color:#008f7b !important;
+  border-color:#8fd8cf !important;
+  border-bottom-color:#00bfa5 !important;
+  box-shadow:none !important;
+  top:1px !important;
+  margin-bottom:0 !important;
+}
+
+/* Selected tab: white. The active position is supplied by the
+   render_ai_assistant inline selector below. */
+
+[class*="st-key-home_ai_exact_answer_box"] [class*="_tab_content"],
+[class*="st-key-answer_"][class*="_tab_content"] {
+  background:#ffffff !important;
+  border-color:#00bfa5 !important;
+  border-top:1px solid #00bfa5 !important;
+  margin-top:-1px !important;
+  padding-top:16px !important;
+  box-shadow:none !important;
+}
+
+/* Active tab is dynamically marked by the inline selector emitted by
+   render_ai_assistant. Keep that tab white and remove its bottom seam. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div:nth-child(1) div[data-testid="stButton"] button[style*="background"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div:nth-child(1) div[data-testid="stButton"] button[style*="background"] {
+  background:#ffffff !important;
+}
+
+/* Eliminate any wrapper seam between the tab row and the content panel. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] + div,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] + div {
+  margin-top:0 !important;
 }
 
 /* Access-token screen. */
