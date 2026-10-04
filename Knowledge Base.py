@@ -461,7 +461,7 @@ def ensure_hpe_kb_usage_sop():
         "1. Start with the AI search bar and enter a clear question.\n"
         "2. Press Enter or the teal arrow to submit the question.\n"
         "3. If several possible answers appear, select the answer that best matches the issue.\n"
-        "4. Review Summary for the direct answer and key points.\n"
+        "4. Select Answer to read the direct answer.\n"
         "5. Select Troubleshooting Steps and follow the numbered procedure.\n"
         "6. Review Related Knowledge to open connected knowledge records or source documents.\n"
         "7. Use the Compute, Networking, Storage, Software & Licensing, Security, or Support & Tools tiles to browse by product family.\n"
@@ -3245,9 +3245,9 @@ def render_ai_assistant(default_query="",
         if st.session_state.get(submitted_key) == previous_demo:
             st.session_state[submitted_key] = ""
 
-    # The exact answer opens with Summary by default.
+    # The exact answer opens with Answer by default.
     st.session_state.setdefault(selected_key, None)
-    st.session_state.setdefault(action_key, "summary")
+    st.session_state.setdefault(action_key, "answer")
 
     query = st.session_state[submitted_key].strip()
     records = []
@@ -3284,8 +3284,8 @@ def render_ai_assistant(default_query="",
             if value:
                 st.session_state[submitted_key] = value
                 st.session_state[selected_key] = None
-                # Always reopen the Summary view for a new question.
-                st.session_state[action_key] = "summary"
+                # Always reopen the Answer view for a new question.
+                st.session_state[action_key] = "answer"
                 # AI Assistant state is intentionally independent from the
                 # hero/global search state.
                 st.rerun()
@@ -3307,8 +3307,8 @@ def render_ai_assistant(default_query="",
                         use_container_width=True
                     ):
                         st.session_state[selected_key] = r["kb_id"]
-                        # Keep Summary open when a suggested answer is selected.
-                        st.session_state[action_key] = "summary"
+                        # Keep Answer open when a suggested answer is selected.
+                        st.session_state[action_key] = "answer"
                         st.rerun()
 
     # Keep the assistant blank until the user enters a question.
@@ -3344,7 +3344,6 @@ def render_ai_assistant(default_query="",
                 <div class="exact-answer-title">{eh(selected["topic"])}</div>
               </div>
             </div>
-            <div class="exact-answer-body">{eh(selected["answer"])}</div>
             """,
             unsafe_allow_html=True
         )
@@ -3385,8 +3384,8 @@ def render_ai_assistant(default_query="",
 
         a1, a2, a3 = st.columns(3, gap="small")
         with a1:
-            if st.button("✦ Summary", key=f"{key_prefix}_summary", use_container_width=True):
-                st.session_state[action_key] = "summary"
+            if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
+                st.session_state[action_key] = "answer"
                 st.rerun()
         with a2:
             if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
@@ -3397,29 +3396,15 @@ def render_ai_assistant(default_query="",
                 st.session_state[action_key] = "related"
                 st.rerun()
 
-        action = st.session_state[action_key] or "summary"
+        action = st.session_state[action_key] or "answer"
 
-        if action == "summary":
+        if action == "answer":
             answer_text = (selected.get("answer") or "").strip()
-            step_lines = []
-            for line in (selected.get("steps") or "").splitlines():
-                clean = re.sub(r"^\s*\d+\.\s*", "", line).strip()
-                if clean:
-                    step_lines.append(clean)
-
-            summary_paragraph = re.sub(r"\s+", " ", answer_text).strip()
-            st.markdown('<div class="exact-section-title">SUMMARY</div>', unsafe_allow_html=True)
+            st.markdown('<div class="exact-section-title">ANSWER</div>', unsafe_allow_html=True)
             st.markdown(
-                f'<div class="summary-paragraph">{eh(summary_paragraph)}</div>',
+                f'<div class="summary-paragraph">{eh(answer_text)}</div>',
                 unsafe_allow_html=True
             )
-            if step_lines:
-                st.markdown('<div class="summary-subtitle">Key points</div>', unsafe_allow_html=True)
-                for item in step_lines[:5]:
-                    st.markdown(
-                        f'<div class="summary-bullet"><span>•</span><div>{eh(item)}</div></div>',
-                        unsafe_allow_html=True
-                    )
 
         elif action == "steps":
             st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
@@ -3475,39 +3460,69 @@ def render_ai_assistant(default_query="",
         elif action == "related":
             st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
 
-            for idx, r in enumerate(records[1:5]):
+            # The current knowledge article/SOP is always shown first so the
+            # user can open its procedure directly.
+            related_kb = [selected]
+
+            # Add other matching SOP/knowledge records.
+            for r in records:
+                if r["kb_id"] not in {x["kb_id"] for x in related_kb}:
+                    related_kb.append(r)
+
+            # Keep Related Knowledge populated with saved SOPs even if the
+            # current search returned only one result.
+            if len(related_kb) < 5:
+                for r in load_records():
+                    if r["kb_id"] not in {x["kb_id"] for x in related_kb}:
+                        related_kb.append(r)
+                    if len(related_kb) >= 5:
+                        break
+
+            for idx, r in enumerate(related_kb[:5]):
+                is_current = r["kb_id"] == selected["kb_id"]
+                label = f"▤  Open SOP — {r['question']}" if is_current else f"▤  {r['question']}"
+
                 if st.button(
-                    f"▤  {r['question']}",
+                    label,
                     key=f"{key_prefix}_related_kb_{idx}_{r['kb_id']}",
                     use_container_width=True,
-                    help=f"Open {r['question']}"
+                    help=f"Open SOP {r['question']}"
                 ):
                     st.session_state[selected_key] = r["kb_id"]
-                    st.session_state[action_key] = "summary"
+                    # Open the selected SOP directly in the procedure view.
+                    st.session_state[action_key] = "steps"
                     st.rerun()
+
                 st.markdown(
                     f'<div class="related-meta">{eh(r["family"])} • {eh(r["topic"])} • {eh(r["kb_id"])}</div>',
                     unsafe_allow_html=True
                 )
 
+            # PDFs are first-class Related Knowledge items and open directly
+            # in the existing indexed-document reader.
             if docs:
-                for d in docs[:4]:
-                    st.markdown(
-                        f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
-                        f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(d["title"])}</div>'
-                        f'<div style="font-size:8px;color:#8a9aa5;">⌁ PDF • Indexed • {eh(d["family"])}</div>'
-                        f'</div></div>',
-                        unsafe_allow_html=True
-                    )
-                    if st.button("↗ View source document", key=f"{key_prefix}_view_source_{d['id']}", use_container_width=True):
+                st.markdown('<div class="related-subtitle">SOURCE PDFS</div>', unsafe_allow_html=True)
+                for d in docs[:6]:
+                    if st.button(
+                        f"▤  Open PDF — {d['title']}",
+                        key=f"{key_prefix}_view_source_{d['id']}",
+                        use_container_width=True,
+                        help=f"Open source PDF {d['title']}"
+                    ):
                         st.session_state.selected_document = d["id"]
                         st.session_state.view = "document"
                         st.rerun()
-            elif len(records) <= 1:
+
+                    st.markdown(
+                        f'<div class="related-meta">PDF • Indexed • {eh(d["family"])} • {eh(d["topic"])}</div>',
+                        unsafe_allow_html=True
+                    )
+            elif not related_kb:
                 st.markdown(
-                    '<div class="related-empty">No additional PDF source was indexed for this answer yet.</div>',
+                    '<div class="related-empty">No related SOP or PDF source is available for this answer yet.</div>',
                     unsafe_allow_html=True
                 )
+
 
     # No follow-up input: the original question field remains the single active question entry.
 
