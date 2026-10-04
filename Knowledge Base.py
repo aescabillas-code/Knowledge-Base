@@ -1959,25 +1959,23 @@ def render_hero():
         with st.form("hero_search_form", clear_on_submit=False):
             c1, c2 = st.columns([0.93, 0.07], gap="small", vertical_alignment="center")
             with c1:
-                pending_global_query = st.session_state.pop("global_query_pending", None)
-                if pending_global_query is not None:
-                    st.session_state["global_query"] = pending_global_query
                 st.text_input(
                     "Global search",
-                    placeholder="Ask a question or search for a document...",
-                    key="global_query",
+                    placeholder="Search documents, topics, products, error messages...",
+                    key="global_search_input",
                     label_visibility="collapsed"
                 )
             with c2:
                 submitted = st.form_submit_button("→", use_container_width=True)
         if submitted:
-            value = st.session_state.get("global_query", "").strip()
+            value = st.session_state.get("global_search_input", "").strip()
             if value:
-                st.session_state["home_ai_query"] = value
-                st.session_state["home_ai_submitted"] = value
-                st.session_state["home_ai_action"] = None
-            st.session_state.view = "home"
-            st.rerun()
+                # The hero field is GLOBAL SEARCH only. Never populate or
+                # submit the separate AI Assistant question field.
+                st.session_state["global_search_query"] = value
+                st.session_state["global_search_submitted"] = value
+                st.session_state.view = "global_search"
+                st.rerun()
 
 
 
@@ -2121,7 +2119,8 @@ def render_ai_assistant(default_query="",
                 st.session_state[selected_key] = None
                 # Always reopen the Summary view for a new question.
                 st.session_state[action_key] = "summary"
-                st.session_state.global_query_pending = value
+                # AI Assistant state is intentionally independent from the
+                # hero/global search state.
                 st.rerun()
 
         if query and records:
@@ -2321,7 +2320,9 @@ def render_featured():
                     unsafe_allow_html=True
                 )
                 if st.button("View", key=f"feature_{i}", use_container_width=True):
-                    st.session_state.global_query_pending = title
+                    st.session_state.global_search_query = title
+                    st.session_state.global_search_submitted = title
+                    st.session_state.view = "global_search"
                     st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -2404,24 +2405,14 @@ def render_bottom_strip():
 def render_home():
     render_hero()
 
-    query = st.session_state.get("global_query", "").strip()
-    # Sync a NEW global-search query into the AI assistant, but do not
-    # overwrite the selected action on every Streamlit rerun.  Previously,
-    # clicking Summarize / Troubleshooting steps / Related knowledge set
-    # home_ai_action and then render_home immediately reset it to None,
-    # making the buttons appear non-functional.
-    current_ai_query = st.session_state.get("home_ai_submitted", "").strip()
-    if query and query != current_ai_query:
-        st.session_state["home_ai_query"] = query
-        st.session_state["home_ai_submitted"] = query
-        st.session_state["home_ai_selected"] = None
-        st.session_state["home_ai_action"] = None
-
+    # The hero search is a TRUE GLOBAL SEARCH. It is intentionally not
+    # passed into the AI Assistant and does not modify any home_ai_* state.
+    # The AI question field below is completely independent.
     left, right = st.columns([1.72, 0.78], gap="medium")
 
     with left:
         render_ai_assistant(
-            default_query=query,
+            default_query="",
             key_prefix="home_ai",
         )
 
@@ -2431,6 +2422,105 @@ def render_home():
     render_bottom_strip()
 
 
+# ============================================================
+# GLOBAL SEARCH PAGE
+# ============================================================
+def render_global_search():
+    query = st.session_state.get("global_search_submitted", "").strip()
+
+    if st.button("← Back to Knowledge Base", key="back_global_search"):
+        st.session_state.view = "home"
+        st.session_state.global_search_query = ""
+        st.session_state.global_search_submitted = ""
+        st.rerun()
+
+    st.markdown(
+        """
+        <div class="family-banner">
+          <h1>⌕ Global Search</h1>
+          <p>Search indexed HPE knowledge, PDF documents, products, topics, keywords and technical information.</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    with st.form("global_search_results_form", clear_on_submit=False):
+        c1, c2 = st.columns([0.93, 0.07], gap="small", vertical_alignment="center")
+        with c1:
+            search_input = st.text_input(
+                "Search all knowledge",
+                value=query,
+                placeholder="Search documents, topics, products, error messages...",
+                label_visibility="collapsed"
+            )
+        with c2:
+            submit = st.form_submit_button("→", use_container_width=True)
+
+    if submit and search_input.strip():
+        st.session_state.global_search_query = search_input.strip()
+        st.session_state.global_search_submitted = search_input.strip()
+        st.rerun()
+
+    query = st.session_state.get("global_search_submitted", "").strip()
+    if not query:
+        st.info("Enter a search term to search the entire Knowledge Base.")
+        return
+
+    records, docs = search(query, family=None, limit=12)
+    total = len(records) + len(docs)
+
+    st.markdown(
+        f'<div style="margin:12px 0 8px;color:#173a56;font-size:13px;font-weight:800;">'
+        f'Global results for <span style="color:#00a991;">{eh(query)}</span> · {total} matches</div>',
+        unsafe_allow_html=True
+    )
+
+    if not records and not docs:
+        st.warning(
+            "No matching knowledge or documents were found. Try a product name, "
+            "topic, keyword, model, feature, or exact error message."
+        )
+        return
+
+    if records:
+        st.markdown(
+            '<div class="panel" style="margin-bottom:12px;">'
+            '<div class="panel-title">Knowledge & Information</div>'
+            '<div class="panel-sub">Matches from searchable HPE knowledge records.</div>'
+            '<div style="height:6px"></div>',
+            unsafe_allow_html=True
+        )
+        for r in records:
+            answer_card(r)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if docs:
+        st.markdown(
+            '<div class="panel">'
+            '<div class="panel-title">Documents</div>'
+            '<div class="panel-sub">Indexed PDF documents matching your search.</div>'
+            '<div style="height:6px"></div>',
+            unsafe_allow_html=True
+        )
+        for d in docs:
+            excerpt = (d["content"] or "")[:420].replace("\n", " ")
+            if len(d["content"] or "") > 420:
+                excerpt += "…"
+            st.markdown(
+                f"""
+                <div class="search-result">
+                  <div class="result-id">PDF · {eh(d['family'])} · {eh(d['topic'])}</div>
+                  <div class="result-q">{eh(d['title'])}</div>
+                  <div class="result-a">{eh(excerpt)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            if st.button("↗ Open document", key=f"global_doc_{d['id']}", use_container_width=True):
+                st.session_state.selected_document = d["id"]
+                st.session_state.view = "document"
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ============================================================
@@ -2910,7 +3000,9 @@ for key, default in [
     ("selected_group",None),
     ("selected_topic",None),
     ("selected_document",None),
-    ("global_query",""),
+    ("global_search_input",""),
+    ("global_search_query",""),
+    ("global_search_submitted",""),
     ("admin_authenticated",False),
 ]:
     if key not in st.session_state:
@@ -2942,6 +3034,8 @@ except Exception:
 
 if st.session_state.view == "home":
     render_home()
+elif st.session_state.view == "global_search":
+    render_global_search()
 elif st.session_state.view == "group":
     render_group()
 elif st.session_state.view == "topic":
