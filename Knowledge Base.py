@@ -11,12 +11,6 @@ from html import escape
 
 import streamlit as st
 
-# Persistent browser-cookie support for one-time Knowledge Base authorization.
-try:
-    from streamlit_cookies_controller import CookieController
-except Exception:
-    CookieController = None
-
 # Signed browser authorization token support.
 # The raw access code is never placed in the URL; only a signed token is.
 try:
@@ -431,128 +425,184 @@ SEED_KB = [
 # DATABASE
 # ============================================================
 def db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    """Open the Knowledge Base SQLite database safely."""
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(
+        str(DB_PATH),
+        check_same_thread=False,
+        timeout=30,
+    )
     conn.row_factory = sqlite3.Row
+
+    # Improve reliability when Streamlit reruns overlap.
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 
 def init_db():
-    # The old database is deliberately deleted ONE TIME.
-    # PDFs are preserved.
-    if not RESET_MARKER.exists() and DB_PATH.exists():
-        DB_PATH.unlink()
+    """
+    Initialize the SQLite schema safely.
 
+    The previous implementation deleted/recreated the DB based on a marker
+    file. On Streamlit Cloud this can leave an incompatible or partially
+    initialized database behind. This version creates/migrates the required
+    tables without deleting user data.
+    """
     conn = db()
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS documents (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            filename TEXT,
-            family TEXT,
-            topic TEXT,
-            source_url TEXT,
-            content TEXT NOT NULL,
-            doc_type TEXT DEFAULT 'PDF',
-            created_at TEXT NOT NULL
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                filename TEXT,
+                family TEXT,
+                topic TEXT,
+                source_url TEXT,
+                content TEXT NOT NULL,
+                doc_type TEXT DEFAULT 'PDF',
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS kb_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kb_id TEXT UNIQUE NOT NULL,
+                family TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                steps TEXT,
+                keywords TEXT,
+                source TEXT DEFAULT 'Built-in AI Knowledge',
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS kb_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kb_id TEXT,
+                document_id INTEGER,
+                filename TEXT NOT NULL,
+                image_path TEXT NOT NULL,
+                page_num INTEGER,
+                placement TEXT,
+                caption TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS kb_videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kb_id TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                video_path TEXT NOT NULL,
+                placement TEXT,
+                caption TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        # Ensure columns used by the current application exist even when an
+        # older knowledge_base.db is already present.
+        required_columns = {
+            "documents": {
+                "filename": "TEXT",
+                "family": "TEXT",
+                "topic": "TEXT",
+                "source_url": "TEXT",
+                "content": "TEXT",
+                "doc_type": "TEXT DEFAULT 'PDF'",
+                "created_at": "TEXT",
+            },
+            "kb_records": {
+                "family": "TEXT",
+                "topic": "TEXT",
+                "question": "TEXT",
+                "answer": "TEXT",
+                "steps": "TEXT",
+                "keywords": "TEXT",
+                "source": "TEXT DEFAULT 'Built-in AI Knowledge'",
+                "created_at": "TEXT",
+            },
+            "kb_images": {
+                "kb_id": "TEXT",
+                "document_id": "INTEGER",
+                "filename": "TEXT",
+                "image_path": "TEXT",
+                "page_num": "INTEGER",
+                "placement": "TEXT",
+                "caption": "TEXT",
+                "created_at": "TEXT",
+            },
+            "kb_videos": {
+                "kb_id": "TEXT",
+                "filename": "TEXT",
+                "video_path": "TEXT",
+                "placement": "TEXT",
+                "caption": "TEXT",
+                "created_at": "TEXT",
+            },
+        }
+
+        for table_name, columns in required_columns.items():
+            existing = {
+                row["name"]
+                for row in conn.execute(
+                    f"PRAGMA table_info({table_name})"
+                ).fetchall()
+            }
+
+            for column_name, column_type in columns.items():
+                if column_name not in existing:
+                    conn.execute(
+                        f"ALTER TABLE {table_name} "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
+
+        # Seed built-in records only when the table is empty.
+        if conn.execute(
+            "SELECT COUNT(*) FROM kb_records"
+        ).fetchone()[0] == 0:
+            now = datetime.now().isoformat(timespec="seconds")
+
+            conn.executemany("""
+                INSERT OR IGNORE INTO kb_records
+                (kb_id, family, topic, question, answer, steps,
+                 keywords, source, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                (
+                    a, b, c, d, e, f, g,
+                    "Built-in AI Knowledge",
+                    now
+                )
+                for a, b, c, d, e, f, g in SEED_KB
+            ])
+
+        conn.commit()
+
+    except sqlite3.DatabaseError:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+    # Keep the marker only as informational metadata. It is no longer used
+    # to decide whether the database should be deleted.
+    try:
+        RESET_MARKER.write_text(
+            "HPE Knowledge Base database initialized/verified.\n",
+            encoding="utf-8",
         )
-    """)
-
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS kb_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            kb_id TEXT UNIQUE NOT NULL,
-            family TEXT NOT NULL,
-            topic TEXT NOT NULL,
-            question TEXT NOT NULL,
-            answer TEXT NOT NULL,
-            steps TEXT,
-            keywords TEXT,
-            source TEXT DEFAULT 'Built-in AI Knowledge',
-            created_at TEXT NOT NULL
-        )
-    """)
-\
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS kb_images (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            kb_id TEXT,
-            document_id INTEGER,
-            filename TEXT NOT NULL,
-            image_path TEXT NOT NULL,
-            page_num INTEGER,
-            placement TEXT,
-            caption TEXT,
-            created_at TEXT NOT NULL
-        )
-    """)
-
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS kb_videos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            kb_id TEXT NOT NULL,
-            filename TEXT NOT NULL,
-            video_path TEXT NOT NULL,
-            placement TEXT,
-            caption TEXT,
-            created_at TEXT NOT NULL
-        )
-    """)
-
-    if conn.execute("SELECT COUNT(*) FROM kb_records").fetchone()[0] == 0:
-        now = datetime.now().isoformat(timespec="seconds")
-        conn.executemany("""
-            INSERT OR IGNORE INTO kb_records
-            (kb_id, family, topic, question, answer, steps, keywords, source, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, [
-            (a,b,c,d,e,f,g,"Built-in AI Knowledge",now)
-            for a,b,c,d,e,f,g in SEED_KB
-        ])
-
-    conn.commit()
-    conn.close()
-
-    RESET_MARKER.write_text(
-        "New HPE Knowledge Base database initialized.\n",
-        encoding="utf-8"
-    )
-
-
-def ensure_hpe_kb_usage_sop():
-    """Add the built-in Knowledge Base usage SOP without disturbing existing data."""
-    now = datetime.now().isoformat(timespec="seconds")
-    kb_id = "KB-USE-001"
-    question = "How do I use the HPE Knowledge Base?"
-    answer = (
-        "Use the HPE Knowledge Base by asking the AI search bar a clear technical question, "
-        "choosing the most relevant suggested answer, reviewing the Summary, following the "
-        "Troubleshooting Steps, and opening Related Knowledge when more context is needed. "
-        "You can also select any of the six HPE & Aruba Product Family tiles to browse structured "
-        "knowledge. Admin users can create AI-ready SOPs and attach images to specific procedure steps."
-    )
-    steps = (
-        "1. Start with the AI search bar and enter a clear question.\n"
-        "2. Press Enter or the teal arrow to submit the question.\n"
-        "3. If several possible answers appear, select the answer that best matches the issue.\n"
-        "4. Review Summary for the direct answer and key points.\n"
-        "5. Select Troubleshooting Steps and follow the numbered procedure.\n"
-        "6. Review Related Knowledge to open connected knowledge records or source documents.\n"
-        "7. Use the Compute, Networking, Storage, Software & Licensing, Security, or Support & Tools tiles to browse by product family.\n"
-        "8. Admin users can create an SOP, upload screenshots or diagrams, and place each image before or after a selected step.\n"
-        "9. Save the SOP so it becomes searchable by the AI Assistant.\n"
-        "10. Validate production procedures against the current authoritative HPE documentation for the applicable product and version."
-    )
-    keywords = "HPE Knowledge Base, AI search, exact answer, Summary, Troubleshooting Steps, Related Knowledge, product families, SOP, images"
-    conn = db()
-    conn.execute("""
-        INSERT OR IGNORE INTO kb_records
-        (kb_id, family, topic, question, answer, steps, keywords, source, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (kb_id, "Support & Tools", "Knowledge Base User Guide", question, answer, steps, keywords, "Built-in HPE Knowledge Base SOP", now))
-    conn.commit()
-    conn.close()
-    return kb_id
+    except Exception:
+        pass
 
 
 init_db()
@@ -5088,251 +5138,142 @@ def render_admin():
             '</div>',
             unsafe_allow_html=True
         )
-
-
-
+        
 # ============================================================
+# PERSISTENT ONE-TIME ACCESS TOKEN (BROWSER LOCALSTORAGE + SECRETS BINDING)
 # ============================================================
-# PERSISTENT ONE-TIME ACCESS
-# ============================================================
-# The access code and signing secret are read ONLY from Streamlit Secrets.
-#
-# IMPORTANT:
-# - Authorization is persisted in a normal browser cookie.
-# - The cookie is NOT a Streamlit widget inside a cached function.
-# - The cookie is deliberately persistent (10 years) so it survives:
-#     * Streamlit reruns
-#     * page refresh
-#     * closing/reopening the tab
-#     * closing/reopening the browser
-#     * Streamlit process/app restart
-#     * PC restart/shutdown
-# - The authorization is removed ONLY when "Clear access token" is clicked
-#   in the admin gear, or when the browser's site data/cookies are manually
-#   deleted.
-# - The raw ACCESS_CODE is never stored in the browser.
-#
-# This also fixes CachedWidgetWarning because CookieController() is created
-# only from the normal app execution path, never from @st.cache_data or
-# @st.cache_resource.
+# - Persists authorization in browser localStorage across new tabs, restarts, and reboots.
+# - Token is cryptographically bound to the current ACCESS_CODE. If ACCESS_CODE in secrets
+#   changes, all existing tokens immediately become invalid.
+# - Cleared only when "Clear access token" is explicitly clicked.
 
-ACCESS_COOKIE_NAME = "hpe_kb_access"
-ACCESS_COOKIE_MAX_AGE = 10 * 365 * 24 * 60 * 60  # 10 years
+ACCESS_QUERY_PARAM = "kb_access"
+LOCAL_STORAGE_KEY = "hpe_kb_browser_auth_token"
 
 
 def _get_access_secrets():
-    """Read the access code and signing secret only from Streamlit Secrets."""
+    """Read ACCESS_CODE and TOKEN_SECRET from Streamlit Secrets/environment."""
     access_code = ""
     token_secret = ""
-
     try:
-        access_code = str(st.secrets.get("ACCESS_CODE", "")).strip()
-        token_secret = str(st.secrets.get("TOKEN_SECRET", "")).strip()
+        access_code = str(
+            st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
+        ).strip()
+        token_secret = str(
+            st.secrets.get("TOKEN_SECRET", os.getenv("TOKEN_SECRET", ""))
+        ).strip()
     except Exception:
-        pass
-
-    # Environment fallback is useful for local development.
-    if not access_code:
-        access_code = os.environ.get("ACCESS_CODE", "").strip()
-    if not token_secret:
-        token_secret = os.environ.get("TOKEN_SECRET", "").strip()
+        access_code = os.getenv("ACCESS_CODE", "").strip()
+        token_secret = os.getenv("TOKEN_SECRET", "").strip()
 
     return access_code, token_secret
 
 
-def _get_token_serializer():
-    """Create the signed-token serializer from the server-side secret."""
+def _get_code_fingerprint(code: str) -> str:
+    """Generate a SHA-256 hash of the current ACCESS_CODE."""
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()[:16]
+
+
+def get_token_serializer():
+    access_code, token_secret = _get_access_secrets()
     if URLSafeTimedSerializer is None:
         return None
-
-    _, token_secret = _get_access_secrets()
     if not token_secret:
-        return None
-
-    return URLSafeTimedSerializer(
-        token_secret,
-        salt="hpe-knowledge-base-browser-access-v2",
-    )
-
-
-def _access_code_fingerprint(access_code):
-    """Bind the browser token to the current access code without storing it."""
-    return hashlib.sha256(access_code.encode("utf-8")).hexdigest()
+        token_secret = hashlib.sha256(
+            f"{os.getcwd()}::{os.getenv('HOSTNAME', 'streamlit')}".encode()
+        ).hexdigest()
+    # Salt is combined with the fingerprint of the ACCESS_CODE so any secret change invalidates all tokens
+    salt = f"knowledge-base-browser-access-{_get_code_fingerprint(access_code)}"
+    return URLSafeTimedSerializer(token_secret, salt=salt)
 
 
-def _create_browser_token():
-    """
-    Create a signed authorization token.
-
-    Only a signed authorization marker and a one-way hash of the current
-    access code are stored. The raw access code is never serialized.
-    """
-    serializer = _get_token_serializer()
+def create_browser_token():
+    serializer = get_token_serializer()
     access_code, _ = _get_access_secrets()
-
     if serializer is None or not access_code:
         return ""
-
     return serializer.dumps({
         "authorized": True,
-        "access_code_hash": _access_code_fingerprint(access_code),
-        "version": 2,
+        "fp": _get_code_fingerprint(access_code)
     })
 
 
-def _validate_browser_token(token):
-    """Validate the persistent browser token against current Secrets."""
+def validate_browser_token(token):
     if not token:
         return False
-
-    serializer = _get_token_serializer()
+    serializer = get_token_serializer()
     access_code, _ = _get_access_secrets()
-
     if serializer is None or not access_code:
         return False
-
     try:
-        # NO max_age is supplied intentionally.
-        # The user requested permanent authorization until Clear Access.
         payload = serializer.loads(str(token))
-
-        if not payload.get("authorized"):
-            return False
-
-        expected_hash = _access_code_fingerprint(access_code)
-        actual_hash = str(payload.get("access_code_hash", ""))
-
-        return hmac.compare_digest(actual_hash, expected_hash)
+        if payload.get("authorized") and payload.get("fp") == _get_code_fingerprint(access_code):
+            return True
+        return False
     except Exception:
         return False
 
 
-def _get_cookie_controller():
-    """
-    Create the cookie controller OUTSIDE any cached function.
-
-    This is the critical fix for CachedWidgetWarning.
-    """
-    if CookieController is None:
-        return None
-
+def get_url_access_token():
     try:
-        return CookieController(key="hpe_kb_persistent_access")
-    except Exception:
-        return None
-
-
-def _read_persistent_access_cookie():
-    """
-    Read the signed authorization cookie.
-
-    CookieController is intentionally not cached because it is a Streamlit
-    widget/component and must execute on the normal Streamlit run path.
-    """
-    controller = _get_cookie_controller()
-    if controller is None:
-        return ""
-
-    try:
-        value = controller.get(ACCESS_COOKIE_NAME)
-        return str(value or "")
+        token = st.query_params.get(ACCESS_QUERY_PARAM, "")
+        if isinstance(token, list):
+            return token[0] if token else ""
+        return str(token or "")
     except Exception:
         return ""
 
 
-def _write_persistent_access_cookie(token):
-    """Persist the signed authorization token in the browser."""
-    controller = _get_cookie_controller()
-    if controller is None or not token:
-        return False
-
-    try:
-        controller.set(
-            ACCESS_COOKIE_NAME,
-            token,
-            max_age=ACCESS_COOKIE_MAX_AGE,
-        )
-        return True
-    except TypeError:
-        # Compatibility with versions that do not expose max_age.
-        try:
-            controller.set(ACCESS_COOKIE_NAME, token)
-            return True
-        except Exception:
-            return False
-    except Exception:
-        return False
-
-
-def _delete_persistent_access_cookie():
-    """Explicitly delete the authorization cookie."""
-    controller = _get_cookie_controller()
-    if controller is None:
-        return False
-
-    try:
-        # streamlit-cookies-controller uses remove() for cookie deletion.
-        controller.remove(ACCESS_COOKIE_NAME)
-        return True
-    except Exception:
-        # Compatibility fallback for versions exposing delete().
-        try:
-            controller.delete(ACCESS_COOKIE_NAME)
-            return True
-        except Exception:
-            return False
-
-
-def _browser_is_authorized():
-    """
-    Check authorization.
-
-    Session state is checked first for normal reruns. A persistent signed
-    browser cookie restores authorization after a completely new Streamlit
-    session, including after browser/PC restart.
-    """
-    if st.session_state.get("access_granted", False):
+def browser_is_authorized():
+    if st.session_state.get("access_authorized", False):
         return True
 
-    token = _read_persistent_access_cookie()
-
-    if _validate_browser_token(token):
-        st.session_state["access_granted"] = True
+    token = get_url_access_token()
+    if validate_browser_token(token):
+        st.session_state["access_authorized"] = True
         return True
 
     return False
 
 
-def _authorize_browser():
-    """Persist a signed authorization token until explicitly cleared."""
-    token = _create_browser_token()
-
+def authorize_browser():
+    token = create_browser_token()
     if not token:
         return False
 
-    if not _write_persistent_access_cookie(token):
-        return False
-
-    st.session_state["access_granted"] = True
+    st.query_params[ACCESS_QUERY_PARAM] = token
+    st.session_state["access_authorized"] = True
+    
+    # Save token directly into the parent browser's persistent localStorage
+    st.components.v1.html(
+        f"""
+        <script>
+            try {{
+                window.parent.localStorage.setItem("{LOCAL_STORAGE_KEY}", "{token}");
+            }} catch(e) {{}}
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
     return True
 
 
-def _clear_browser_access():
-    """Explicitly remove the persistent authorization cookie."""
+def clear_browser_access():
+    st.session_state["access_authorized"] = False
     st.session_state["access_granted"] = False
-    _delete_persistent_access_cookie()
+    st.session_state["clear_browser_storage"] = True
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
 
 
 def access_token_gate():
     """
     Gate the entire app behind a one-time access code.
-
-    Once accepted, authorization is stored as a signed persistent browser
-    cookie. The code is NOT requested again after refresh, tab/browser close,
-    Streamlit restart, or PC restart/shutdown.
-
-    The user must explicitly use "Clear access token" in the admin gear to
-    authorize again.
+    Persists via localStorage and query parameters across tab closures,
+    restarts, and shutdowns, invalidating only if cleared or if ACCESS_CODE changes.
     """
     if URLSafeTimedSerializer is None:
         st.error(
@@ -5341,39 +5282,77 @@ def access_token_gate():
         )
         st.stop()
 
-    if CookieController is None:
-        st.error(
-            "Persistent browser access support is not installed. "
-            "Add `streamlit-cookies-controller` to requirements.txt and redeploy."
+    # Handle pending clear storage action before doing anything else
+    if st.session_state.get("clear_browser_storage"):
+        st.components.v1.html(
+            f"""
+            <script>
+                try {{
+                    window.parent.localStorage.removeItem("{LOCAL_STORAGE_KEY}");
+                }} catch(e) {{}}
+            </script>
+            """,
+            height=0,
+            width=0,
         )
-        st.stop()
+        st.session_state["clear_browser_storage"] = False
 
     access_code, token_secret = _get_access_secrets()
 
-    if not access_code or not token_secret:
+    if not access_code:
         st.error(
             "Access control is not configured. Add ACCESS_CODE and TOKEN_SECRET "
             "to Streamlit Secrets; do not place them in the GitHub source code."
         )
         st.stop()
 
-    if _browser_is_authorized():
+    # 1. Check if token in URL or session state is already valid
+    if browser_is_authorized():
+        # Sync to localStorage in case user navigated directly with a valid URL token
+        current_token = get_url_access_token() or create_browser_token()
+        st.components.v1.html(
+            f"""
+            <script>
+                try {{
+                    window.parent.localStorage.setItem("{LOCAL_STORAGE_KEY}", "{current_token}");
+                }} catch(e) {{}}
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
         return True
 
-    # Dedicated access screen. No Knowledge Base content is rendered before
-    # the access code is accepted.
-    st.markdown(
+    # 2. Check client-side localStorage and restore token into URL if present
+    st.components.v1.html(
         f"""
+        <script>
+            try {{
+                const token = window.parent.localStorage.getItem("{LOCAL_STORAGE_KEY}");
+                const urlParams = new URLSearchParams(window.parent.location.search);
+                if (token && !urlParams.has("{ACCESS_QUERY_PARAM}")) {{
+                    urlParams.set("{ACCESS_QUERY_PARAM}", token);
+                    window.parent.location.search = urlParams.toString();
+                }}
+            }} catch(e) {{}}
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+    st.markdown(
+        """
         <style>
-        .kb-access-shell {{
+        .kb-access-shell {
           min-height:58vh;
           display:flex;
           align-items:center;
           justify-content:center;
           padding:36px 16px;
           box-sizing:border-box;
-        }}
-        .kb-access-card {{
+        }
+        .kb-access-card {
           width:min(520px,100%);
           padding:30px 34px 28px;
           border:1px solid #8fd8cf;
@@ -5381,32 +5360,28 @@ def access_token_gate():
           background:linear-gradient(145deg,#ffffff 0%,#f2fffc 100%);
           box-shadow:0 14px 40px rgba(0,95,90,.10);
           text-align:center;
-        }}
-        .kb-access-logo {{
-          width:62px;
-          margin:0 auto 13px;
-          display:block;
-        }}
-        .kb-access-kicker {{
+        }
+        .kb-access-logo { width:62px; margin:0 auto 13px; display:block; }
+        .kb-access-kicker {
           color:#008f7b;
           font-size:9px;
           font-weight:800;
           letter-spacing:1.3px;
-        }}
-        .kb-access-title {{
+        }
+        .kb-access-title {
           margin-top:7px;
           color:#08384b;
           font-size:26px;
           line-height:1.15;
           font-weight:800;
-        }}
-        .kb-access-copy {{
+        }
+        .kb-access-copy {
           max-width:410px;
           margin:10px auto 0;
           color:#5a7180;
           font-size:12px;
           line-height:1.6;
-        }}
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -5422,8 +5397,8 @@ def access_token_gate():
             <div class="kb-access-title">Secure access</div>
             <div class="kb-access-copy">
               Enter your one-time access code to open the Knowledge Base.
-              This browser remains authorized until access is explicitly
-              cleared from the gear menu.
+              This browser stays authorized permanently across sessions, tabs, and reboots
+              until access is explicitly cleared from the gear menu or the access code changes.
             </div>
           </div>
         </div>
@@ -5448,32 +5423,28 @@ def access_token_gate():
 
     if submit:
         if hmac.compare_digest(entered.strip(), access_code):
-            if _authorize_browser():
+            if authorize_browser():
                 st.rerun()
             else:
                 st.error(
-                    "Unable to create the persistent browser authorization. "
-                    "Check TOKEN_SECRET and streamlit-cookies-controller."
+                    "Unable to create the browser authorization token. "
+                    "Check TOKEN_SECRET and itsdangerous."
                 )
         else:
             st.error("Invalid access code.")
 
     st.caption(
-        "Your access code is never stored in the browser. "
-        "A signed authorization token is stored in a persistent browser cookie."
+        "Your access code is never stored in the URL. "
+        "A signed token is stored in your browser to maintain one-time authorization."
     )
     st.stop()
 
 
 def render_access_controls():
-    """Render explicit persistent-access status and clear control."""
+    """Render the persistent-access status and explicit clear control."""
     with st.expander("Secure access", expanded=False):
         st.caption(
-            "This browser is authorized with a signed persistent access token."
-        )
-        st.caption(
-            "Authorization survives refresh, browser close/reopen, "
-            "Streamlit restart, and PC restart/shutdown."
+            "This browser is permanently authorized with a signed token stored in localStorage."
         )
 
         if st.button(
@@ -5481,12 +5452,11 @@ def render_access_controls():
             key="clear_access_token",
             use_container_width=True,
         ):
-            _clear_browser_access()
+            clear_browser_access()
             st.session_state["admin_authenticated"] = False
             st.session_state["view"] = "home"
             st.rerun()
-
-
+            
 # ============================================================
 # ROUTER
 # ============================================================
@@ -5494,7 +5464,6 @@ def render_access_controls():
 # The access gate runs before router/page rendering so no knowledge-base
 # content is exposed before authorization.
 access_token_gate()
-
 
 for key, default in [
     ("view","home"),
