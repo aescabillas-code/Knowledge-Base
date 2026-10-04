@@ -856,7 +856,7 @@ def get_mongo_client():
             uri = os.getenv("MONGO_URI", "").strip()
         if not uri:
             return None
-        client = MongoClient(uri, serverSelectionTimeoutMS=6000, connectTimeoutMS=6000)
+        client = MongoClient(uri, serverSelectionTimeoutMS=2500, connectTimeoutMS=2500, socketTimeoutMS=5000)
         client.admin.command("ping")
         return client
     except Exception:
@@ -936,6 +936,18 @@ def ensure_kb_user_guide_in_mongo():
     kb_id = "KB-USE-001"
     now = datetime.now().isoformat(timespec="seconds")
     saved = 0
+
+    # Fast path: when the shared library is already fully populated, do not
+    # touch SQLite, decode bundled media, or issue GridFS operations.
+    try:
+        guide_exists = handles["kb"].find_one({"kb_id": kb_id}, {"_id": 1}) is not None
+        image_count = handles["media"].count_documents({"kb_id": kb_id, "media_type": "image"}, limit=5)
+        video_exists = handles["media"].find_one({"kb_id": kb_id, "media_type": "video"}, {"_id": 1}) is not None
+        pptx_exists = handles["docs"].find_one({"doc_id": f"{kb_id}-PPTX"}, {"_id": 1}) is not None
+        if guide_exists and image_count >= 5 and video_exists and pptx_exists:
+            return 0
+    except Exception:
+        pass
 
     # Use the exact user-guide record already defined by the application.
     guide_record = None
@@ -1105,6 +1117,7 @@ def ensure_kb_user_guide_in_mongo():
     return saved
 
 
+@st.cache_resource(show_spinner=False)
 def ensure_mock_sops_in_mongo():
     """Seed the shared MongoDB library once; never overwrite an existing SOP."""
     handles = mongo_handles()
@@ -1114,6 +1127,18 @@ def ensure_mock_sops_in_mongo():
     docs = handles["docs"]
     media = handles["media"]
     seeded = 0
+
+    # Fast path for normal app startup: the six built-in SOPs and their
+    # companions are already present, so skip all per-record find/upload work.
+    try:
+        expected = len(MOCK_SOP_SEED)
+        kb_count = kb.count_documents({"seed_type": "mock_hpe_official_source_sop"}, limit=expected)
+        doc_count = docs.count_documents({"seed_type": {"$exists": True}}, limit=expected)
+        media_count = media.count_documents({"media_type": "image", "kb_id": {"$in": [x["kb_id"] for x in MOCK_SOP_SEED]}}, limit=expected)
+        if kb_count >= expected and doc_count >= expected and media_count >= expected:
+            return expected
+    except Exception:
+        pass
 
     # Useful indexes for fast cross-PC retrieval.
     try:
@@ -1190,6 +1215,7 @@ def ensure_mock_sops_in_mongo():
         seeded += 1
     return seeded
 
+@st.cache_data(ttl=60, show_spinner=False)
 def load_mongo_records():
     handles = mongo_handles()
     if not handles:
@@ -1203,6 +1229,7 @@ def load_mongo_records():
     except Exception:
         return []
 
+@st.cache_data(ttl=60, show_spinner=False)
 def load_mongo_documents():
     handles = mongo_handles()
     if not handles:
@@ -1340,7 +1367,7 @@ def mongo_store_kb_record(record):
 # ============================================================
 # DATA
 # ============================================================
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def load_records():
     local_rows = []
     try:
@@ -1359,7 +1386,7 @@ def load_records():
     return remote + [r for r in local_rows if r.get("kb_id") not in remote_ids]
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def load_documents():
     local_rows = []
     try:
@@ -1841,6 +1868,19 @@ def search(query, family=None, limit=8):
     q = query.strip().lower()
     if not q:
         return records[:limit], []
+
+    # The Home page opens with the built-in User Guide question. Resolve that
+    # exact record directly instead of rebuilding a TF-IDF matrix on first load.
+    # This preserves the displayed answer while making the initial render much faster.
+    if q == "how do i use the hpe knowledge base?":
+        guide = next((r for r in records if r.get("kb_id") == "KB-USE-001"), None)
+        if guide is not None:
+            related = [
+                d for d in documents
+                if (d.get("family") == guide.get("family") and d.get("topic") == guide.get("topic"))
+                and Path(d.get("filename") or "").suffix.lower() in SUPPORTED_KB_FILES
+            ][:limit]
+            return [guide], related
 
     raw_tokens = re.findall(r"[a-z0-9][a-z0-9\-]+", q)
     stopwords = {
