@@ -362,6 +362,11 @@ SEED_KB = [
      "Use one clear question per knowledge record, followed immediately by a direct answer. Add product and topic scope, numbered steps, verification, escalation criteria, and searchable keywords. Keep the record self-contained.",
      "1. Write one question per record.\n2. Put the direct answer first.\n3. Use exact product and feature names.\n4. Keep scope explicit.\n5. Add numbered steps when needed.\n6. Add keywords and metadata.",
      "AI retrieval, RAG, atomic SOP, exact answer, knowledge chunk"),
+    ("KB-002","Support & Tools","HPE Knowledge Base — User Guide",
+     "How do I use the HPE Knowledge Base?",
+     "Use the HPE Knowledge Base to search HPE technical knowledge, open product-family areas, ask the AI Assistant a direct question, review the exact answer, inspect troubleshooting steps and related knowledge, and use the Admin area to create or upload searchable SOP content. Product-family tiles and Related Knowledge cards are clickable so you can move directly into the relevant knowledge area.",
+     "1. Start on the HPE Knowledge Base home page and review the HPE & Aruba Product Families.\n2. Select a product-family tile such as Compute, Networking, Storage, Software & Licensing, Security, or Support & Tools to open its related knowledge.\n3. Use the AI Assistant question field to enter a specific HPE question and submit it with the teal arrow.\n4. If several possible answers are found, select the suggested answer that best matches the issue.\n5. Review the Exact Answer and use Summary for the concise explanation.\n6. Select Troubleshooting Steps to follow the numbered procedure; SOP images can appear between steps when an administrator has assigned image placement.\n7. Select Related Knowledge to open connected knowledge records or indexed source documents.\n8. Use Global Search when you need to search across indexed knowledge, PDF documents, products, topics, keywords, or error messages.\n9. For administrators, open the Admin control, create an AI-ready SOP or upload a PDF, and add images to SOPs with a defined placement such as Before Step 1, After Step N, or End of SOP.\n10. Verify production procedures against the current authoritative HPE documentation before execution.",
+     "HPE Knowledge Base, how to use knowledge base, AI Assistant, product families, exact answer, summary, troubleshooting steps, related knowledge, global search, SOP, PDF, images, Admin"),
 ]
 
 
@@ -425,16 +430,17 @@ def init_db():
         )
     """)
 
-    if conn.execute("SELECT COUNT(*) FROM kb_records").fetchone()[0] == 0:
-        now = datetime.now().isoformat(timespec="seconds")
-        conn.executemany("""
-            INSERT OR IGNORE INTO kb_records
-            (kb_id, family, topic, question, answer, steps, keywords, source, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, [
-            (a,b,c,d,e,f,g,"Built-in AI Knowledge",now)
-            for a,b,c,d,e,f,g in SEED_KB
-        ])
+    # Seed every missing built-in record on every startup. This keeps new
+    # built-in SOPs available even when an existing database is already populated.
+    now = datetime.now().isoformat(timespec="seconds")
+    conn.executemany("""
+        INSERT OR IGNORE INTO kb_records
+        (kb_id, family, topic, question, answer, steps, keywords, source, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, [
+        (a,b,c,d,e,f,g,"Built-in AI Knowledge",now)
+        for a,b,c,d,e,f,g in SEED_KB
+    ])
 
     conn.commit()
     conn.close()
@@ -2995,6 +3001,101 @@ div.stButton > button {
   margin-top:3px !important;
 }
 
+
+
+/* ============================================================
+   USER-REQUESTED VISUAL / NAVIGATION UPDATES
+   ============================================================ */
+/* Product-family tile lining: HPE teal, matching the supplied reference. */
+.family-card-compact {
+  border:2px solid #00bfa5 !important;
+}
+.family-card-compact:hover {
+  border-color:#00a991 !important;
+  box-shadow:0 8px 24px rgba(0,150,135,.16) !important;
+}
+
+/* Related Knowledge cards are real Streamlit buttons so the entire card is clickable. */
+[class*="_related_card_"] div[data-testid="stButton"] button,
+[class*="_related_pdf_card_"] div[data-testid="stButton"] button {
+  width:100% !important;
+  min-height:48px !important;
+  margin:0 !important;
+  padding:8px 12px !important;
+  border:1px solid #d6e6e9 !important;
+  border-radius:9px !important;
+  background:#ffffff !important;
+  color:#0a3154 !important;
+  text-align:left !important;
+  justify-content:flex-start !important;
+  font-size:9px !important;
+  font-weight:800 !important;
+  box-shadow:0 1px 3px rgba(20,70,80,.03) !important;
+}
+[class*="_related_card_"] div[data-testid="stButton"] button:hover,
+[class*="_related_pdf_card_"] div[data-testid="stButton"] button:hover {
+  border-color:#00bfa5 !important;
+  color:#008f7b !important;
+  background:#fbffff !important;
+  box-shadow:0 4px 12px rgba(0,150,135,.10) !important;
+}
+[class*="_related_card_"] .related-card-meta,
+[class*="_related_pdf_card_"] .related-card-meta {
+  margin:-7px 10px 5px !important;
+  color:#8a9aa5 !important;
+  font-size:7px !important;
+  line-height:1.2 !important;
+}
+/* Keep exactly 5px between adjacent related cards. */
+[class*="_related_card_"] + [class*="_related_card_"],
+[class*="_related_pdf_card_"] + [class*="_related_pdf_card_"] {
+  margin-top:5px !important;
+}
+
+/* Suggested-answer buttons remain white with HPE teal text and light-teal lining. */
+[class*="_question_box"] div[data-testid="stButton"] button {
+  background:#ffffff !important;
+  color:#008f7b !important;
+  border:1px solid #bfe5df !important;
+  border-radius:8px !important;
+}
+[class*="_question_box"] div[data-testid="stButton"] button:hover {
+  background:#f9fffe !important;
+  border-color:#00bfa5 !important;
+  color:#007f70 !important;
+}
+
+/* Summary / Troubleshooting / Related Knowledge controls use the same visual language. */
+[class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
+  background:#ffffff !important;
+  color:#008f7b !important;
+  border:1px solid #bfe5df !important;
+  border-radius:8px !important;
+}
+[class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:hover {
+  background:#f9fffe !important;
+  border-color:#00bfa5 !important;
+  color:#007f70 !important;
+}
+
+/* The AI question field and arrow use HPE teal. */
+[class*="_question_box"] div[data-testid="stTextInput"] input {
+  background:#00bfa5 !important;
+  color:#ffffff !important;
+  border:1px solid #00a991 !important;
+}
+[class*="_question_box"] div[data-testid="stTextInput"] input::placeholder {
+  color:rgba(255,255,255,.86) !important;
+}
+[class*="_question_box"] div[data-testid="stFormSubmitButton"] button {
+  background:#00bfa5 !important;
+  color:#ffffff !important;
+  border:1px solid #00a991 !important;
+}
+[class*="_question_box"] div[data-testid="stFormSubmitButton"] button:hover {
+  background:#00a991 !important;
+  color:#ffffff !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -3212,7 +3313,7 @@ def render_ai_assistant(default_query="",
                         st.session_state[action_key] = "summary"
                         st.rerun()
 
-    # Keep the assistant blank until the user enters a question.
+    # Keep the assistant blank only when no default question was supplied.
     if not query:
         return
 
@@ -3376,28 +3477,38 @@ def render_ai_assistant(default_query="",
         elif action == "related":
             st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
 
-            for r in records[1:5]:
-                st.markdown(
-                    f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
-                    f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(r["question"])}</div>'
-                    f'<div style="font-size:8px;color:#8a9aa5;">{eh(r["family"])} • {eh(r["topic"])} • {eh(r["kb_id"])}</div>'
-                    f'</div></div>',
-                    unsafe_allow_html=True
-                )
-
-            if docs:
-                for d in docs[:4]:
+            for related_index, r in enumerate(records[1:5]):
+                with st.container(key=f"{key_prefix}_related_card_{related_index}"):
+                    if st.button(
+                        f"▤  {r['question']}",
+                        key=f"{key_prefix}_related_open_{related_index}_{r['kb_id']}",
+                        use_container_width=True,
+                        help="Open this related knowledge answer"
+                    ):
+                        st.session_state[selected_key] = r["kb_id"]
+                        st.session_state[action_key] = "summary"
+                        st.rerun()
                     st.markdown(
-                        f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
-                        f'<div style="font-size:9px;font-weight:800;color:#173a56;">{eh(d["title"])}</div>'
-                        f'<div style="font-size:8px;color:#8a9aa5;">⌁ PDF • Indexed • {eh(d["family"])}</div>'
-                        f'</div></div>',
+                        f'<div class="related-card-meta">{eh(r["family"])} • {eh(r["topic"])} • {eh(r["kb_id"])}</div>',
                         unsafe_allow_html=True
                     )
-                    if st.button("↗ View source document", key=f"{key_prefix}_view_source_{d['id']}", use_container_width=True):
-                        st.session_state.selected_document = d["id"]
-                        st.session_state.view = "document"
-                        st.rerun()
+
+            if docs:
+                for doc_index, d in enumerate(docs[:4]):
+                    with st.container(key=f"{key_prefix}_related_pdf_card_{doc_index}"):
+                        if st.button(
+                            f"▤  {d['title']}",
+                            key=f"{key_prefix}_related_pdf_{doc_index}_{d['id']}",
+                            use_container_width=True,
+                            help="Open the indexed source document"
+                        ):
+                            st.session_state.selected_document = d["id"]
+                            st.session_state.view = "document"
+                            st.rerun()
+                        st.markdown(
+                            f'<div class="related-card-meta">⌁ PDF • Indexed • {eh(d["family"])} • {eh(d["topic"])}</div>',
+                            unsafe_allow_html=True
+                        )
             elif len(records) <= 1:
                 st.markdown(
                     '<div class="related-empty">No additional PDF source was indexed for this answer yet.</div>',
