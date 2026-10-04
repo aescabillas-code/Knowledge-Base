@@ -5086,27 +5086,32 @@ def render_admin():
 
 
 # ============================================================
-# PERSISTENT ONE-TIME ACCESS TOKEN
 # ============================================================
-# This follows the working authorization pattern from the reference
-# Knowledge Base:
+# PERSISTENT ONE-TIME ACCESS
+# ============================================================
+# The access code and signing secret are read ONLY from Streamlit Secrets.
 #
-# 1. ACCESS_CODE and TOKEN_SECRET live only in Streamlit Secrets.
-# 2. The user enters ACCESS_CODE once.
-# 3. The app creates a signed authorization token.
-# 4. Only the signed token is persisted in the browser URL as kb_access.
-# 5. The raw ACCESS_CODE is never placed in the URL.
-# 6. Refreshing the page preserves the signed token because Streamlit
-#    restores the query parameters.
-# 7. The token remains valid until the user explicitly clears browser
-#    access from the gear menu (or the browser URL/token is removed).
+# IMPORTANT:
+# - Authorization is persisted in a normal browser cookie.
+# - The cookie is NOT a Streamlit widget inside a cached function.
+# - The cookie is deliberately persistent (10 years) so it survives:
+#     * Streamlit reruns
+#     * page refresh
+#     * closing/reopening the tab
+#     * closing/reopening the browser
+#     * Streamlit process/app restart
+#     * PC restart/shutdown
+# - The authorization is removed ONLY when "Clear access token" is clicked
+#   in the admin gear, or when the browser's site data/cookies are manually
+#   deleted.
+# - The raw ACCESS_CODE is never stored in the browser.
 #
-# This deliberately does NOT use CookieController. The reference
-# implementation demonstrates that the signed query-token approach is
-# reliable across Streamlit reruns/fresh WebSocket connections and avoids
-# CachedWidgetWarning from browser-cookie components.
+# This also fixes CachedWidgetWarning because CookieController() is created
+# only from the normal app execution path, never from @st.cache_data or
+# @st.cache_resource.
 
-ACCESS_QUERY_PARAM = "kb_access"
+ACCESS_COOKIE_NAME = "hpe_kb_access"
+ACCESS_COOKIE_MAX_AGE = 10 * 365 * 24 * 60 * 60  # 10 years
 
 
 def _get_access_secrets():
@@ -5120,8 +5125,7 @@ def _get_access_secrets():
     except Exception:
         pass
 
-    # Environment fallback is useful for local development and keeps secrets
-    # out of the GitHub source code.
+    # Environment fallback is useful for local development.
     if not access_code:
         access_code = os.environ.get("ACCESS_CODE", "").strip()
     if not token_secret:
@@ -5141,23 +5145,21 @@ def _get_token_serializer():
 
     return URLSafeTimedSerializer(
         token_secret,
-        salt="hpe-knowledge-base-browser-access-v1",
+        salt="hpe-knowledge-base-browser-access-v2",
     )
 
 
 def _access_code_fingerprint(access_code):
     """Bind the browser token to the current access code without storing it."""
-    return hashlib.sha256(
-        access_code.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(access_code.encode("utf-8")).hexdigest()
 
 
 def _create_browser_token():
     """
-    Create a signed browser authorization token.
+    Create a signed authorization token.
 
-    The token contains only an authorization marker and a one-way hash of
-    the current access code. The raw access code is never serialized.
+    Only a signed authorization marker and a one-way hash of the current
+    access code are stored. The raw access code is never serialized.
     """
     serializer = _get_token_serializer()
     access_code, _ = _get_access_secrets()
@@ -5168,11 +5170,12 @@ def _create_browser_token():
     return serializer.dumps({
         "authorized": True,
         "access_code_hash": _access_code_fingerprint(access_code),
+        "version": 2,
     })
 
 
 def _validate_browser_token(token):
-    """Validate the signed browser token against the current access code."""
+    """Validate the persistent browser token against current Secrets."""
     if not token:
         return False
 
@@ -5183,8 +5186,8 @@ def _validate_browser_token(token):
         return False
 
     try:
-        # No max_age is supplied intentionally. The user requested that the
-        # authorization remain until Clear Browser Access is explicitly used.
+        # NO max_age is supplied intentionally.
+        # The user requested permanent authorization until Clear Access.
         payload = serializer.loads(str(token))
 
         if not payload.get("authorized"):
@@ -5198,28 +5201,94 @@ def _validate_browser_token(token):
         return False
 
 
-def _get_browser_access_token():
-    """Read the signed authorization token from Streamlit query parameters."""
+def _get_cookie_controller():
+    """
+    Create the cookie controller OUTSIDE any cached function.
+
+    This is the critical fix for CachedWidgetWarning.
+    """
+    if CookieController is None:
+        return None
+
     try:
-        token = st.query_params.get(ACCESS_QUERY_PARAM, "")
-        if isinstance(token, list):
-            return token[0] if token else ""
-        return str(token or "")
+        return CookieController(key="hpe_kb_persistent_access")
+    except Exception:
+        return None
+
+
+def _read_persistent_access_cookie():
+    """
+    Read the signed authorization cookie.
+
+    CookieController is intentionally not cached because it is a Streamlit
+    widget/component and must execute on the normal Streamlit run path.
+    """
+    controller = _get_cookie_controller()
+    if controller is None:
+        return ""
+
+    try:
+        value = controller.get(ACCESS_COOKIE_NAME)
+        return str(value or "")
     except Exception:
         return ""
 
 
+def _write_persistent_access_cookie(token):
+    """Persist the signed authorization token in the browser."""
+    controller = _get_cookie_controller()
+    if controller is None or not token:
+        return False
+
+    try:
+        controller.set(
+            ACCESS_COOKIE_NAME,
+            token,
+            max_age=ACCESS_COOKIE_MAX_AGE,
+        )
+        return True
+    except TypeError:
+        # Compatibility with versions that do not expose max_age.
+        try:
+            controller.set(ACCESS_COOKIE_NAME, token)
+            return True
+        except Exception:
+            return False
+    except Exception:
+        return False
+
+
+def _delete_persistent_access_cookie():
+    """Explicitly delete the authorization cookie."""
+    controller = _get_cookie_controller()
+    if controller is None:
+        return False
+
+    try:
+        # streamlit-cookies-controller uses remove() for cookie deletion.
+        controller.remove(ACCESS_COOKIE_NAME)
+        return True
+    except Exception:
+        # Compatibility fallback for versions exposing delete().
+        try:
+            controller.delete(ACCESS_COOKIE_NAME)
+            return True
+        except Exception:
+            return False
+
+
 def _browser_is_authorized():
     """
-    Check the signed browser authorization token.
+    Check authorization.
 
-    Session state is checked first for fast reruns. On a new Streamlit
-    session, the signed query parameter restores authorization automatically.
+    Session state is checked first for normal reruns. A persistent signed
+    browser cookie restores authorization after a completely new Streamlit
+    session, including after browser/PC restart.
     """
     if st.session_state.get("access_granted", False):
         return True
 
-    token = _get_browser_access_token()
+    token = _read_persistent_access_cookie()
 
     if _validate_browser_token(token):
         st.session_state["access_granted"] = True
@@ -5229,45 +5298,47 @@ def _browser_is_authorized():
 
 
 def _authorize_browser():
-    """Persist a signed authorization token in the browser URL."""
+    """Persist a signed authorization token until explicitly cleared."""
     token = _create_browser_token()
 
     if not token:
         return False
 
-    # Query parameters survive Streamlit refreshes and fresh WebSocket
-    # connections. The raw access code is never included.
-    st.query_params[ACCESS_QUERY_PARAM] = token
+    if not _write_persistent_access_cookie(token):
+        return False
+
     st.session_state["access_granted"] = True
     return True
 
 
 def _clear_browser_access():
-    """Explicitly remove the persistent authorization token."""
+    """Explicitly remove the persistent authorization cookie."""
     st.session_state["access_granted"] = False
-
-    try:
-        st.query_params.clear()
-    except Exception:
-        # Fallback for older Streamlit versions.
-        try:
-            st.experimental_set_query_params()
-        except Exception:
-            pass
+    _delete_persistent_access_cookie()
 
 
 def access_token_gate():
     """
     Gate the entire app behind a one-time access code.
 
-    The successful access creates a signed authorization token in the
-    browser URL. The access code is not requested again on refresh or
-    Streamlit reruns. The gear menu can explicitly clear that token.
+    Once accepted, authorization is stored as a signed persistent browser
+    cookie. The code is NOT requested again after refresh, tab/browser close,
+    Streamlit restart, or PC restart/shutdown.
+
+    The user must explicitly use "Clear access token" in the admin gear to
+    authorize again.
     """
     if URLSafeTimedSerializer is None:
         st.error(
             "Persistent access-token support is not installed. "
             "Add `itsdangerous` to requirements.txt and redeploy."
+        )
+        st.stop()
+
+    if CookieController is None:
+        st.error(
+            "Persistent browser access support is not installed. "
+            "Add `streamlit-cookies-controller` to requirements.txt and redeploy."
         )
         st.stop()
 
@@ -5286,17 +5357,17 @@ def access_token_gate():
     # Dedicated access screen. No Knowledge Base content is rendered before
     # the access code is accepted.
     st.markdown(
-        """
+        f"""
         <style>
-        .kb-access-shell {
+        .kb-access-shell {{
           min-height:58vh;
           display:flex;
           align-items:center;
           justify-content:center;
           padding:36px 16px;
           box-sizing:border-box;
-        }
-        .kb-access-card {
+        }}
+        .kb-access-card {{
           width:min(520px,100%);
           padding:30px 34px 28px;
           border:1px solid #8fd8cf;
@@ -5304,28 +5375,32 @@ def access_token_gate():
           background:linear-gradient(145deg,#ffffff 0%,#f2fffc 100%);
           box-shadow:0 14px 40px rgba(0,95,90,.10);
           text-align:center;
-        }
-        .kb-access-logo { width:62px; margin:0 auto 13px; display:block; }
-        .kb-access-kicker {
+        }}
+        .kb-access-logo {{
+          width:62px;
+          margin:0 auto 13px;
+          display:block;
+        }}
+        .kb-access-kicker {{
           color:#008f7b;
           font-size:9px;
           font-weight:800;
           letter-spacing:1.3px;
-        }
-        .kb-access-title {
+        }}
+        .kb-access-title {{
           margin-top:7px;
           color:#08384b;
           font-size:26px;
           line-height:1.15;
           font-weight:800;
-        }
-        .kb-access-copy {
+        }}
+        .kb-access-copy {{
           max-width:410px;
           margin:10px auto 0;
           color:#5a7180;
           font-size:12px;
           line-height:1.6;
-        }
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -5341,8 +5416,8 @@ def access_token_gate():
             <div class="kb-access-title">Secure access</div>
             <div class="kb-access-copy">
               Enter your one-time access code to open the Knowledge Base.
-              This browser stays authorized until access is explicitly cleared
-              from the gear menu.
+              This browser remains authorized until access is explicitly
+              cleared from the gear menu.
             </div>
           </div>
         </div>
@@ -5368,29 +5443,31 @@ def access_token_gate():
     if submit:
         if hmac.compare_digest(entered.strip(), access_code):
             if _authorize_browser():
-                # The signed token is now in the URL. Rerun immediately so the
-                # router renders the Knowledge Base instead of the access page.
                 st.rerun()
             else:
                 st.error(
-                    "Unable to create the browser authorization token. "
-                    "Check TOKEN_SECRET and itsdangerous."
+                    "Unable to create the persistent browser authorization. "
+                    "Check TOKEN_SECRET and streamlit-cookies-controller."
                 )
         else:
             st.error("Invalid access code.")
 
     st.caption(
-        "Your access code is never stored in the URL. "
-        "A signed authorization token is used to keep this browser authorized."
+        "Your access code is never stored in the browser. "
+        "A signed authorization token is stored in a persistent browser cookie."
     )
     st.stop()
 
 
 def render_access_controls():
-    """Render the persistent-access status and explicit clear control."""
+    """Render explicit persistent-access status and clear control."""
     with st.expander("Secure access", expanded=False):
         st.caption(
-            "This browser is authorized with a signed server-derived access token."
+            "This browser is authorized with a signed persistent access token."
+        )
+        st.caption(
+            "Authorization survives refresh, browser close/reopen, "
+            "Streamlit restart, and PC restart/shutdown."
         )
 
         if st.button(
@@ -5401,8 +5478,6 @@ def render_access_controls():
             _clear_browser_access()
             st.session_state["admin_authenticated"] = False
             st.session_state["view"] = "home"
-
-            # Do not leave the user on an authorized page after clearing.
             st.rerun()
 
 
@@ -5413,6 +5488,7 @@ def render_access_controls():
 # The access gate runs before router/page rendering so no knowledge-base
 # content is exposed before authorization.
 access_token_gate()
+
 
 for key, default in [
     ("view","home"),
