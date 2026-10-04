@@ -3866,10 +3866,6 @@ def answer_card(r):
         """,
         unsafe_allow_html=True
     )
-    with st.expander("Show troubleshooting steps"):
-        for line in (r["steps"] or "").splitlines():
-            st.markdown(eh(line))
-        st.caption("Search terms: " + r["keywords"])
 
 
 def render_ai_answer(query, family=None):
@@ -3982,8 +3978,9 @@ def render_ai_assistant(default_query="",
         if Path(d.get("filename") or "").suffix.lower() in SUPPORTED_KB_FILES
     ]
 
-    sop_images = load_kb_images(kb_id=selected["kb_id"], limit=50)
-    sop_videos = load_sop_videos(selected["kb_id"], limit=20)
+    # Media is loaded lazily inside the answer fragment only when a tab needs it.
+    sop_images = []
+    sop_videos = []
 
     with st.container(key=f"{key_prefix}_exact_answer_box"):
         st.markdown(
@@ -4031,18 +4028,39 @@ def render_ai_assistant(default_query="",
                 unsafe_allow_html=True,
             )
 
+            current_action = st.session_state.get(action_key) or "answer"
             a1, a2, a3 = st.columns(3, gap="small")
             with a1:
-                if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
+                if st.button(
+                    "✦ Answer",
+                    key=f"{key_prefix}_answer",
+                    use_container_width=True,
+                    type="primary" if current_action == "answer" else "secondary",
+                ):
                     st.session_state[action_key] = "answer"
             with a2:
-                if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
+                if st.button(
+                    "⌕ Troubleshooting steps",
+                    key=f"{key_prefix}_steps",
+                    use_container_width=True,
+                    type="primary" if current_action == "steps" else "secondary",
+                ):
                     st.session_state[action_key] = "steps"
             with a3:
-                if st.button("▤ Related knowledge", key=f"{key_prefix}_files", use_container_width=True):
+                if st.button(
+                    "▤ Related knowledge",
+                    key=f"{key_prefix}_files",
+                    use_container_width=True,
+                    type="primary" if current_action == "files" else "secondary",
+                ):
                     st.session_state[action_key] = "files"
 
-            action = st.session_state[action_key] or "answer"
+            action = st.session_state.get(action_key) or "answer"
+
+            # Load SOP media only for tabs that can display it. These database reads
+            # are therefore skipped when the selected tab does not need media.
+            sop_images = load_kb_images(kb_id=selected["kb_id"], limit=50)
+            sop_videos = load_sop_videos(selected["kb_id"], limit=20)
 
             # The active tab is the top edge of this content page; the body shares
             # the active-tab background so the selected tab visibly connects to
@@ -4579,15 +4597,6 @@ def render_topic():
     else:
         st.info("There is currently no atomic AI record mapped directly to this topic.")
 
-    st.markdown("### Search this topic")
-    q = st.text_input(
-        "Topic search",
-        placeholder=f"Ask a specific {topic} question...",
-        key=f"topic_question_{group}_{topic}",
-        label_visibility="collapsed"
-    )
-    if q:
-        render_ai_answer(q, family=group)
 
 
 # ============================================================
@@ -4653,33 +4662,39 @@ def get_admin_password():
     return ""
 
 
-def admin_login():
+@st.dialog("Admin Access", width="small")
+def _admin_login_dialog():
     """Password gate for the admin area. Password never lives in source code."""
-    with st.popover("⚙", help="Security and Knowledge Base Admin"):
-        render_access_controls()
-        st.markdown("#### Admin")
-        st.caption("Enter the admin password configured in Streamlit Secrets.")
+    render_access_controls()
+    st.markdown("#### Admin")
+    st.caption("Enter the admin password configured in Streamlit Secrets.")
 
-        with st.form("admin_login_form"):
-            password = st.text_input(
-                "Password",
-                type="password",
-                autocomplete="current-password",
-                label_visibility="collapsed",
-                placeholder="Admin password"
-            )
-            login = st.form_submit_button("Sign in", use_container_width=True)
+    with st.form("admin_login_form"):
+        password = st.text_input(
+            "Password",
+            type="password",
+            autocomplete="current-password",
+            label_visibility="collapsed",
+            placeholder="Admin password"
+        )
+        login = st.form_submit_button("Sign in", use_container_width=True)
 
-        if login:
-            expected = get_admin_password()
-            if expected and password == expected:
-                st.session_state.admin_authenticated = True
-                st.session_state.view = "admin"
-                st.rerun()
-            elif not expected:
-                st.error("ADMIN_PASSWORD is not configured in Streamlit Secrets.")
-            else:
-                st.error("Incorrect admin password.")
+    if login:
+        expected = get_admin_password()
+        if expected and password == expected:
+            st.session_state.admin_authenticated = True
+            st.session_state.view = "admin"
+            st.rerun()
+        elif not expected:
+            st.error("ADMIN_PASSWORD is not configured in Streamlit Secrets.")
+        else:
+            st.error("Incorrect admin password.")
+
+
+def admin_login():
+    """Single clickable gear tile for opening the protected admin dialog."""
+    if st.button("⚙", key="admin_gear_button", help="Security and Knowledge Base Admin", type="tertiary"):
+        _admin_login_dialog()
 
 
 def create_ai_ready_sop(
@@ -5984,6 +5999,91 @@ hr, [data-testid="stMarkdownContainer"] hr {
 [class*="st-key-home_ai_exact_answer_box"] *,
 [class*="st-key-answer_"][class*="_exact_answer_box"] *,
 .stApp * {
+  font-family:Inter,Arial,sans-serif !important;
+}
+
+/* FINAL INTERACTION / CLEAN UI OVERRIDES */
+/* Streamlit button type is now the source of truth for the active AI tab. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] button[data-testid="stBaseButton-primary"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button[data-testid="stBaseButton-primary"] {
+  background:#ffffff !important;
+  color:#007f70 !important;
+  border:1px solid #00bfa5 !important;
+  border-bottom-color:#ffffff !important;
+  box-shadow:none !important;
+  transform:none !important;
+  top:0 !important;
+  margin-bottom:-1px !important;
+  position:relative !important;
+  z-index:8 !important;
+}
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] button[data-testid="stBaseButton-secondary"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button[data-testid="stBaseButton-secondary"] {
+  background:#d9f7f2 !important;
+  color:#008f7b !important;
+  border:1px solid #8fd8cf !important;
+  border-bottom:1px solid #00bfa5 !important;
+  box-shadow:none !important;
+  top:0 !important;
+  margin-bottom:0 !important;
+}
+
+/* Absolutely no horizontal rule/seam inside or immediately around the AI body. */
+[class*="st-key-home_ai_exact_answer_box"] hr,
+[class*="st-key-answer_"][class*="_exact_answer_box"] hr,
+[class*="st-key-home_ai_exact_answer_box"] [class*="_tab_content"],
+[class*="st-key-answer_"][class*="_tab_content"] {
+  border-top:0 !important;
+  outline:none !important;
+}
+[class*="st-key-home_ai_exact_answer_box"] [class*="_tab_content"],
+[class*="st-key-answer_"][class*="_tab_content"] {
+  margin-top:0 !important;
+  padding-top:16px !important;
+}
+
+/* Remove the old Streamlit popover chevron styling if an older cached DOM is present. */
+.st-key-hero_admin_gear [data-testid="stPopover"] {
+  display:none !important;
+}
+
+/* The admin tile itself is the only hero control. */
+.st-key-hero_admin_gear div[data-testid="stButton"] button {
+  width:48px !important;
+  height:48px !important;
+  min-width:48px !important;
+  min-height:48px !important;
+  padding:0 !important;
+  margin:0 !important;
+  border-radius:12px !important;
+  border:1px solid rgba(0,230,220,.30) !important;
+  background:rgba(0,80,92,.22) !important;
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  box-shadow:none !important;
+  font-size:23px !important;
+  line-height:1 !important;
+}
+.st-key-hero_admin_gear div[data-testid="stButton"] button:hover,
+.st-key-hero_admin_gear div[data-testid="stButton"] button:focus-visible {
+  background:rgba(0,191,165,.18) !important;
+  border-color:rgba(0,230,220,.65) !important;
+  color:#ffffff !important;
+  outline:3px solid rgba(255,255,255,.10) !important;
+  outline-offset:2px !important;
+}
+
+/* Remove the extra topic-search surface; topic/question cards remain the interaction. */
+
+/* Eliminate top padding/rules that can appear above the hero on Streamlit rerenders. */
+[data-testid="stAppViewBlockContainer"],
+section.main > div,
+div[data-testid="stAppViewContainer"] > .main {
+  padding-top:0 !important;
+}
+
+/* Inter remains the single app-wide typeface. */
+html, body, .stApp, .stApp *, button, input, textarea, select, option {
   font-family:Inter,Arial,sans-serif !important;
 }
 
