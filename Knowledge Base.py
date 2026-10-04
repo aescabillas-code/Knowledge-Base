@@ -984,18 +984,38 @@ def file_data_uri(path):
 
 
 def render_clickable_image(path, caption="", max_height=190):
-    """Show a compact image thumbnail; clicking it opens the image at its actual size."""
+    """Show a compact thumbnail; clicking it opens the actual image in an in-page modal."""
     data_uri = file_data_uri(path)
     if not data_uri:
         return False
+
     safe_caption = eh(caption)
+    # Generate a deterministic, URL-safe fragment ID without adding another
+    # browser page or requiring JavaScript.
+    token = base64.urlsafe_b64encode(
+        f"{path}|{caption}".encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    modal_id = "kb_img_" + re.sub(r"[^A-Za-z0-9_-]", "_", token)[:80]
+
     st.markdown(
         f"""
         <div class="kb-image-preview">
-          <a href="{data_uri}" target="_blank" rel="noopener" title="Open image at actual size">
-            <img src="{data_uri}" alt="{safe_caption}" class="kb-clickable-image" style="max-height:{int(max_height)}px;">
+          <a href="#{modal_id}" class="kb-image-open" title="View image at actual size">
+            <img src="{data_uri}" alt="{safe_caption}"
+                 class="kb-clickable-image"
+                 style="max-height:{int(max_height)}px;">
           </a>
           <div class="kb-image-caption">{safe_caption}</div>
+        </div>
+
+        <div id="{modal_id}" class="kb-image-modal" aria-label="Image preview">
+          <div class="kb-image-modal-backdrop">
+            <a href="#" class="kb-image-modal-close" aria-label="Close image">×</a>
+            <div class="kb-image-modal-content">
+              <img src="{data_uri}" alt="{safe_caption}" class="kb-image-full">
+              <div class="kb-image-modal-caption">{safe_caption}</div>
+            </div>
+          </div>
         </div>
         """,
         unsafe_allow_html=True
@@ -1464,8 +1484,8 @@ div[data-testid="stToolbar"] { display:none !important; }
   outline-offset:2px;
 }
 .family-card-compact {
-  height:58px !important;
-  min-height:58px !important;
+  height:68px !important;
+  min-height:68px !important;
   padding:8px 10px !important;
   margin-bottom:7px !important;
   display:flex !important;
@@ -1487,12 +1507,13 @@ div[data-testid="stToolbar"] { display:none !important; }
   text-shadow:none;
 }
 .family-card-compact .family-icon {
-  width:34px !important;
-  height:34px !important;
-  min-width:34px !important;
-  border-radius:9px !important;
+  width:44px !important;
+  height:44px !important;
+  min-width:44px !important;
+  flex:0 0 44px !important;
+  border-radius:11px !important;
   margin:0 !important;
-  font-size:17px !important;
+  font-size:22px !important;
 }
 .family-card-compact .family-card-copy {
   min-width:0;
@@ -5030,6 +5051,13 @@ st.markdown("""
   box-shadow:0 5px 18px rgba(0,139,123,.08) !important;
   backdrop-filter:blur(7px) !important;
 }
+[class*="st-key-home_ai_question_box"],
+[class*="st-key-answer_"][class*="_question_box"] {
+  background:#ffffff !important;
+  border:1px solid #d7e7eb !important;
+  border-radius:13px !important;
+  box-shadow:0 5px 18px rgba(0,139,123,.06) !important;
+}
 [class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"],
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] {
   width:100% !important;
@@ -5037,10 +5065,11 @@ st.markdown("""
 [class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"] input,
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] input {
   height:44px !important;
-  border:1px solid rgba(0,151,135,.48) !important;
+  border:1px solid #9edfd8 !important;
   border-radius:11px !important;
-  background:rgba(0,191,165,.20) !important;
+  background:#ffffff !important;
   color:#08384b !important;
+  -webkit-text-fill-color:#08384b !important;
   box-shadow:inset 0 1px 3px rgba(0,88,80,.06) !important;
 }
 [class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"] input::placeholder,
@@ -5066,7 +5095,7 @@ st.markdown("""
   max-width:none !important;
 }
 
-/* Compact image previews; click opens the original image at natural size. */
+/* Compact image previews; clicking opens the original image in an in-page modal. */
 .kb-image-preview {
   width:100% !important;
   min-height:70px !important;
@@ -5078,9 +5107,10 @@ st.markdown("""
   text-align:center !important;
   box-sizing:border-box !important;
 }
-.kb-image-preview a {
+.kb-image-open {
   display:block !important;
   cursor:zoom-in !important;
+  text-decoration:none !important;
 }
 .kb-clickable-image {
   display:block !important;
@@ -5097,6 +5127,81 @@ st.markdown("""
   color:#6c808d !important;
   font-size:7px !important;
   line-height:10px !important;
+}
+
+/* CSS-only modal: stays on the same Streamlit page and expands to actual image size. */
+.kb-image-modal {
+  display:none !important;
+  position:fixed !important;
+  inset:0 !important;
+  z-index:999999 !important;
+}
+.kb-image-modal:target {
+  display:block !important;
+}
+.kb-image-modal-backdrop {
+  position:fixed !important;
+  inset:0 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  padding:28px !important;
+  box-sizing:border-box !important;
+  background:rgba(3,24,34,.78) !important;
+  backdrop-filter:blur(3px) !important;
+}
+.kb-image-modal-content {
+  position:relative !important;
+  max-width:96vw !important;
+  max-height:94vh !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  justify-content:center !important;
+  padding:14px !important;
+  border-radius:14px !important;
+  background:#ffffff !important;
+  box-shadow:0 18px 60px rgba(0,0,0,.35) !important;
+}
+.kb-image-full {
+  display:block !important;
+  width:auto !important;
+  height:auto !important;
+  max-width:92vw !important;
+  max-height:86vh !important;
+  object-fit:contain !important;
+  border-radius:7px !important;
+}
+.kb-image-modal-caption {
+  width:100% !important;
+  margin-top:7px !important;
+  color:#466271 !important;
+  font-size:10px !important;
+  line-height:14px !important;
+  text-align:center !important;
+}
+.kb-image-modal-close {
+  position:fixed !important;
+  top:14px !important;
+  right:18px !important;
+  z-index:1000001 !important;
+  width:38px !important;
+  height:38px !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  border-radius:50% !important;
+  background:#ffffff !important;
+  color:#07566a !important;
+  text-decoration:none !important;
+  font-size:27px !important;
+  line-height:1 !important;
+  font-weight:700 !important;
+  box-shadow:0 5px 18px rgba(0,0,0,.25) !important;
+}
+.kb-image-modal-close:hover {
+  background:#e9fffb !important;
+  color:#008f7b !important;
 }
 
 @media (max-width:1100px) {
