@@ -3,11 +3,21 @@ import re
 import sqlite3
 import mimetypes
 import base64
+import hashlib
+import hmac
 from datetime import datetime
 from pathlib import Path
 from html import escape
 
 import streamlit as st
+
+# Persistent browser cookie support for the one-time access-token gate.
+# The dependency is kept optional so the script can still start and display
+# a clear setup message if the package has not yet been added to requirements.
+try:
+    from streamlit_cookies_controller import CookieController
+except Exception:
+    CookieController = None
 
 try:
     from docx import Document as WordDocument
@@ -4520,7 +4530,8 @@ def get_admin_password():
 
 def admin_login():
     """Password gate for the admin area. Password never lives in source code."""
-    with st.popover("⚙", help="Knowledge Base Admin"):
+    with st.popover("⚙", help="Security and Knowledge Base Admin"):
+        render_access_controls()
         st.markdown("#### Admin")
         st.caption("Enter the admin password configured in Streamlit Secrets.")
 
@@ -5074,9 +5085,263 @@ def render_admin():
         )
 
 
+
+# ============================================================
+# PERSISTENT ONE-TIME ACCESS TOKEN
+# ============================================================
+# Security model:
+# 1. ACCESS_CODE and TOKEN_SECRET live ONLY in Streamlit Secrets.
+# 2. The user enters ACCESS_CODE once.
+# 3. The app deterministically derives a signed token from the two
+#    server-side secrets and stores ONLY that derived token in a browser cookie.
+# 4. The raw access code is never written to the GitHub source code,
+#    SQLite database, query string, or browser cookie.
+# 5. The gear menu provides "Clear access token", which removes the cookie.
+#
+# Required Streamlit Secrets:
+#   ACCESS_CODE = "your-one-time-access-code"
+#   TOKEN_SECRET = "a-long-random-server-side-secret"
+#
+# Add this package to requirements.txt:
+#   streamlit-cookies-controller
+
+ACCESS_COOKIE_NAME = "hpe_kb_access_token_v1"
+
+
+def _get_access_secrets():
+    """Read the access code and signing secret only from Streamlit Secrets."""
+    access_code = ""
+    token_secret = ""
+    try:
+        access_code = str(st.secrets.get("ACCESS_CODE", "")).strip()
+        token_secret = str(st.secrets.get("TOKEN_SECRET", "")).strip()
+    except Exception:
+        pass
+
+    # Environment fallback is useful for local development/containers and
+    # still keeps both values out of the GitHub source code.
+    if not access_code:
+        access_code = os.environ.get("ACCESS_CODE", "").strip()
+    if not token_secret:
+        token_secret = os.environ.get("TOKEN_SECRET", "").strip()
+
+    return access_code, token_secret
+
+
+def _derive_access_token(access_code, token_secret):
+    """Convert the one-time access code into a server-verifiable token."""
+    if not access_code or not token_secret:
+        return ""
+    payload = ("HPE-KB-ACCESS-V1|" + access_code).encode("utf-8")
+    secret = token_secret.encode("utf-8")
+    return hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+
+@st.cache_resource(show_spinner=False)
+def _get_cookie_controller():
+    """Create one persistent cookie controller for this Streamlit session."""
+    if CookieController is None:
+        return None
+    return CookieController()
+
+
+def _read_access_cookie():
+    controller = _get_cookie_controller()
+    if controller is None:
+        return None, False
+    try:
+        # CookieController exposes ready() while its browser component is
+        # establishing communication with the page.
+        if hasattr(controller, "ready") and not controller.ready():
+            return None, True
+        return controller.get(ACCESS_COOKIE_NAME), False
+    except Exception:
+        return None, False
+
+
+def _write_access_cookie(token):
+    controller = _get_cookie_controller()
+    if controller is None:
+        return False
+    try:
+        # Keep the access token until the user explicitly clears it.
+        controller.set(
+            ACCESS_COOKIE_NAME,
+            token,
+            max_age=60 * 60 * 24 * 365 * 10,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _clear_access_cookie():
+    controller = _get_cookie_controller()
+    if controller is None:
+        return False
+    try:
+        controller.remove(ACCESS_COOKIE_NAME)
+        return True
+    except Exception:
+        return False
+
+
+def has_valid_access_token():
+    """Return True only when the browser cookie matches the current secrets."""
+    access_code, token_secret = _get_access_secrets()
+    expected = _derive_access_token(access_code, token_secret)
+    if not expected:
+        return False
+
+    cookie_token, cookie_waiting = _read_access_cookie()
+    if cookie_waiting:
+        return None
+
+    if not cookie_token:
+        return False
+
+    return hmac.compare_digest(str(cookie_token), expected)
+
+
+def access_token_gate():
+    """
+    Gate the entire app behind a one-time access code.
+
+    The first successful entry creates the persistent browser cookie.
+    Subsequent refreshes open the app without asking for the code again.
+    """
+    if CookieController is None:
+        st.error(
+            "Persistent access-token support is not installed. "
+            "Add `streamlit-cookies-controller` to requirements.txt and redeploy."
+        )
+        st.stop()
+
+    access_code, token_secret = _get_access_secrets()
+
+    if not access_code or not token_secret:
+        st.error(
+            "Access control is not configured. Add ACCESS_CODE and TOKEN_SECRET "
+            "to Streamlit Secrets; do not place them in the GitHub source code."
+        )
+        st.stop()
+
+    valid = has_valid_access_token()
+
+    if valid is None:
+        # Allow the cookie component one browser round-trip to initialize.
+        st.info("Preparing secure access…")
+        st.stop()
+
+    if valid:
+        st.session_state["access_granted"] = True
+        return True
+
+    st.session_state["access_granted"] = False
+
+    # Dedicated full-page access screen. No knowledge-base content is rendered
+    # until the one-time access code is accepted.
+
+    st.markdown("""
+    <style>
+    .kb-access-shell {
+      min-height:58vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:36px 16px;
+      box-sizing:border-box;
+    }
+    .kb-access-card {
+      width:min(520px,100%);
+      padding:30px 34px 28px;
+      border:1px solid #8fd8cf;
+      border-radius:18px;
+      background:linear-gradient(145deg,#ffffff 0%,#f2fffc 100%);
+      box-shadow:0 14px 40px rgba(0,95,90,.10);
+      text-align:center;
+    }
+    .kb-access-logo { width:62px; margin:0 auto 13px; display:block; }
+    .kb-access-kicker { color:#008f7b; font-size:9px; font-weight:800; letter-spacing:1.3px; }
+    .kb-access-title { margin-top:7px; color:#08384b; font-size:26px; line-height:1.15; font-weight:800; }
+    .kb-access-copy { max-width:410px; margin:10px auto 0; color:#5a7180; font-size:12px; line-height:1.6; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(
+        f"""
+        <div class="kb-access-shell">
+          <div class="kb-access-card">
+            <img src="data:image/png;base64,{HPE_KB_LOGO_B64}" alt="HPE" class="kb-access-logo">
+            <div class="kb-access-kicker">HPE KNOWLEDGE BASE</div>
+            <div class="kb-access-title">Secure access</div>
+            <div class="kb-access-copy">
+              Enter your one-time access token to open the Knowledge Base.
+              This device will stay authorized until the token is cleared from the gear menu.
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.form("hpe_access_token_form", clear_on_submit=True):
+        entered = st.text_input(
+            "Access token",
+            type="password",
+            placeholder="Enter access token",
+            label_visibility="collapsed",
+            autocomplete="one-time-code",
+        )
+        submit = st.form_submit_button(
+            "Open Knowledge Base →",
+            use_container_width=True,
+            type="primary",
+        )
+
+    if submit:
+        if hmac.compare_digest(entered.strip(), access_code):
+            derived = _derive_access_token(access_code, token_secret)
+            if _write_access_cookie(derived):
+                st.session_state["access_granted"] = True
+                st.rerun()
+            else:
+                st.error(
+                    "The access token could not be saved in the browser. "
+                    "Confirm that streamlit-cookies-controller is installed."
+                )
+        else:
+            st.error("Invalid access token.")
+
+    st.stop()
+
+
+def render_access_controls():
+    """Render access-token status and the clear-token control in the gear menu."""
+    with st.expander("Secure access", expanded=False):
+        st.caption("This browser is authorized with a server-derived access token.")
+        if st.button(
+            "Clear access token",
+            key="clear_access_token",
+            use_container_width=True,
+        ):
+            _clear_access_cookie()
+            st.session_state["access_granted"] = False
+            st.session_state["admin_authenticated"] = False
+            st.session_state["view"] = "home"
+            st.success("Access token cleared. The next page load will require the token again.")
+            st.rerun()
+
+
+
 # ============================================================
 # ROUTER
 # ============================================================
+
+# The access gate runs before router/page rendering so no knowledge-base
+# content is exposed before authorization.
+access_token_gate()
+
 for key, default in [
     ("view","home"),
     ("selected_group",None),
@@ -5390,5 +5655,102 @@ st.markdown("""
   .family-link-horizontal .family-card-compact { height:70px !important; min-height:70px !important; }
   .family-link-horizontal .family-icon { flex-basis:28px !important; width:28px !important; height:28px !important; }
 }
+
+/* ============================================================
+   CONNECTED AI ANSWER TABS
+   The active tab and the content panel must read as ONE surface.
+   Streamlit inserts wrappers/gaps between the button row and the
+   following container; these overrides intentionally collapse that
+   seam.
+   ============================================================ */
+[class*="st-key-home_ai_exact_answer_box"] > div[data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] > div[data-testid="stVerticalBlock"] {
+  gap:0 !important;
+  row-gap:0 !important;
+}
+
+/* The tab button row sits directly on top of the content page. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button),
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) {
+  margin-bottom:-1px !important;
+  padding-bottom:0 !important;
+  position:relative !important;
+  z-index:5 !important;
+}
+
+/* Remove Streamlit's default element spacing around the tab row. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button)
+  > div[data-testid="column"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button)
+  > div[data-testid="column"] {
+  margin-bottom:0 !important;
+  padding-bottom:0 !important;
+}
+
+/* Pull the content shell up into the tab row so there is no white gap. */
+[class*="st-key-home_ai_exact_answer_box"] [class*="_tab_content"],
+[class*="st-key-answer_"][class*="_tab_content"] {
+  margin-top:-1px !important;
+  position:relative !important;
+  z-index:2 !important;
+  border-top:1px solid #00bfa5 !important;
+  border-radius:0 0 12px 12px !important;
+  background:#d9f7f2 !important;
+}
+
+/* The selected button covers the content shell's top border, creating
+   the visual effect of a single connected browser/Excel-style tab. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
+  position:relative !important;
+  z-index:6 !important;
+  margin-bottom:-1px !important;
+}
+
+/* Access-token screen. */
+.kb-access-shell {
+  min-height:58vh !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  padding:36px 16px !important;
+  box-sizing:border-box !important;
+}
+.kb-access-card {
+  width:min(520px, 100%) !important;
+  padding:30px 34px 28px !important;
+  border:1px solid #8fd8cf !important;
+  border-radius:18px !important;
+  background:linear-gradient(145deg,#ffffff 0%,#f2fffc 100%) !important;
+  box-shadow:0 14px 40px rgba(0,95,90,.10) !important;
+  text-align:center !important;
+}
+.kb-access-logo {
+  width:62px !important;
+  height:auto !important;
+  margin:0 auto 13px !important;
+  display:block !important;
+}
+.kb-access-kicker {
+  color:#008f7b !important;
+  font-size:9px !important;
+  font-weight:800 !important;
+  letter-spacing:1.3px !important;
+}
+.kb-access-title {
+  margin-top:7px !important;
+  color:#08384b !important;
+  font-size:26px !important;
+  line-height:1.15 !important;
+  font-weight:800 !important;
+}
+.kb-access-copy {
+  max-width:410px !important;
+  margin:10px auto 0 !important;
+  color:#5a7180 !important;
+  font-size:12px !important;
+  line-height:1.6 !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
