@@ -2244,6 +2244,175 @@ div.stButton > button {
   box-shadow:0 8px 24px rgba(0,150,135,.18) !important;
 }
 
+
+/* ============================================================
+   HPE REFERENCE VISUAL — ANSWER ACTIONS + PRODUCT FAMILY TILES
+   Uses the same dark HPE teal/navy visual language as the supplied
+   hero reference image. Icons keep their original family colors.
+   ============================================================ */
+
+/* Shared HPE hero surface. */
+:root {
+  --hpe-reference-bg:
+    radial-gradient(ellipse at 78% 47%,rgba(0,239,218,.23),transparent 23%),
+    radial-gradient(ellipse at 31% 12%,rgba(0,119,158,.30),transparent 31%),
+    linear-gradient(117deg,#041d2a 0%,#062a3a 52%,#062b38 100%);
+}
+
+/* Suggested / possible-answer buttons:
+   exactly 1px vertical separation and white text on the HPE surface. */
+[class*="st-key-home_ai_question_box"],
+[class*="st-key-answer_"][class*="_question_box"] {
+  /* Do not let Streamlit's default vertical spacing create a large gap. */
+  gap:1px !important;
+}
+
+[class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlock"] {
+  gap:1px !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]),
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]) {
+  margin-top:0 !important;
+  margin-bottom:0 !important;
+  padding-top:0 !important;
+  padding-bottom:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
+  margin:0 !important;
+  padding:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > button {
+  width:100% !important;
+  min-height:28px !important;
+  height:28px !important;
+  margin:0 !important;
+  padding:3px 12px !important;
+  border:1px solid rgba(0,229,210,.58) !important;
+  border-radius:16px !important;
+  background:var(--hpe-reference-bg) !important;
+  color:#ffffff !important;
+  font-size:10px !important;
+  font-weight:700 !important;
+  line-height:1.1 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 2px 7px rgba(0,28,42,.08) !important;
+  transition:filter .15s ease, transform .15s ease, border-color .15s ease !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > button:hover,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > button:hover {
+  background:
+    radial-gradient(ellipse at 78% 47%,rgba(0,239,218,.29),transparent 23%),
+    linear-gradient(117deg,#052433 0%,#073b4c 52%,#063640 100%) !important;
+  color:#ffffff !important;
+  border-color:#00d9c5 !important;
+  transform:none !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > button p,
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > button span,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > button p,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > button span {
+  color:#ffffff !important;
+  font-size:10px !important;
+  font-weight:700 !important;
+  line-height:1.1 !important;
+  margin:0 !important;
+}
+
+/* Remove the extra vertical whitespace around the prompt itself. */
+[class*="st-key-home_ai_question_box"] .chatbot-prompt,
+[class*="st-key-answer_"][class*="_question_box"] .chatbot-prompt {
+  margin:5px 0 3px !important;
+}
+
+/* Summary / Troubleshooting Steps / Related Knowledge buttons:
+   same HPE reference background and white text. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] > button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] > button {
+  min-height:30px !important;
+  height:30px !important;
+  padding:4px 10px !important;
+  border:1px solid rgba(0,229,210,.58) !important;
+  border-radius:17px !important;
+  background:var(--hpe-reference-bg) !important;
+  color:#ffffff !important;
+  font-size:9px !important;
+  font-weight:700 !important;
+  line-height:1.1 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 3px 9px rgba(0,28,42,.10) !important;
+}
+
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] > button:hover,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] > button:hover {
+  background:
+    radial-gradient(ellipse at 78% 47%,rgba(0,239,218,.29),transparent 23%),
+    linear-gradient(117deg,#052433 0%,#073b4c 52%,#063640 100%) !important;
+  color:#ffffff !important;
+  border-color:#00d9c5 !important;
+}
+
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] > button p,
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] > button span,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] > button p,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] > button span {
+  color:#ffffff !important;
+  font-size:9px !important;
+  font-weight:700 !important;
+  margin:0 !important;
+}
+
+/* Product-family tiles: same HPE reference surface; original icon colors
+   remain untouched because the icon itself still uses its family class. */
+.family-card-compact {
+  background:var(--hpe-reference-bg) !important;
+  border:1px solid rgba(0,229,210,.30) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 -1px 0 rgba(0,25,38,.18),
+    0 7px 18px rgba(0,28,42,.13) !important;
+}
+
+.family-card-compact .family-name,
+.family-card-compact .family-desc {
+  color:#ffffff !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.20);
+}
+
+.family-card-compact .family-arrow {
+  /* Keep the original arrow/icon color treatment. */
+  filter:none !important;
+}
+
+.family-link:hover .family-card-compact {
+  background:
+    radial-gradient(ellipse at 78% 47%,rgba(0,239,218,.29),transparent 23%),
+    linear-gradient(117deg,#052433 0%,#073b4c 52%,#063640 100%) !important;
+  border-color:#00d9c5 !important;
+}
+
+/* No-match answer area: no fabricated content, only a compact message. */
+.no-match-answer {
+  min-height:52px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px 12px;
+  color:#637b8e;
+  font-size:10px;
+  font-weight:600;
+  text-align:center;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -2409,19 +2578,10 @@ def render_ai_assistant(default_query="",
     if query:
         records, docs = search(query, family=family, limit=6)
 
-        if not records and docs:
-            d = docs[0]
-            excerpt = d["content"][:1200].replace("\n", " ")
-            records = [{
-                "kb_id": f"DOC-{d['id']}",
-                "family": d["family"],
-                "topic": d["topic"],
-                "question": query,
-                "answer": excerpt + ("…" if len(d["content"]) > 1200 else ""),
-                "steps": "",
-                "keywords": query,
-                "source": d["title"],
-            }]
+        # PDF/document matches are intentionally NOT converted into an
+        # AI exact answer. The AI answer area must only use a matching
+        # knowledge article/atomic KB record. Documents remain available
+        # through Global Search and Related Knowledge.
 
     # One bordered question box: question entry + matching options.
     with st.container(key=f"{key_prefix}_question_box"):
@@ -2475,12 +2635,13 @@ def render_ai_assistant(default_query="",
         return
 
     if not records:
-        # Keep the exact-answer area in the same position and size family,
-        # but leave it intentionally blank when the knowledge base has no
-        # confident answer for the submitted question.
+        # No matching KB article: do not fabricate an AI answer from a PDF
+        # excerpt. Show a compact, neutral no-match message instead.
         with st.container(key=f"{key_prefix}_exact_answer_box"):
             st.markdown(
-                '<div class="exact-answer-empty" aria-label="No exact answer available"></div>',
+                '<div class="no-match-answer" aria-label="No matching information found">'
+                'No matching information found in the HPE Knowledge Base.'
+                '</div>',
                 unsafe_allow_html=True
             )
         return
@@ -2742,7 +2903,7 @@ def render_home():
 
     with left:
         render_ai_assistant(
-            default_query="NSP onboarding guide",
+            default_query="NSP onboarding guide",  # Default AI question
             key_prefix="home_ai",
         )
 
