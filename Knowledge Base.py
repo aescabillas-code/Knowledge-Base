@@ -3748,6 +3748,11 @@ div.stButton > button {
   margin-top:3px !important;
 }
 
+
+
+   END FINAL FIX
+   ============================================================ */
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -3882,6 +3887,11 @@ def render_ai_answer(query, family=None):
     )
 
 
+def _set_ai_tab(action_key, value):
+    """Update the selected AI tab before the fragment redraws."""
+    st.session_state[action_key] = value
+
+
 def render_ai_assistant(default_query="",
                          family=None, key_prefix="home_ai"):
     """Exact-answer assistant with Answer, Troubleshooting Steps and Related Files."""
@@ -4003,58 +4013,41 @@ def render_ai_assistant(default_query="",
         # from running on every tab click.
         @st.fragment
         def _render_answer_tabs():
-            # Dynamic active-tab styling: only the selected tab is light teal.
-            selected_tab_index = {"answer": 1, "steps": 2, "files": 3}.get(
-                st.session_state.get(action_key), 1
-            )
-            st.markdown(
-                f"""
-                <style>
-                [class*="st-key-{key_prefix}_exact_answer_box"] div[data-testid="stHorizontalBlock"]
-                  > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button,
-                .st-key-home_ai_exact_answer_box div[data-testid="stHorizontalBlock"]
-                  > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button {{
-                    background:#ffffff !important;
-                    color:#007f70 !important;
-                    border-color:#00bfa5 !important;
-                    border-bottom-color:#ffffff !important;
-                    margin-bottom:-1px !important;
-                    box-shadow:0 -1px 5px rgba(0,191,165,.10), inset 0 1px 0 rgba(255,255,255,.75) !important;
-                    top:0 !important;
-                    z-index:2 !important;
-                  }}
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
-
+            # Use Streamlit callbacks so the selected tab state is committed
+            # before the fragment redraws. This removes the old one-click-behind
+            # nth-child CSS behavior that made users click twice.
             current_action = st.session_state.get(action_key) or "answer"
             a1, a2, a3 = st.columns(3, gap="small")
             with a1:
-                if st.button(
+                st.button(
                     "✦ Answer",
                     key=f"{key_prefix}_answer",
                     use_container_width=True,
                     type="primary" if current_action == "answer" else "secondary",
-                ):
-                    st.session_state[action_key] = "answer"
+                    on_click=_set_ai_tab,
+                    args=(action_key, "answer"),
+                )
             with a2:
-                if st.button(
+                st.button(
                     "⌕ Troubleshooting steps",
                     key=f"{key_prefix}_steps",
                     use_container_width=True,
                     type="primary" if current_action == "steps" else "secondary",
-                ):
-                    st.session_state[action_key] = "steps"
+                    on_click=_set_ai_tab,
+                    args=(action_key, "steps"),
+                )
             with a3:
-                if st.button(
+                st.button(
                     "▤ Related knowledge",
                     key=f"{key_prefix}_files",
                     use_container_width=True,
                     type="primary" if current_action == "files" else "secondary",
-                ):
-                    st.session_state[action_key] = "files"
+                    on_click=_set_ai_tab,
+                    args=(action_key, "files"),
+                )
 
+            # The callback runs before this fragment redraw, so this is already
+            # the newly selected tab on the very first click.
             action = st.session_state.get(action_key) or "answer"
 
             # Load SOP media only for tabs that can display it. These database reads
@@ -4569,6 +4562,7 @@ def render_topic():
 
     if st.button("← Back to product family", key="back_topic"):
         st.session_state.view = "group"
+        st.session_state.pop("topic_open_kb_id", None)
         st.rerun()
 
     st.markdown(
@@ -4581,22 +4575,121 @@ def render_topic():
         unsafe_allow_html=True
     )
 
-    # Search the built-in atomic records using topic + family.
+    # Topic questions are interactive tiles. Clicking a question opens its
+    # complete answer, troubleshooting procedure, and any images/media tied to
+    # the SOP or the indexed documents for this topic.
     records = [
         r for r in load_records()
         if r["family"] == group and (
             topic.lower() in r["topic"].lower()
-            or any(word in (r["question"] + " " + r["keywords"]).lower()
-                   for word in topic.lower().split() if len(word) > 3)
+            or any(
+                word in (r["question"] + " " + r["keywords"]).lower()
+                for word in topic.lower().split()
+                if len(word) > 3
+            )
         )
     ]
 
-    if records:
-        for r in records:
-            answer_card(r)
-    else:
+    if not records:
         st.info("There is currently no atomic AI record mapped directly to this topic.")
+        return
 
+    open_kb_id = st.session_state.get("topic_open_kb_id")
+
+    for index, r in enumerate(records):
+        tile_key = f"topic_question_{re.sub(r'[^A-Za-z0-9]+', '_', r['kb_id'])}_{index}"
+        is_open = open_kb_id == r["kb_id"]
+
+        with st.container(key=f"topic_question_tile_{index}"):
+            if st.button(
+                f"▸  {r['question']}",
+                key=tile_key,
+                use_container_width=True,
+                help="Click to expand the answer, troubleshooting steps, and related visuals.",
+            ):
+                st.session_state.topic_open_kb_id = None if is_open else r["kb_id"]
+                st.rerun()
+
+            if is_open:
+                # Include both SOP-attached images and images extracted from
+                # documents belonging to this family/topic.
+                topic_doc_ids = [
+                    d["id"]
+                    for d in load_documents()
+                    if d.get("family") == group and d.get("topic") == topic
+                ]
+                related_images = load_kb_images(
+                    kb_id=r["kb_id"],
+                    document_ids=topic_doc_ids,
+                    limit=12,
+                )
+                related_videos = load_sop_videos(r["kb_id"], limit=6)
+
+                with st.container(key=f"topic_question_detail_{index}"):
+                    st.markdown(
+                        f"""
+                        <div class="topic-answer-panel">
+                          <div class="topic-answer-kicker">EXACT ANSWER</div>
+                          <div class="topic-answer-title">{eh(r["question"])}</div>
+                          <div class="topic-answer-text">{eh(r["answer"])}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    step_lines = [
+                        re.sub(r"^\s*\d+\.\s*", "", line).strip()
+                        for line in (r.get("steps") or "").splitlines()
+                        if line.strip()
+                    ]
+                    if step_lines:
+                        st.markdown(
+                            '<div class="topic-detail-heading">TROUBLESHOOTING STEPS</div>',
+                            unsafe_allow_html=True,
+                        )
+                        for step_no, step in enumerate(step_lines, 1):
+                            st.markdown(
+                                f"""
+                                <div class="topic-step-row">
+                                  <div class="topic-step-number">{step_no}</div>
+                                  <div class="topic-step-text">{eh(step)}</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                    if related_images or related_videos:
+                        st.markdown(
+                            '<div class="topic-detail-heading">RELATED VISUALS & MEDIA</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                    if related_images:
+                        image_cols = st.columns(min(3, len(related_images)), gap="small")
+                        for image_index, image_record in enumerate(related_images):
+                            with image_cols[image_index % len(image_cols)]:
+                                image_path = image_record.get("image_path")
+                                if image_path and Path(image_path).exists():
+                                    render_clickable_image(
+                                        image_path,
+                                        image_record.get("caption")
+                                        or image_record.get("placement")
+                                        or f"Related image {image_index + 1}",
+                                        max_height=190,
+                                    )
+
+                    for video_index, video_record in enumerate(related_videos):
+                        video_path = video_record.get("video_path")
+                        if video_path and Path(video_path).exists():
+                            st.video(video_path)
+                            if video_record.get("caption"):
+                                st.caption(video_record["caption"])
+
+                    st.markdown(
+                        f'<div class="topic-detail-source">KB ID: {eh(r["kb_id"])} • '
+                        f'Search terms: {eh(r.get("keywords") or "")}</div>',
+                        unsafe_allow_html=True,
+                    )
 
 
 # ============================================================
@@ -6132,5 +6225,188 @@ html, body, .stApp, .stApp *, button, input, textarea, select, option {
   line-height:1.6 !important;
 }
 
+/* ============================================================
+   FINAL FIX — AI TABS, CONNECTED BORDERS, QUESTION TILES
+   ============================================================ */
+
+/* The tab row owns one continuous baseline. The buttons sit directly
+   on that line so there are no broken one-pixel border segments. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button),
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) {
+  border-bottom:1px solid #00bfa5 !important;
+  margin:0 !important;
+  padding:0 !important;
+  gap:0 !important;
+  align-items:stretch !important;
+}
+
+/* Remove column padding that creates tiny border breaks between tabs. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) > div[data-testid="column"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"]:has(button) > div[data-testid="column"] {
+  padding:0 !important;
+  margin:0 !important;
+}
+
+/* Stable visual state: Streamlit's actual button type is the only source
+   of truth. The first click changes the type on the same fragment rerun. */
+[class*="st-key-home_ai_exact_answer_box"] button[data-testid="stBaseButton-primary"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] button[data-testid="stBaseButton-primary"] {
+  background:#ffffff !important;
+  color:#007f70 !important;
+  border:1px solid #00bfa5 !important;
+  border-bottom-color:#ffffff !important;
+  border-radius:12px 12px 0 0 !important;
+  box-shadow:none !important;
+  margin:0 0 -1px 0 !important;
+  position:relative !important;
+  z-index:5 !important;
+}
+
+[class*="st-key-home_ai_exact_answer_box"] button[data-testid="stBaseButton-secondary"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] button[data-testid="stBaseButton-secondary"] {
+  background:#d9f7f2 !important;
+  color:#008f7b !important;
+  border:1px solid #8fd8cf !important;
+  border-bottom-color:#00bfa5 !important;
+  border-radius:12px 12px 0 0 !important;
+  box-shadow:none !important;
+  margin:0 !important;
+  position:relative !important;
+  z-index:4 !important;
+}
+
+/* Override older nth-child/background selectors. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
+  top:0 !important;
+  transform:none !important;
+}
+
+/* Content shell touches the tab baseline; no top border or white seam. */
+[class*="st-key-home_ai_tab_content"],
+[class*="st-key-answer_"][class*="_tab_content"] {
+  margin:0 !important;
+  padding:16px 18px 20px !important;
+  border-top:0 !important;
+  border-left:1px solid #00bfa5 !important;
+  border-right:1px solid #00bfa5 !important;
+  border-bottom:1px solid #00bfa5 !important;
+  border-radius:0 0 12px 12px !important;
+  background:#ffffff !important;
+  box-shadow:none !important;
+  outline:none !important;
+}
+
+/* Question tiles on topic pages. The tile itself is the expand control. */
+[class*="st-key-topic_question_tile_"] {
+  margin:0 0 7px 0 !important;
+  padding:0 !important;
+}
+
+[class*="st-key-topic_question_tile_"] div[data-testid="stButton"] button {
+  width:100% !important;
+  min-height:58px !important;
+  height:auto !important;
+  padding:12px 15px !important;
+  text-align:left !important;
+  justify-content:flex-start !important;
+  white-space:normal !important;
+  line-height:1.45 !important;
+  border:1px solid #d7e7eb !important;
+  border-radius:11px !important;
+  background:#ffffff !important;
+  color:#0c3455 !important;
+  font-size:11px !important;
+  font-weight:800 !important;
+  box-shadow:0 1px 4px rgba(7,55,75,.04) !important;
+  transition:background .12s ease,border-color .12s ease,box-shadow .12s ease !important;
+}
+
+[class*="st-key-topic_question_tile_"] div[data-testid="stButton"] button:hover,
+[class*="st-key-topic_question_tile_"] div[data-testid="stButton"] button:focus-visible {
+  background:#f3fffc !important;
+  border-color:#00bfa5 !important;
+  color:#007f70 !important;
+  box-shadow:0 5px 14px rgba(0,150,135,.10) !important;
+}
+
+[class*="st-key-topic_question_tile_"] div[data-testid="stButton"] button:focus-visible {
+  outline:3px solid rgba(0,191,165,.22) !important;
+  outline-offset:2px !important;
+}
+
+/* Expanded question content is visually attached to the clicked tile. */
+[class*="st-key-topic_question_detail_"] {
+  margin:-7px 0 12px 0 !important;
+  padding:16px 17px 18px !important;
+  border:1px solid #00bfa5 !important;
+  border-top:0 !important;
+  border-radius:0 0 12px 12px !important;
+  background:#ffffff !important;
+  box-shadow:0 4px 14px rgba(0,150,135,.07) !important;
+}
+
+.topic-answer-panel {
+  padding:0 !important;
+}
+.topic-answer-kicker,
+.topic-detail-heading {
+  color:#008f7b !important;
+  font-size:9px !important;
+  font-weight:800 !important;
+  letter-spacing:.7px !important;
+  margin:0 0 6px !important;
+}
+.topic-answer-title {
+  color:#0c3455 !important;
+  font-size:13px !important;
+  font-weight:800 !important;
+  line-height:1.45 !important;
+  margin-bottom:7px !important;
+}
+.topic-answer-text {
+  color:#536c7e !important;
+  font-size:12px !important;
+  line-height:1.65 !important;
+  margin-bottom:14px !important;
+}
+.topic-detail-heading {
+  margin-top:12px !important;
+}
+.topic-step-row {
+  display:flex !important;
+  gap:10px !important;
+  align-items:flex-start !important;
+  margin:6px 0 !important;
+}
+.topic-step-number {
+  flex:0 0 24px !important;
+  width:24px !important;
+  height:24px !important;
+  border-radius:50% !important;
+  background:#d9f7f2 !important;
+  color:#007f70 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  font-size:10px !important;
+  font-weight:800 !important;
+}
+.topic-step-text {
+  flex:1 !important;
+  color:#324e63 !important;
+  font-size:11px !important;
+  line-height:1.55 !important;
+  padding-top:3px !important;
+}
+.topic-detail-source {
+  color:#7c909d !important;
+  font-size:8px !important;
+  margin-top:12px !important;
+  padding-top:8px !important;
+  border-top:1px solid #e5eff1 !important;
+}
+
+/* ============================================================
 </style>
 """, unsafe_allow_html=True)
