@@ -1470,6 +1470,30 @@ div.stButton > button {
 }
 
 
+[class*="st-key-home_ai_question_box"],
+[class*="st-key-answer_"][class*="_question_box"] {
+  margin:0 0 10px 0 !important;
+  padding:10px 14px 9px !important;
+  border:1px solid #cfe6e1 !important;
+  border-radius:10px !important;
+  background:rgba(255,255,255,.72) !important;
+  box-shadow:0 2px 8px rgba(0,130,115,.035) !important;
+}
+[class*="st-key-home_ai_question_box"] .stForm,
+[class*="st-key-answer_"][class*="_question_box"] .stForm {
+  border:0 !important;
+  padding:0 !important;
+  margin:0 !important;
+}
+[class*="st-key-home_ai_question_box"] .chatbot-prompt,
+[class*="st-key-answer_"][class*="_question_box"] .chatbot-prompt {
+  margin:7px 0 5px !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
+  margin:3px 0 !important;
+}
+
 .chatbot-prompt {
   margin:9px 0 6px 12px;
   color:#526c7d;
@@ -2034,15 +2058,12 @@ def render_ai_assistant(default_query="",
     selected_key = f"{key_prefix}_selected"
     action_key = f"{key_prefix}_action"
 
-    # The assistant starts blank on the home page. A non-empty default_query
-    # is only used by an explicit programmatic call such as render_ai_answer().
     if q_key not in st.session_state:
         st.session_state[q_key] = default_query or ""
 
     if submitted_key not in st.session_state:
         st.session_state[submitted_key] = default_query or ""
 
-    # Never resurrect the old demo question if it exists in a stale session.
     previous_demo = "How do I troubleshoot ClearPass licensing issues?"
     if not default_query:
         if st.session_state.get(q_key) == previous_demo:
@@ -2050,95 +2071,95 @@ def render_ai_assistant(default_query="",
         if st.session_state.get(submitted_key) == previous_demo:
             st.session_state[submitted_key] = ""
 
+    # The exact answer opens with Summary by default.
     st.session_state.setdefault(selected_key, None)
-    st.session_state.setdefault(action_key, None)
-
-    st.markdown("""
-    <div class="panel ai-panel">
-      <div class="ai-head">
-        <div class="robot">🤖</div>
-        <div>
-          <div class="panel-title">HPE AI Assistant <span class="beta">BETA</span></div>
-          <div class="panel-sub">Ask a question. Choose the closest result. Get the exact answer.</div>
-        </div>
-        <div class="powered">✦ Powered by HPE Knowledge</div>
-      </div>
-    """, unsafe_allow_html=True)
-
-    with st.form(f"{key_prefix}_question_form", clear_on_submit=False):
-        c1, c2 = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
-        with c1:
-            st.text_input(
-                "Ask HPE AI",
-                key=q_key,
-                placeholder="Ask a question...",
-                label_visibility="collapsed",
-                help="Type your question and press Enter, or select the arrow to submit."
-            )
-        with c2:
-            submit = st.form_submit_button("→", use_container_width=True)
-
-    if submit:
-        value = st.session_state[q_key].strip()
-        if value:
-            st.session_state[submitted_key] = value
-            st.session_state[selected_key] = None
-            st.session_state[action_key] = None
-            st.session_state.global_query_pending = value
-            st.rerun()
+    st.session_state.setdefault(action_key, "summary")
 
     query = st.session_state[submitted_key].strip()
+    records = []
+    docs = []
+
+    # Resolve the current query before rendering the question area so the
+    # matching-answer options can live inside the same bordered box as the
+    # question entry.
+    if query:
+        records, docs = search(query, family=family, limit=6)
+
+        if not records and docs:
+            d = docs[0]
+            excerpt = d["content"][:1200].replace("\n", " ")
+            records = [{
+                "kb_id": f"DOC-{d['id']}",
+                "family": d["family"],
+                "topic": d["topic"],
+                "question": query,
+                "answer": excerpt + ("…" if len(d["content"]) > 1200 else ""),
+                "steps": "",
+                "keywords": query,
+                "source": d["title"],
+            }]
+
+    # One bordered question box: question entry + matching options.
+    with st.container(key=f"{key_prefix}_question_box"):
+        with st.form(f"{key_prefix}_question_form", clear_on_submit=False):
+            c1, c2 = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
+            with c1:
+                st.text_input(
+                    "Ask HPE AI",
+                    key=q_key,
+                    placeholder="Ask a question...",
+                    label_visibility="collapsed",
+                    help="Type your question and press Enter, or select the arrow to submit."
+                )
+            with c2:
+                submit = st.form_submit_button("→", use_container_width=True)
+
+        if submit:
+            value = st.session_state[q_key].strip()
+            if value:
+                st.session_state[submitted_key] = value
+                st.session_state[selected_key] = None
+                # Always reopen the Summary view for a new question.
+                st.session_state[action_key] = "summary"
+                st.session_state.global_query_pending = value
+                st.rerun()
+
+        if query and records:
+            options = records[:3]
+            selected_id = st.session_state.get(selected_key)
+            selected = next((r for r in options if r["kb_id"] == selected_id), None)
+
+            if len(options) > 1 and selected is None:
+                st.markdown(
+                    '<div class="chatbot-prompt">I found these possible answers. Choose the one that best matches your question:</div>',
+                    unsafe_allow_html=True
+                )
+                for i, r in enumerate(options):
+                    if st.button(
+                        r["question"],
+                        key=f"{key_prefix}_option_{i}_{r['kb_id']}",
+                        use_container_width=True
+                    ):
+                        st.session_state[selected_key] = r["kb_id"]
+                        # Keep Summary open when a suggested answer is selected.
+                        st.session_state[action_key] = "summary"
+                        st.rerun()
 
     # Keep the assistant blank until the user enters a question.
     if not query:
-        st.markdown("</div>", unsafe_allow_html=True)
         return
-
-    records, docs = search(query, family=family, limit=6)
-
-    if not records and docs:
-        d = docs[0]
-        excerpt = d["content"][:1200].replace("\n", " ")
-        records = [{
-            "kb_id": f"DOC-{d['id']}",
-            "family": d["family"],
-            "topic": d["topic"],
-            "question": query,
-            "answer": excerpt + ("…" if len(d["content"]) > 1200 else ""),
-            "steps": "",
-            "keywords": query,
-            "source": d["title"],
-        }]
 
     if not records:
         st.warning(
             "I couldn't find a confident answer. Try adding the product name, "
             "feature, model, version, or exact error message."
         )
-        st.markdown("</div>", unsafe_allow_html=True)
         return
 
     options = records[:3]
     selected_id = st.session_state.get(selected_key)
     selected = next((r for r in options if r["kb_id"] == selected_id), None)
-
-    if len(options) > 1 and selected is None:
-        st.markdown(
-            '<div class="chatbot-prompt">I found these possible answers. Choose the one that best matches your question:</div>',
-            unsafe_allow_html=True
-        )
-        for i, r in enumerate(options):
-            if st.button(
-                r["question"],
-                key=f"{key_prefix}_option_{i}_{r['kb_id']}",
-                use_container_width=True
-            ):
-                st.session_state[selected_key] = r["kb_id"]
-                st.session_state[action_key] = None
-                st.rerun()
-        selected = options[0]
-    else:
-        selected = selected or options[0]
+    selected = selected or options[0]
 
     # Keep the complete answer experience inside one bordered answer box.
     with st.container(key=f"{key_prefix}_exact_answer_box"):
@@ -2159,7 +2180,7 @@ def render_ai_assistant(default_query="",
 
         a1, a2, a3 = st.columns(3, gap="small")
         with a1:
-            if st.button("✦ Summarize", key=f"{key_prefix}_summary", use_container_width=True):
+            if st.button("✦ Summary", key=f"{key_prefix}_summary", use_container_width=True):
                 st.session_state[action_key] = "summary"
                 st.rerun()
         with a2:
@@ -2171,10 +2192,8 @@ def render_ai_assistant(default_query="",
                 st.session_state[action_key] = "related"
                 st.rerun()
 
-        action = st.session_state[action_key]
+        action = st.session_state[action_key] or "summary"
 
-        # The answer box defaults to the direct answer only. The three actions
-        # deliberately reveal their content inside the same answer container.
         if action == "summary":
             answer_text = (selected.get("answer") or "").strip()
             step_lines = []
@@ -2183,8 +2202,6 @@ def render_ai_assistant(default_query="",
                 if clean:
                     step_lines.append(clean)
 
-            # Keep the summary readable: one concise paragraph followed by
-            # only the most useful action points when the source contains steps.
             summary_paragraph = re.sub(r"\s+", " ", answer_text).strip()
             st.markdown('<div class="exact-section-title">SUMMARY</div>', unsafe_allow_html=True)
             st.markdown(
@@ -2213,7 +2230,6 @@ def render_ai_assistant(default_query="",
         elif action == "related":
             st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
 
-            # Related KB records
             for r in records[1:5]:
                 st.markdown(
                     f'<div class="ai-doc"><div class="pdf-icon">▤</div><div style="flex:1;">'
@@ -2223,8 +2239,6 @@ def render_ai_assistant(default_query="",
                     unsafe_allow_html=True
                 )
 
-            # PDFs belong ONLY to Related knowledge; they are no longer
-            # rendered underneath the default exact answer.
             if docs:
                 for d in docs[:4]:
                     st.markdown(
@@ -2245,9 +2259,6 @@ def render_ai_assistant(default_query="",
                 )
 
     # No follow-up input: the original question field remains the single active question entry.
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
 
 
 def render_documents(docs):
