@@ -2040,6 +2040,133 @@ div.stButton > button {
   }
 }
 
+
+
+/* ============================================================
+   USER REQUEST — FINAL VISUAL OVERRIDES
+   1. Exact answer aligns with the question box.
+   2. Suggested answers use HPE teal with white text and 5px gaps.
+   3. Summary / Troubleshooting / Related Knowledge use HPE teal.
+   4. Product-family tiles use HPE teal with white text.
+   ============================================================ */
+
+/* Align the answer container edge-to-edge with the question container.
+   The previous 12px left inset made the answer box visibly narrower. */
+.st-key-home_ai_exact_answer_box,
+[class*="st-key-answer_"][class*="_exact_answer_box"] {
+  width:100% !important;
+  max-width:none !important;
+  margin:9px 0 9px 0 !important;
+  box-sizing:border-box !important;
+}
+
+/* Keep the answer's inner content aligned to the same visual edge. */
+.st-key-home_ai_exact_answer_box > div[data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] > div[data-testid="stVerticalBlock"] {
+  width:100% !important;
+  max-width:none !important;
+  margin:0 !important;
+}
+
+/* Suggested-answer list: exactly 5px between choices. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
+  margin:0 0 5px 0 !important;
+  padding:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"]:last-child,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"]:last-child {
+  margin-bottom:0 !important;
+}
+
+/* HPE teal suggested-answer buttons. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
+  background:#00bfa5 !important;
+  color:#ffffff !important;
+  border:1px solid #00bfa5 !important;
+  box-shadow:none !important;
+  height:26px !important;
+  min-height:26px !important;
+  margin:0 !important;
+  padding:2px 9px !important;
+  border-radius:15px !important;
+  font-size:8px !important;
+  font-weight:600 !important;
+  line-height:1.1 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button:hover,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button:hover {
+  background:#009f8d !important;
+  border-color:#009f8d !important;
+  color:#ffffff !important;
+}
+
+/* HPE teal action buttons inside the exact-answer box. */
+.st-key-home_ai_exact_answer_box div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button {
+  background:#00bfa5 !important;
+  color:#ffffff !important;
+  border:1px solid #00bfa5 !important;
+  box-shadow:none !important;
+  min-height:30px !important;
+  height:30px !important;
+  border-radius:16px !important;
+  font-size:9px !important;
+  font-weight:700 !important;
+  padding:3px 10px !important;
+}
+
+.st-key-home_ai_exact_answer_box div[data-testid="stButton"] button:hover,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button:hover {
+  background:#009f8d !important;
+  border-color:#009f8d !important;
+  color:#ffffff !important;
+}
+
+/* Product-family tiles: HPE teal background and white text. */
+.family-card-compact {
+  background:#00bfa5 !important;
+  border-color:#00bfa5 !important;
+  box-shadow:0 5px 18px rgba(0,130,115,.16) !important;
+}
+
+.family-card-compact .family-name,
+.family-card-compact .family-desc {
+  color:#ffffff !important;
+}
+
+.family-card-compact .family-icon {
+  background:rgba(255,255,255,.18) !important;
+  color:#ffffff !important;
+}
+
+.family-card-compact .family-arrow {
+  background:rgba(255,255,255,.20) !important;
+  color:#ffffff !important;
+}
+
+.family-link:hover .family-card-compact {
+  background:#009f8d !important;
+  border-color:#009f8d !important;
+  box-shadow:0 8px 24px rgba(0,130,115,.22) !important;
+}
+
+@media (max-width:800px) {
+  .st-key-home_ai_exact_answer_box,
+  [class*="st-key-answer_"][class*="_exact_answer_box"] {
+    width:100% !important;
+    margin:8px 0 !important;
+  }
+
+  [class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+  [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
+    margin-bottom:5px !important;
+  }
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -2534,7 +2661,7 @@ def render_home():
 
     with left:
         render_ai_assistant(
-            default_query="",
+            default_query="NSP onboarding guide",
             key_prefix="home_ai",
         )
 
