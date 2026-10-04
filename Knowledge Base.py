@@ -4141,17 +4141,31 @@ def render_family_cards():
                 )
 
 
-def answer_card(r):
-    st.markdown(
-        f"""
-        <div class="search-result">
-          <div class="result-id">{eh(r['kb_id'])} • {eh(r['family'])} • {eh(r['topic'])}</div>
-          <div class="result-q">{eh(r['question'])}</div>
-          <div class="result-a">{eh(r['answer'])}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
+def answer_card(r, card_index=None, key_prefix="global_kb"):
+    """Render a whole clickable knowledge result tile.
+
+    Clicking anywhere on the tile opens the complete knowledge record/SOP
+    view, where the user can read the full procedure and open related files
+    or play attached videos.
+    """
+    safe_id = re.sub(r"[^A-Za-z0-9]+", "_", str(r.get("kb_id") or "record")).strip("_")
+    key = f"{key_prefix}_{safe_id}_{card_index if card_index is not None else 0}"
+
+    label = (
+        f"**{r.get('question', '')}**\n\n"
+        f"{r.get('answer', '')}"
     )
+
+    if st.button(
+        label,
+        key=key,
+        use_container_width=True,
+        type="secondary",
+        help="Open the complete article/SOP, related files, images, and videos.",
+    ):
+        st.session_state.selected_kb_id = r["kb_id"]
+        st.session_state.view = "kb_detail"
+        st.rerun()
 
 
 def render_ai_answer(query, family=None):
@@ -4710,8 +4724,8 @@ def render_global_search():
             '<div style="height:6px"></div>',
             unsafe_allow_html=True
         )
-        for r in records:
-            answer_card(r)
+        for result_index, r in enumerate(records):
+            answer_card(r, card_index=result_index, key_prefix="global_kb")
         st.markdown('</div>', unsafe_allow_html=True)
 
     if docs:
@@ -4722,21 +4736,31 @@ def render_global_search():
             '<div style="height:6px"></div>',
             unsafe_allow_html=True
         )
-        for d in docs:
+        for doc_index, d in enumerate(docs):
             excerpt = (d["content"] or "")[:420].replace("\n", " ")
             if len(d["content"] or "") > 420:
                 excerpt += "…"
-            st.markdown(
-                f"""
-                <div class="search-result">
-                  <div class="result-id">PDF · {eh(d['family'])} · {eh(d['topic'])}</div>
-                  <div class="result-q">{eh(d['title'])}</div>
-                  <div class="result-a">{eh(excerpt)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
+            doc_type = d.get("doc_type") or SUPPORTED_KB_FILES.get(Path(d.get("filename") or "").suffix.lower(), "File")
+            doc_label = {
+                "PDF": "▤ PDF",
+                "Video": "▶ Video",
+                "Excel": "▦ Excel",
+                "Word": "▤ Word",
+                "PowerPoint": "▥ PowerPoint",
+            }.get(doc_type, "▤ File")
+            doc_key = f"global_doc_{d['id']}_{doc_index}"
+            doc_button_label = (
+                f"**{d['title']}**\n\n"
+                f"{doc_label} • {d.get('family') or ''} • {d.get('topic') or ''}\n\n"
+                f"{excerpt}"
             )
-            if st.button("↗ Open document", key=f"global_doc_{d['id']}", use_container_width=True):
+            if st.button(
+                doc_button_label,
+                key=doc_key,
+                use_container_width=True,
+                type="secondary",
+                help="Open the complete file or play the video.",
+            ):
                 st.session_state.selected_document = d["id"]
                 st.session_state.view = "document"
                 st.rerun()
@@ -4972,6 +4996,124 @@ def render_topic():
 
 
 # ============================================================
+# KNOWLEDGE / SOP DETAIL PAGE
+# ============================================================
+def render_kb_detail():
+    """Show the complete knowledge record/SOP selected from Global Search."""
+    kb_id = st.session_state.get("selected_kb_id")
+    record = next((r for r in load_records() if r["kb_id"] == kb_id), None)
+
+    if not record:
+        st.error("Knowledge record not found.")
+        if st.button("← Back to Global Search", key="back_missing_kb"):
+            st.session_state.view = "global_search"
+            st.rerun()
+        return
+
+    if st.button("← Back to Global Search", key="back_kb_detail"):
+        st.session_state.view = "global_search"
+        st.rerun()
+
+    st.markdown(
+        f"""
+        <div class="family-banner">
+          <h1>{eh(record['question'])}</h1>
+          <p>{eh(record['family'])} • {eh(record['topic'])} • KB ID: {eh(record['kb_id'])}</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        f"""
+        <div class="kb-detail-article">
+          <div class="kb-detail-kicker">EXACT ANSWER</div>
+          <div class="kb-detail-answer">{eh(record.get('answer') or '')}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    steps = [line.strip() for line in (record.get("steps") or "").splitlines() if line.strip()]
+    if steps:
+        st.markdown('<div class="kb-detail-section-title">TROUBLESHOOTING / SOP STEPS</div>', unsafe_allow_html=True)
+        for index, line in enumerate(steps, 1):
+            clean = re.sub(r"^\s*\d+[.)]\s*", "", line).strip()
+            if clean.lower() in {"prerequisites:", "procedure:", "verification:", "escalation:"}:
+                st.markdown(f'<div class="kb-detail-subheading">{eh(clean)}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f'<div class="kb-detail-step"><span class="kb-detail-step-number">{index}</span>'
+                    f'<span>{eh(clean)}</span></div>',
+                    unsafe_allow_html=True,
+                )
+
+    images = load_kb_images(kb_id=record["kb_id"], limit=50)
+    videos = load_sop_videos(record["kb_id"], limit=20)
+
+    if images or videos:
+        st.markdown('<div class="kb-detail-section-title">RELATED VISUALS & MEDIA</div>', unsafe_allow_html=True)
+
+    if images:
+        image_cols = st.columns(min(3, len(images)), gap="small")
+        for index, image_record in enumerate(images):
+            with image_cols[index % len(image_cols)]:
+                path = image_record.get("image_path")
+                if path and Path(path).exists():
+                    render_clickable_image(
+                        path,
+                        image_record.get("caption") or image_record.get("placement") or f"Related image {index + 1}",
+                        max_height=240,
+                    )
+
+    for index, video_record in enumerate(videos):
+        video_path = video_record.get("video_path")
+        if video_path and Path(video_path).exists():
+            st.markdown(
+                f'<div class="kb-media-label">▶ Video {index + 1}'
+                f'{" • " + eh(video_record.get("caption")) if video_record.get("caption") else ""}</div>',
+                unsafe_allow_html=True,
+            )
+            st.video(video_path)
+
+    # Related indexed files are matched by the same product family/topic.
+    related_docs = [
+        d for d in load_documents()
+        if d.get("family") == record.get("family")
+        and (d.get("topic") == record.get("topic") or record.get("topic", "").lower() in (d.get("topic") or "").lower())
+    ]
+
+    if related_docs:
+        st.markdown('<div class="kb-detail-section-title">RELATED FILES</div>', unsafe_allow_html=True)
+        for index, doc in enumerate(related_docs[:12]):
+            suffix = Path(doc.get("filename") or "").suffix.lower()
+            file_type = SUPPORTED_KB_FILES.get(suffix, doc.get("doc_type") or "File")
+            if suffix == ".pdf":
+                if st.button(
+                    f"▤  Open PDF • {doc['filename']}",
+                    key=f"kb_detail_pdf_{doc['id']}_{index}",
+                    use_container_width=True,
+                ):
+                    st.session_state.selected_document = doc["id"]
+                    st.session_state.view = "document"
+                    st.rerun()
+            else:
+                path = BASE_DIR / "files" / file_type.lower().replace(" ", "_") / doc["filename"]
+                data_uri = file_data_uri(path)
+                if data_uri:
+                    st.markdown(
+                        f'<a class="kb-related-file" href="{data_uri}" target="_blank" rel="noopener">'
+                        f'<span>▤</span><b>{eh(doc["filename"])}</b><small>{eh(file_type)} • Open</small><span>↗</span></a>',
+                        unsafe_allow_html=True,
+                    )
+
+    st.markdown(
+        f'<div class="topic-detail-source">KB ID: {eh(record["kb_id"])} • Search terms: {eh(record.get("keywords") or "")}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
 # DOCUMENT PAGE
 # ============================================================
 def render_document():
@@ -4998,6 +5140,30 @@ def render_document():
         """,
         unsafe_allow_html=True
     )
+
+    doc_suffix = Path(doc.get("filename") or "").suffix.lower()
+    doc_type = doc.get("doc_type") or SUPPORTED_KB_FILES.get(doc_suffix, "File")
+    stored_path = BASE_DIR / "files" / doc_type.lower().replace(" ", "_") / doc["filename"]
+
+    # Video files should open as an actual player, not as extracted text.
+    if doc_type == "Video" and stored_path.exists():
+        st.markdown('<div class="kb-detail-section-title">VIDEO</div>', unsafe_allow_html=True)
+        st.video(str(stored_path))
+        if st.button("← Back to Global Search", key="video_back_global"):
+            st.session_state.view = "global_search"
+            st.rerun()
+        return
+
+    # Office/source files are presented as the complete stored file when the
+    # browser can open it. PDF files continue to use the searchable document view.
+    if doc_type != "PDF" and stored_path.exists():
+        data_uri = file_data_uri(stored_path)
+        if data_uri:
+            st.markdown(
+                f'<a class="kb-related-file" href="{data_uri}" target="_blank" rel="noopener">'
+                f'<span>↗</span><b>Open {eh(doc["filename"])}</b><small>{eh(doc_type)} file</small></a>',
+                unsafe_allow_html=True,
+            )
 
     find = st.text_input(
         "Find in document",
@@ -5888,6 +6054,7 @@ for key, default in [
     ("selected_group",None),
     ("selected_topic",None),
     ("selected_document",None),
+    ("selected_kb_id",None),
     ("global_search_input",""),
     ("global_search_query",""),
     ("global_search_submitted",""),
@@ -5928,6 +6095,8 @@ elif st.session_state.view == "group":
     render_group()
 elif st.session_state.view == "topic":
     render_topic()
+elif st.session_state.view == "kb_detail":
+    render_kb_detail()
 elif st.session_state.view == "document":
     render_document()
 elif st.session_state.view == "admin":
@@ -7054,4 +7223,115 @@ header[data-testid="stHeader"],
   box-shadow:none !important;
 }
 </style>
+""", unsafe_allow_html=True)
+
+
+st.markdown(r"""
+<style>
+/* Global Search: the entire knowledge result is one large clickable tile. */
+[class*="st-key-global_kb_"] {
+  margin: 0 0 10px 0 !important;
+}
+[class*="st-key-global_kb_"] button {
+  width: 100% !important;
+  min-height: 112px !important;
+  padding: 17px 18px !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  align-items: flex-start !important;
+  white-space: normal !important;
+  border: 1px solid #d6e3e8 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  color: #173a56 !important;
+  box-shadow: 0 1px 4px rgba(15, 55, 72, .05) !important;
+}
+[class*="st-key-global_kb_"] button:hover {
+  border-color: #00bfa5 !important;
+  background: #f7fffd !important;
+  color: #123c55 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 191, 165, .12) !important;
+}
+[class*="st-key-global_kb_"] button p {
+  white-space: pre-wrap !important;
+  text-align: left !important;
+  line-height: 1.5 !important;
+}
+
+.kb-detail-article {
+  background:#fff !important;
+  border:1px solid #d6e3e8 !important;
+  border-radius:14px !important;
+  padding:22px !important;
+  margin:10px 0 16px !important;
+}
+.kb-detail-kicker, .kb-detail-section-title {
+  color:#007f70 !important;
+  font-size:11px !important;
+  font-weight:900 !important;
+  letter-spacing:.7px !important;
+}
+.kb-detail-answer {
+  margin-top:9px !important;
+  color:#173a56 !important;
+  font-size:15px !important;
+  line-height:1.65 !important;
+}
+.kb-detail-section-title {
+  margin:18px 0 9px !important;
+}
+.kb-detail-subheading {
+  margin:10px 0 5px !important;
+  color:#173a56 !important;
+  font-weight:800 !important;
+}
+.kb-detail-step {
+  display:flex !important;
+  gap:11px !important;
+  align-items:flex-start !important;
+  background:#fff !important;
+  border:1px solid #e0eaee !important;
+  border-radius:10px !important;
+  padding:11px 13px !important;
+  margin:6px 0 !important;
+  color:#324e63 !important;
+  line-height:1.5 !important;
+}
+.kb-detail-step-number {
+  flex:0 0 25px !important;
+  width:25px !important;
+  height:25px !important;
+  border-radius:50% !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  background:#e1f7f3 !important;
+  color:#007f70 !important;
+  font-weight:900 !important;
+}
+.kb-media-label {
+  color:#173a56 !important;
+  font-size:12px !important;
+  font-weight:800 !important;
+  margin:10px 0 5px !important;
+}
+.kb-related-file {
+  display:flex !important;
+  align-items:center !important;
+  gap:10px !important;
+  text-decoration:none !important;
+  background:#fff !important;
+  border:1px solid #d6e3e8 !important;
+  border-radius:10px !important;
+  padding:12px 14px !important;
+  margin:7px 0 !important;
+  color:#173a56 !important;
+}
+.kb-related-file small {
+  color:#6b8191 !important;
+  flex:1 !important;
+}
+</style>
+
 """, unsafe_allow_html=True)
