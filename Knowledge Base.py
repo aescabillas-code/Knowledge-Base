@@ -42,7 +42,7 @@ except Exception:
 # ============================================================
 # Use the user-supplied HPE logo as the in-app brand mark; Knowledge Base remains live text.
 # The logo and favicon are embedded so deployment does not depend on uploaded assets.
-HPE_KB_LOGO_B64 = "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"
+HPE_KB_LOGO_B64 = "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"
 HPE_FAVICON_B64 = "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"
 HPE_LOGO_PATH = Path("knowledge_base_data") / "hpe_kb_logo_v4.png"
 HPE_FAVICON_PATH = Path("knowledge_base_data") / "hpe_kb_favicon_v4.png"
@@ -2560,6 +2560,20 @@ div.stButton > button {
    Keep the typography visually consistent across the entire
    answer section shown in the supplied reference image.
    ============================================================ */
+/* HPE exact-answer shell: strong teal outline on every side. */
+.st-key-home_ai_exact_answer_box,
+[class*="st-key-answer_"][class*="_exact_answer_box"] {
+  border:3px solid #00bfa5 !important;
+  border-radius:12px !important;
+  background:#f8fffd !important;
+  padding:10px 12px 12px !important;
+  box-sizing:border-box !important;
+}
+.st-key-home_ai_exact_answer_box > div,
+[class*="st-key-answer_"][class*="_exact_answer_box"] > div {
+  border-radius:9px !important;
+}
+
 .st-key-home_ai_exact_answer_box .user-msg,
 [class*="st-key-answer_"][class*="_exact_answer_box"] .user-msg {
   font-size:10px !important;
@@ -2628,6 +2642,67 @@ div.stButton > button {
   font-size:9px !important;
 }
 
+/* Same-page Topics & Solutions tiles. */
+[class*="st-key-topic_tile_"] div[data-testid="stButton"] button {
+  width:100% !important;
+  min-height:58px !important;
+  height:58px !important;
+  text-align:left !important;
+  justify-content:flex-start !important;
+  border:1px solid #dbe7ec !important;
+  background:#ffffff !important;
+  color:#173a56 !important;
+  border-radius:9px !important;
+  padding:8px 10px !important;
+  box-shadow:none !important;
+  font-size:12px !important;
+  font-weight:700 !important;
+  line-height:1.25 !important;
+  white-space:normal !important;
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease !important;
+}
+[class*="st-key-topic_tile_"] div[data-testid="stButton"] button:hover {
+  transform:translateY(-1px) !important;
+  border-color:#00bfa5 !important;
+  background:#f4fffd !important;
+  color:#007f70 !important;
+  box-shadow:0 6px 18px rgba(0,150,135,.12) !important;
+}
+[class*="st-key-topic_tile_"] div[data-testid="stButton"] button:focus-visible {
+  outline:3px solid rgba(0,191,165,.28) !important;
+  outline-offset:2px !important;
+}
+
+/* ============================================================
+   AI ANSWER TABS — Excel/browser-tab style
+   The active tab stays light teal until another tab is selected.
+   ============================================================ */
+.st-key-home_ai_exact_answer_box div[data-testid="stHorizontalBlock"] > div,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] > div {
+  padding:0 2px !important;
+}
+.st-key-home_ai_exact_answer_box div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
+  height:34px !important;
+  min-height:34px !important;
+  border:1px solid #8fd8cf !important;
+  border-bottom:2px solid #8fd8cf !important;
+  border-radius:12px 12px 0 0 !important;
+  background:#ffffff !important;
+  color:#008f7b !important;
+  box-shadow:0 1px 0 rgba(0,0,0,.03) !important;
+  font-weight:800 !important;
+  transition:all .15s ease !important;
+  position:relative !important;
+  top:2px !important;
+}
+.st-key-home_ai_exact_answer_box div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:hover,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:hover {
+  background:#e9faf7 !important;
+  border-color:#00bfa5 !important;
+  color:#007f70 !important;
+}
+/* Selected state is injected by render_ai_assistant based on session state. */
 /* Keep the three action controls readable without making them oversized. */
 .st-key-home_ai_exact_answer_box ~ div div[data-testid="stButton"] button,
 [class*="st-key-answer_"][class*="_exact_answer_box"] ~ div div[data-testid="stButton"] button {
@@ -2965,58 +3040,6 @@ div.stButton > button {
   background:#009f8d !important;
   border-color:#009f8d !important;
   color:#ffffff !important;
-}
-
-/* ============================================================
-   USER REQUESTED TAB + LOGO READABILITY OVERRIDES
-   - Selected Answer / Troubleshooting / Related Knowledge tab:
-     light HPE teal background.
-   - Inactive tabs remain white.
-   - The teal portion of the HPE E has a black outline for readability.
-   ============================================================ */
-
-/* Selected action tab */
-[class*="_tab_answer_active"] div[data-testid="stButton"] button,
-[class*="_tab_steps_active"] div[data-testid="stButton"] button,
-[class*="_tab_files_active"] div[data-testid="stButton"] button {
-  background:#dff8f4 !important;
-  border:1px solid #00bfa5 !important;
-  color:#007f70 !important;
-  box-shadow:inset 0 0 0 1px rgba(0,191,165,.08) !important;
-}
-
-[class*="_tab_answer_active"] div[data-testid="stButton"] button p,
-[class*="_tab_answer_active"] div[data-testid="stButton"] button span,
-[class*="_tab_steps_active"] div[data-testid="stButton"] button p,
-[class*="_tab_steps_active"] div[data-testid="stButton"] button span,
-[class*="_tab_files_active"] div[data-testid="stButton"] button p,
-[class*="_tab_files_active"] div[data-testid="stButton"] button span {
-  color:#007f70 !important;
-}
-
-/* Inactive action tabs */
-[class*="_tab_answer_inactive"] div[data-testid="stButton"] button,
-[class*="_tab_steps_inactive"] div[data-testid="stButton"] button,
-[class*="_tab_files_inactive"] div[data-testid="stButton"] button {
-  background:#ffffff !important;
-  border:1px solid #9edfd8 !important;
-  color:#008f7b !important;
-}
-
-[class*="_tab_answer_inactive"] div[data-testid="stButton"] button:hover,
-[class*="_tab_steps_inactive"] div[data-testid="stButton"] button:hover,
-[class*="_tab_files_inactive"] div[data-testid="stButton"] button:hover {
-  background:#eefcf9 !important;
-  border-color:#00bfa5 !important;
-  color:#007f70 !important;
-}
-
-/* Keep the action-tab wrappers visually seamless. */
-[class*="_tab_answer_"],
-[class*="_tab_steps_"],
-[class*="_tab_files_"] {
-  margin:0 !important;
-  padding:0 !important;
 }
 
 /* Product-family tiles: solid HPE teal, while the individual icon colors
@@ -3821,24 +3844,45 @@ def render_ai_assistant(default_query="",
             unsafe_allow_html=True
         )
 
-        action = st.session_state[action_key] or "answer"
+        # Dynamic active-tab styling: only the selected tab is light teal.
+        selected_tab_index = {"answer": 1, "steps": 2, "files": 3}.get(
+            st.session_state.get(action_key), 1
+        )
+        st.markdown(
+            f"""
+            <style>
+            [class*="st-key-{key_prefix}_exact_answer_box"] div[data-testid="stHorizontalBlock"]
+              > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button,
+            .st-key-home_ai_exact_answer_box div[data-testid="stHorizontalBlock"]
+              > div:nth-child({selected_tab_index}) div[data-testid="stButton"] button {{
+                background:#d9f7f2 !important;
+                color:#007f70 !important;
+                border-color:#00bfa5 !important;
+                border-bottom-color:#d9f7f2 !important;
+                box-shadow:0 -1px 5px rgba(0,191,165,.10), inset 0 1px 0 rgba(255,255,255,.75) !important;
+                top:0 !important;
+                z-index:2 !important;
+              }}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
         a1, a2, a3 = st.columns(3, gap="small")
         with a1:
-            with st.container(key=f"{key_prefix}_tab_answer_{'active' if action == 'answer' else 'inactive'}"):
-                if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
-                    st.session_state[action_key] = "answer"
-                    st.rerun()
+            if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
+                st.session_state[action_key] = "answer"
+                st.rerun()
         with a2:
-            with st.container(key=f"{key_prefix}_tab_steps_{'active' if action == 'steps' else 'inactive'}"):
-                if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
-                    st.session_state[action_key] = "steps"
-                    st.rerun()
+            if st.button("⌕ Troubleshooting steps", key=f"{key_prefix}_steps", use_container_width=True):
+                st.session_state[action_key] = "steps"
+                st.rerun()
         with a3:
-            with st.container(key=f"{key_prefix}_tab_files_{'active' if action == 'files' else 'inactive'}"):
-                if st.button("▤ Related knowledge", key=f"{key_prefix}_files", use_container_width=True):
-                    st.session_state[action_key] = "files"
-                    st.rerun()
+            if st.button("▤ Related knowledge", key=f"{key_prefix}_files", use_container_width=True):
+                st.session_state[action_key] = "files"
+                st.rerun()
+
+        action = st.session_state[action_key] or "answer"
 
         if action == "answer":
             answer_text = (selected.get("answer") or "").strip()
@@ -4277,33 +4321,29 @@ def render_group():
     st.markdown("""
     <div class="panel" style="margin-bottom:10px;">
       <div class="panel-title">Topics & Solutions</div>
-      <div class="panel-sub">Select a topic to view its related AI answers and sources.</div>
+      <div class="panel-sub">Select a topic to view its related AI answers and sources on this page.</div>
       <div style="height:8px"></div>
     """, unsafe_allow_html=True)
 
-    from urllib.parse import quote
+    # Same-page topic navigation: clicking a tile changes the Streamlit
+    # view in-session instead of navigating to a URL/new browser context.
     topic_cols = st.columns(3, gap="small")
-    family_param = quote(group, safe="")
     for i, topic in enumerate(data["topics"]):
         with topic_cols[i % 3]:
-            topic_param = quote(topic, safe="")
-            st.markdown(
-                f"""
-                <a class="topic-link"
-                   href="?family={family_param}&topic={topic_param}"
-                   aria-label="Open {eh(topic)}">
-                  <div class="topic-card">
-                    <div class="topic-icon">{eh(data['icon'])}</div>
-                    <div style="flex:1;min-width:0">
-                      <div class="topic-name">{eh(topic)}</div>
-                      <div class="topic-count">View related knowledge</div>
-                    </div>
-                    <div style="color:#6b8191;font-size:18px;line-height:1;">›</div>
-                  </div>
-                </a>
-                """,
-                unsafe_allow_html=True
-            )
+            with st.container(key=f"topic_tile_{i}"):
+                if st.button(
+                    f"{data['icon']}  {topic}",
+                    key=f"topic_open_{i}_{re.sub(r'[^A-Za-z0-9]+', '_', topic)}",
+                    use_container_width=True,
+                    help=f"Open {topic}",
+                ):
+                    st.session_state.selected_topic = topic
+                    st.session_state.view = "topic"
+                    try:
+                        st.query_params.clear()
+                    except Exception:
+                        pass
+                    st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
