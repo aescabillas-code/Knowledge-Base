@@ -562,16 +562,7 @@ def search(query, family=None, limit=8):
 
     record_map = {r["kb_id"]: r for r in records}
     ordered = sorted(unique.items(), key=lambda x: x[1], reverse=True)
-
-    # Do not force a loosely related knowledge record into the Exact Answer
-    # area. If the best match is not strong enough, the AI Assistant treats
-    # the query as having no available exact answer instead of showing an
-    # unrelated answer.
-    MIN_EXACT_MATCH_SCORE = 8.0
-    if ordered and ordered[0][1] < MIN_EXACT_MATCH_SCORE:
-        result_records = []
-    else:
-        result_records = [record_map[k] for k, _ in ordered[:limit]]
+    result_records = [record_map[k] for k, _ in ordered[:limit]]
 
     # PDF text search
     doc_scored = []
@@ -874,6 +865,28 @@ div[data-testid="stToolbar"] { display:none !important; }
   align-items:center !important;
   gap:9px !important;
   border-radius:12px !important;
+
+  /* Glassy HPE teal surface — the icon colors remain unchanged. */
+  background:
+    linear-gradient(
+      135deg,
+      rgba(0,191,165,.78) 0%,
+      rgba(0,176,158,.64) 52%,
+      rgba(0,191,165,.74) 100%
+    ) !important;
+  border:1px solid rgba(255,255,255,.38) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -1px 0 rgba(0,90,85,.12),
+    0 7px 18px rgba(0,128,116,.12) !important;
+  backdrop-filter:blur(10px) saturate(125%) !important;
+  -webkit-backdrop-filter:blur(10px) saturate(125%) !important;
+}
+
+.family-card-compact .family-name,
+.family-card-compact .family-desc {
+  color:#ffffff !important;
+  text-shadow:0 1px 2px rgba(0,70,65,.22);
 }
 .family-card-compact .family-icon {
   width:34px !important;
@@ -1500,7 +1513,7 @@ div.stButton > button {
 }
 [class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
-  margin:3px 0 !important;
+  margin:0 !important;
 }
 
 .chatbot-prompt {
@@ -1661,13 +1674,18 @@ div.stButton > button {
 
 .st-key-home_ai_exact_answer_box,
 [class*="st-key-answer_"][class*="_exact_answer_box"] {
-  margin:9px 0 8px 12px !important;
+  margin:9px 0 8px 0 !important;
   padding:0 14px 12px !important;
   border:1px solid #cfe6e1 !important;
   border-left:4px solid #00bfa5 !important;
   border-radius:0 12px 12px 12px !important;
   background:#f7fcfb !important;
   box-shadow:0 2px 9px rgba(0,130,115,.04) !important;
+}
+.exact-answer-empty {
+  min-height:52px;
+  width:100%;
+  background:transparent;
 }
 .exact-section-title {
   margin:12px 0 5px;
@@ -1964,10 +1982,10 @@ div.stButton > button {
   padding:0 !important;
 }
 
-/* Only a 2px visual gap remains between suggested-answer buttons. */
+/* Only a 1px visual gap remains between suggested-answer buttons. */
 [class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
-  margin-bottom:2px !important;
+  margin-bottom:1px !important;
 }
 
 [class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
@@ -1984,7 +2002,7 @@ div.stButton > button {
    ============================================================ */
 .st-key-home_ai_exact_answer_box,
 [class*="st-key-answer_"][class*="_exact_answer_box"] {
-  margin:9px 0 9px 12px !important;
+  margin:9px 0 9px 0 !important;
   padding:13px 14px 13px !important;
   overflow:visible !important;
 }
@@ -2068,20 +2086,14 @@ div.stButton > button {
   box-sizing:border-box !important;
 }
 
-/* No confident match = visibly blank Exact Answer area. */
-.empty-exact-answer {
-  min-height:142px !important;
-  width:100% !important;
-}
-
-/* Suggested-answer buttons: exactly 5px between each answer. */
+/* Suggested-answer buttons: exactly 5px between rows. */
 [class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
-  margin:0 !important;
+  margin:0 0 5px 0 !important;
   padding:0 !important;
 }
 
-/* Remove Streamlit wrapper spacing and create the exact 5px row gap. */
+/* Remove Streamlit wrapper spacing only for the suggested-answer button rows. */
 [class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]),
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]) {
   margin:0 0 5px 0 !important;
@@ -2152,24 +2164,20 @@ div.stButton > button {
   color:#ffffff !important;
 }
 
-/* Product-family tiles: GLASSY / TRANSPARENT HPE treatment.
-   Keep the existing icon gradients/colors and arrow colors unchanged. */
+/* Product-family tiles: solid HPE teal, while the individual icon colors
+   and arrow colors remain exactly as defined by their existing classes. */
 .family-card-compact {
-  background:rgba(255,255,255,.24) !important;
-  border:1px solid rgba(255,255,255,.72) !important;
-  box-shadow:
-    0 6px 18px rgba(24,92,104,.08),
-    inset 0 1px 0 rgba(255,255,255,.72) !important;
-  backdrop-filter:blur(10px) saturate(135%);
-  -webkit-backdrop-filter:blur(10px) saturate(135%);
+  background:#00bfa5 !important;
+  border-color:#00bfa5 !important;
+  box-shadow:0 5px 16px rgba(0,130,115,.13) !important;
 }
 
 .family-card-compact .family-name {
-  color:#0a3154 !important;
+  color:#ffffff !important;
 }
 
 .family-card-compact .family-desc {
-  color:#536f82 !important;
+  color:#ffffff !important;
 }
 
 .family-card-compact .family-icon {
@@ -2183,11 +2191,9 @@ div.stButton > button {
 }
 
 .family-link:hover .family-card-compact {
-  background:rgba(255,255,255,.38) !important;
-  border-color:rgba(0,191,165,.38) !important;
-  box-shadow:
-    0 9px 24px rgba(0,150,135,.12),
-    inset 0 1px 0 rgba(255,255,255,.82) !important;
+  background:#00bfa5 !important;
+  border-color:#00a991 !important;
+  box-shadow:0 8px 24px rgba(0,150,135,.18) !important;
 }
 
 </style>
@@ -2421,11 +2427,14 @@ def render_ai_assistant(default_query="",
         return
 
     if not records:
-        # Keep the Exact Answer area visible but completely blank when the
-        # knowledge base has no confident match. This prevents an unrelated
-        # record from being presented as the answer.
+        # Keep the exact-answer area in the same position and size family,
+        # but leave it intentionally blank when the knowledge base has no
+        # confident answer for the submitted question.
         with st.container(key=f"{key_prefix}_exact_answer_box"):
-            st.markdown('<div class="empty-exact-answer" aria-hidden="true"></div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="exact-answer-empty" aria-label="No exact answer available"></div>',
+                unsafe_allow_html=True
+            )
         return
 
     options = records[:3]
