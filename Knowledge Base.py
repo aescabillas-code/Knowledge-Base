@@ -4056,27 +4056,31 @@ def eh(value):
 
 
 def render_hero():
-    st.markdown(f"""
-    <div class="hero">
-      <div class="hero-grid">
-        <div class="brand">
-          <img class="hpe-kb-logo-image" src="data:image/png;base64,{HPE_KB_LOGO_B64}" alt="HPE">
-          <div class="kb-brand-text">Knowledge Base</div>
+    # Keep the admin control in the same positioned Streamlit container as the
+    # hero.  This makes the gear physically belong to the teal hero surface
+    # instead of positioning it relative to the page/viewport.
+    with st.container(key="hero_shell", gap=None):
+        st.markdown(f"""
+        <div class="hero">
+          <div class="hero-grid">
+            <div class="brand">
+              <img class="hpe-kb-logo-image" src="data:image/png;base64,{HPE_KB_LOGO_B64}" alt="HPE">
+              <div class="kb-brand-text">Knowledge Base</div>
+            </div>
+            <div class="hero-center">
+              <div class="hero-title">How can we help you <span>today?</span></div>
+              <div class="hero-sub">Search HPE documentation, guides, and solutions with AI.</div>
+            </div>
+            <div class="hero-right">
+              Accelerating<br>what's next<br><span class="next">together</span>
+              <div class="dash">—</div>
+            </div>
+          </div>
         </div>
-        <div class="hero-center">
-          <div class="hero-title">How can we help you <span>today?</span></div>
-          <div class="hero-sub">Search HPE documentation, guides, and solutions with AI.</div>
-        </div>
-        <div class="hero-right">
-          Accelerating<br>what's next<br><span class="next">together</span>
-          <div class="dash">—</div>
-        </div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    with st.container(key="hero_admin_gear"):
-        admin_login()
+        with st.container(key="hero_admin_gear"):
+            admin_login()
 
     with st.container(key="hero_search_area"):
         with st.form("hero_search_form", clear_on_submit=False):
@@ -7052,6 +7056,53 @@ header[data-testid="stHeader"],
   margin-top:-8px !important;
   border-top:0 !important;
   box-shadow:none !important;
+}
+
+/* FINAL FIX v10 — the admin gear belongs to the hero shell.
+   The shell is the containing block, so the gear can never float above
+   the teal hero or become positioned against the browser viewport. */
+.st-key-hero_shell {
+  position:relative !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:245px !important;
+  height:245px !important;
+  margin:0 !important;
+  padding:0 !important;
+  gap:0 !important;
+  overflow:visible !important;
+}
+.st-key-hero_shell > div[data-testid="stVerticalBlock"],
+.st-key-hero_shell > div {
+  position:relative !important;
+  width:100% !important;
+  min-width:0 !important;
+  height:245px !important;
+  margin:0 !important;
+  padding:0 !important;
+  gap:0 !important;
+}
+.st-key-hero_shell .st-key-hero_admin_gear {
+  position:absolute !important;
+  top:18px !important;
+  right:18px !important;
+  left:auto !important;
+  bottom:auto !important;
+  width:48px !important;
+  height:48px !important;
+  min-width:48px !important;
+  max-width:48px !important;
+  margin:0 !important;
+  padding:0 !important;
+  z-index:100 !important;
+}
+.st-key-hero_shell .st-key-hero_admin_gear > div,
+.st-key-hero_shell .st-key-hero_admin_gear [data-testid="stVerticalBlock"] {
+  width:48px !important;
+  height:48px !important;
+  min-width:48px !important;
+  margin:0 !important;
+  padding:0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
