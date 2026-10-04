@@ -1920,7 +1920,8 @@ div.stButton > button {
 }
 
 /* ============================================================
-   COMPACT AI QUESTION / SUGGESTED ANSWERS
+   COMPACT AI QUESTION / SUGGESTED ANSWERS — FINAL OVERRIDE
+   Force Streamlit's generated wrapper gaps to collapse.
    ============================================================ */
 [class*="st-key-home_ai_question_box"],
 [class*="st-key-answer_"][class*="_question_box"] {
@@ -1928,17 +1929,36 @@ div.stButton > button {
   padding:7px 12px 6px !important;
 }
 
+/* The prompt stays close to the input field. */
 [class*="st-key-home_ai_question_box"] .chatbot-prompt,
 [class*="st-key-answer_"][class*="_question_box"] .chatbot-prompt {
-  margin:4px 0 3px !important;
+  margin:3px 0 2px !important;
+  padding:0 !important;
 }
 
+/* Collapse EVERY Streamlit vertical wrapper inside the suggestion area. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stVerticalBlock"] {
+  gap:0px !important;
+  row-gap:0px !important;
+}
+
+/* Streamlit may place each button inside its own element container.
+   Remove both the wrapper spacing and the button spacing. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"],
 [class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"],
 [class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > div,
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > div {
   margin:0 !important;
   padding:0 !important;
+}
+
+/* Only a 2px visual gap remains between suggested-answer buttons. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
+  margin-bottom:2px !important;
 }
 
 [class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
@@ -1950,24 +1970,48 @@ div.stButton > button {
   line-height:1.0 !important;
 }
 
-/* Remove Streamlit's inter-element gap around the stacked suggested answers. */
-[class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlock"],
-[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlock"] {
-  gap:0 !important;
-}
-
-/* Equal top and bottom breathing room inside the exact-answer box. */
+/* ============================================================
+   EXACT ANSWER BOX — BALANCED INNER TOP/BOTTOM SPACE
+   ============================================================ */
 .st-key-home_ai_exact_answer_box,
 [class*="st-key-answer_"][class*="_exact_answer_box"] {
   margin:9px 0 9px 12px !important;
   padding:13px 14px 13px !important;
+  overflow:visible !important;
 }
 
-/* The question line already supplies the visual top spacing; normalize its
-   outer margin so the box padding, rather than margin collapse, controls it. */
+/* Prevent the question row from consuming an uneven top margin. */
 .st-key-home_ai_exact_answer_box .user-msg,
 [class*="st-key-answer_"][class*="_exact_answer_box"] .user-msg {
-  margin-top:0 !important;
+  margin:0 0 12px 0 !important;
+}
+
+/* Normalize the last visible content so the box always has the same
+   13px breathing room below it as above. */
+.st-key-home_ai_exact_answer_box > div:last-child,
+[class*="st-key-answer_"][class*="_exact_answer_box"] > div:last-child {
+  margin-bottom:0 !important;
+  padding-bottom:0 !important;
+}
+
+.st-key-home_ai_exact_answer_box .ai-doc:last-child,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-doc:last-child {
+  margin-bottom:0 !important;
+}
+
+/* The related-knowledge list must not visually touch the bottom border. */
+.st-key-home_ai_exact_answer_box .ai-doc,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-doc {
+  margin-bottom:0 !important;
+}
+
+/* Streamlit's inner vertical block must not replace the container's
+   controlled padding with its own spacing. */
+.st-key-home_ai_exact_answer_box > div[data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] > div[data-testid="stVerticalBlock"] {
+  gap:0 !important;
+  row-gap:0 !important;
+  padding-bottom:0 !important;
 }
 
 @media (max-width:800px) {
@@ -1977,16 +2021,22 @@ div.stButton > button {
     margin-bottom:8px !important;
   }
 
+  [class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+  [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
+    margin-bottom:2px !important;
+  }
+
   [class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
   [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
-    height:27px !important;
-    min-height:27px !important;
-    margin:1px 0 !important;
+    height:26px !important;
+    min-height:26px !important;
+    margin:0 !important;
   }
 
   .st-key-home_ai_exact_answer_box,
   [class*="st-key-answer_"][class*="_exact_answer_box"] {
     margin:8px 0 8px 0 !important;
+    padding:11px 10px 11px !important;
   }
 }
 
