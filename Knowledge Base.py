@@ -605,6 +605,54 @@ def init_db():
         pass
 
 
+def ensure_hpe_kb_usage_sop():
+    """Add the built-in Knowledge Base usage SOP without disturbing existing data."""
+    now = datetime.now().isoformat(timespec="seconds")
+    kb_id = "KB-USE-001"
+    question = "How do I use the HPE Knowledge Base?"
+    answer = (
+        "Use the HPE Knowledge Base by asking the AI search bar a clear technical question, "
+        "choosing the most relevant suggested answer, reviewing the Summary, following the "
+        "Troubleshooting Steps, and opening Related Knowledge when more context is needed. "
+        "You can also select any of the six HPE & Aruba Product Family tiles to browse structured "
+        "knowledge. Admin users can create AI-ready SOPs and attach images to specific procedure steps."
+    )
+    steps = (
+        "1. Start with the AI search bar and enter a clear question\n"
+        "2. Press Enter or the teal arrow to submit the question.\n"
+        "3. If several possible answers appear, select the answer that best matches the issue.\n"
+        "4. Review Summary for the direct answer and key points.\n"
+        "5. Select Troubleshooting Steps and follow the numbered procedure.\n"
+        "6. Review Related Knowledge to open connected knowledge records or source documents.\n"
+        "7. Use the Compute, Networking, Storage, Software & Licensing, Security, or Support & Tools tiles to browse by product family.\n"
+        "8. Admin users can create an SOP, upload screenshots or diagrams, and place each image before or after a selected step.\n"
+        "9. Save the SOP so it becomes searchable by the AI Assistant.\n"
+        "10. Validate production procedures against the current authoritative HPE documentation for the applicable product and version."
+    )
+    keywords = "HPE Knowledge Base, AI search, exact answer, Summary, Troubleshooting Steps, Related Knowledge, product families, SOP, images"
+    conn = db()
+    try:
+        conn.execute("""
+            INSERT OR IGNORE INTO kb_records
+            (kb_id, family, topic, question, answer, steps, keywords, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            kb_id,
+            "Support & Tools",
+            "Knowledge Base User Guide",
+            question,
+            answer,
+            steps,
+            keywords,
+            "Built-in HPE Knowledge Base SOP",
+            now,
+        ))
+        conn.commit()
+    finally:
+        conn.close()
+    return kb_id
+
+
 init_db()
 ensure_hpe_kb_usage_sop()
 
