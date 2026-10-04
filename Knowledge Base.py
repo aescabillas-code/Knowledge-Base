@@ -1,11 +1,28 @@
 import os
 import re
 import sqlite3
+import mimetypes
+import base64
 from datetime import datetime
 from pathlib import Path
 from html import escape
 
 import streamlit as st
+
+try:
+    from docx import Document as WordDocument
+except Exception:
+    WordDocument = None
+
+try:
+    from openpyxl import load_workbook
+except Exception:
+    load_workbook = None
+
+try:
+    from pptx import Presentation as PowerPointPresentation
+except Exception:
+    PowerPointPresentation = None
 
 try:
     import fitz
@@ -35,7 +52,23 @@ PDF_DIR = BASE_DIR / "pdfs"
 IMAGE_DIR = BASE_DIR / "images"
 PDF_IMAGE_DIR = IMAGE_DIR / "pdf"
 SOP_IMAGE_DIR = IMAGE_DIR / "sop"
+SOP_VIDEO_DIR = BASE_DIR / "videos"
 DB_PATH = BASE_DIR / "knowledge_base.db"
+
+SUPPORTED_KB_FILES = {
+    ".pdf": "PDF",
+    ".xlsx": "Excel",
+    ".xls": "Excel",
+    ".docx": "Word",
+    ".doc": "Word",
+    ".pptx": "PowerPoint",
+    ".ppt": "PowerPoint",
+    ".mp4": "Video",
+    ".webm": "Video",
+    ".mov": "Video",
+    ".m4v": "Video",
+    ".avi": "Video",
+}
 RESET_MARKER = BASE_DIR / ".knowledge_base_v2_reset_complete"
 
 BASE_DIR.mkdir(exist_ok=True)
@@ -43,6 +76,7 @@ PDF_DIR.mkdir(exist_ok=True)
 IMAGE_DIR.mkdir(exist_ok=True)
 PDF_IMAGE_DIR.mkdir(exist_ok=True)
 SOP_IMAGE_DIR.mkdir(exist_ok=True)
+SOP_VIDEO_DIR.mkdir(exist_ok=True)
 
 
 # ============================================================
@@ -425,6 +459,18 @@ def init_db():
         )
     """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kb_videos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kb_id TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            video_path TEXT NOT NULL,
+            placement TEXT,
+            caption TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+
     if conn.execute("SELECT COUNT(*) FROM kb_records").fetchone()[0] == 0:
         now = datetime.now().isoformat(timespec="seconds")
         conn.executemany("""
@@ -461,7 +507,7 @@ def ensure_hpe_kb_usage_sop():
         "1. Start with the AI search bar and enter a clear question.\n"
         "2. Press Enter or the teal arrow to submit the question.\n"
         "3. If several possible answers appear, select the answer that best matches the issue.\n"
-        "4. Select Answer to read the direct answer.\n"
+        "4. Review Summary for the direct answer and key points.\n"
         "5. Select Troubleshooting Steps and follow the numbered procedure.\n"
         "6. Review Related Knowledge to open connected knowledge records or source documents.\n"
         "7. Use the Compute, Networking, Storage, Software & Licensing, Security, or Support & Tools tiles to browse by product family.\n"
@@ -690,6 +736,237 @@ def save_sop_images(kb_id, uploaded_images, placements):
     conn.commit()
     conn.close()
     return saved
+
+
+def save_sop_videos(kb_id, uploaded_videos, placements=None):
+    """Persist admin-uploaded SOP videos with an exact step placement."""
+    if not uploaded_videos:
+        return 0
+
+    target_dir = SOP_VIDEO_DIR / kb_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    placements = placements or []
+    conn = db()
+    now = datetime.now().isoformat(timespec="seconds")
+    saved = 0
+
+    for index, uploaded_video in enumerate(uploaded_videos):
+        try:
+            safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", uploaded_video.name)
+            filename = f"{index + 1:02d}_{safe}"
+            path = target_dir / filename
+            path.write_bytes(uploaded_video.getbuffer())
+
+            placement = placements[index] if index < len(placements) else "End of SOP"
+            conn.execute("""
+                INSERT INTO kb_videos
+                (kb_id, filename, video_path, placement, caption, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                kb_id,
+                filename,
+                str(path),
+                placement,
+                f"{uploaded_video.name} — {placement}",
+                now
+            ))
+            saved += 1
+        except Exception:
+            continue
+
+    conn.commit()
+    conn.close()
+    return saved
+
+
+def load_sop_videos(kb_id, limit=8):
+    conn = db()
+    rows = conn.execute("""
+        SELECT id, kb_id, filename, video_path, placement, caption, created_at
+        FROM kb_videos
+        WHERE kb_id = ?
+        ORDER BY id ASC
+        LIMIT ?
+    """, (kb_id, limit)).fetchall()
+    conn.close()
+    return [dict(x) for x in rows]
+
+
+def delete_sop_media(kb_id):
+    """Delete stored SOP images/videos and their database rows."""
+    conn = db()
+    image_rows = conn.execute(
+        "SELECT image_path FROM kb_images WHERE kb_id=?",
+        (kb_id,)
+    ).fetchall()
+    video_rows = conn.execute(
+        "SELECT video_path FROM kb_videos WHERE kb_id=?",
+        (kb_id,)
+    ).fetchall()
+
+    conn.execute("DELETE FROM kb_images WHERE kb_id=?", (kb_id,))
+    conn.execute("DELETE FROM kb_videos WHERE kb_id=?", (kb_id,))
+    conn.commit()
+    conn.close()
+
+    for row in image_rows:
+        try:
+            Path(row["image_path"]).unlink(missing_ok=True)
+        except Exception:
+            pass
+    for row in video_rows:
+        try:
+            Path(row["video_path"]).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def update_ai_ready_sop(
+    kb_id, family, product, topic, question, direct_answer,
+    prerequisites, steps, verification, escalation, keywords,
+    source_title="", source_url="", uploaded_images=None,
+    image_placements=None, uploaded_videos=None, video_placements=None,
+    replace_media=False
+):
+    """Update an existing atomic SOP while preserving its stable KB ID."""
+    normalized_steps = steps.strip()
+    if prerequisites.strip():
+        normalized_steps = (
+            "Prerequisites:\n" + prerequisites.strip()
+            + "\n\nProcedure:\n" + normalized_steps
+        )
+    if verification.strip():
+        normalized_steps += "\n\nVerification:\n" + verification.strip()
+    if escalation.strip():
+        normalized_steps += "\n\nEscalation:\n" + escalation.strip()
+
+    source = source_title.strip() or "Admin-created SOP"
+    if source_url.strip():
+        source += f" | {source_url.strip()}"
+
+    conn = db()
+    conn.execute("""
+        UPDATE kb_records
+        SET family=?, topic=?, question=?, answer=?, steps=?, keywords=?, source=?
+        WHERE kb_id=?
+    """, (
+        family,
+        f"{product} — {topic}",
+        question.strip(),
+        direct_answer.strip(),
+        normalized_steps,
+        ", ".join([x.strip() for x in keywords.split(",") if x.strip()]),
+        source,
+        kb_id
+    ))
+    conn.commit()
+    conn.close()
+
+    if replace_media:
+        delete_sop_media(kb_id)
+
+    image_count = save_sop_images(kb_id, uploaded_images or [], image_placements or [])
+    video_count = save_sop_videos(kb_id, uploaded_videos or [], video_placements or [])
+    search.clear()
+    return image_count, video_count
+
+
+def delete_ai_ready_sop(kb_id):
+    """Delete an SOP and all media attached to it."""
+    delete_sop_media(kb_id)
+    conn = db()
+    conn.execute("DELETE FROM kb_records WHERE kb_id=?", (kb_id,))
+    conn.commit()
+    conn.close()
+    search.clear()
+
+
+def extract_office_text(uploaded_file, suffix):
+    """Best-effort text extraction for searchable Office files."""
+    raw = uploaded_file.getvalue()
+    try:
+        if suffix in {".docx"} and WordDocument:
+            doc = WordDocument(__import__("io").BytesIO(raw))
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+        if suffix in {".xlsx", ".xls"} and load_workbook and suffix == ".xlsx":
+            wb = load_workbook(__import__("io").BytesIO(raw), read_only=True, data_only=True)
+            parts = []
+            for ws in wb.worksheets:
+                parts.append(f"[Sheet: {ws.title}]")
+                for row in ws.iter_rows(values_only=True):
+                    vals = [str(v) for v in row if v is not None and str(v).strip()]
+                    if vals:
+                        parts.append(" | ".join(vals))
+            return "\n".join(parts)
+
+        if suffix in {".pptx"} and PowerPointPresentation:
+            prs = PowerPointPresentation(__import__("io").BytesIO(raw))
+            parts = []
+            for slide_no, slide in enumerate(prs.slides, 1):
+                parts.append(f"[Slide {slide_no}]")
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        parts.append(shape.text.strip())
+            return "\n".join(parts)
+    except Exception:
+        return ""
+    return ""
+
+
+def index_supported_file(uploaded_file, family, topic):
+    """Store PDF/Office/video knowledge sources for Related Files and search."""
+    suffix = Path(uploaded_file.name).suffix.lower()
+    doc_type = SUPPORTED_KB_FILES.get(suffix)
+    if not doc_type:
+        return False, "Unsupported file type."
+
+    if suffix == ".pdf":
+        return index_pdf(uploaded_file, family, topic)
+
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", uploaded_file.name)
+    target_dir = BASE_DIR / "files" / doc_type.lower().replace(" ", "_")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path = target_dir / safe
+    path.write_bytes(uploaded_file.getbuffer())
+
+    extracted = extract_office_text(uploaded_file, suffix)
+    if doc_type == "Video":
+        extracted = f"Video file: {uploaded_file.name}"
+
+    conn = db()
+    conn.execute("""
+        INSERT INTO documents
+        (title, filename, family, topic, source_url, content, doc_type, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        Path(uploaded_file.name).stem,
+        uploaded_file.name,
+        family,
+        topic,
+        "",
+        extracted.strip() or uploaded_file.name,
+        doc_type,
+        datetime.now().isoformat(timespec="seconds")
+    ))
+    conn.commit()
+    conn.close()
+    search.clear()
+    return True, f"Indexed {uploaded_file.name} as {doc_type}."
+
+
+def file_data_uri(path):
+    """Create a browser-openable data URI for a related file."""
+    try:
+        p = Path(path)
+        if not p.exists():
+            return None
+        mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+        encoded = base64.b64encode(p.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{encoded}"
+    except Exception:
+        return None
 
 
 # ============================================================
@@ -1398,6 +1675,57 @@ div[class*="_exact_answer_box"] div[data-testid="stButton"] button:hover {
   color:#8a9aa5;
   font-size:8px;
   line-height:10px;
+}
+
+.related-file-link {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  box-sizing:border-box;
+  margin:7px 0;
+  padding:10px 12px;
+  border:1px solid #9adfd7;
+  border-radius:8px;
+  background:#ffffff;
+  color:#008f7b !important;
+  text-decoration:none !important;
+  transition:all .15s ease;
+}
+.related-file-link:hover {
+  border-color:#00a991;
+  box-shadow:0 2px 8px rgba(0,169,145,.12);
+  text-decoration:none !important;
+}
+.related-file-icon {
+  width:30px;
+  height:30px;
+  border-radius:6px;
+  background:#e9f8f6;
+  color:#008f7b;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  flex:0 0 30px;
+}
+.related-file-link b {
+  display:block;
+  color:#173a56;
+  font-size:10px;
+  line-height:1.35;
+}
+.related-file-link small {
+  display:block;
+  color:#8a9aa5;
+  font-size:8px;
+  margin-top:2px;
+}
+.related-file-arrow {
+  margin-left:auto;
+  color:#00a991;
+  font-weight:900;
+  font-size:14px;
 }
 
 .ai-doc {
@@ -3226,7 +3554,7 @@ def render_ai_answer(query, family=None):
 
 def render_ai_assistant(default_query="",
                          family=None, key_prefix="home_ai"):
-    """Option-based HPE AI chatbot with exact-answer retrieval."""
+    """Exact-answer assistant with Answer, Troubleshooting Steps and Related Files."""
     q_key = f"{key_prefix}_query"
     submitted_key = f"{key_prefix}_submitted"
     selected_key = f"{key_prefix}_selected"
@@ -3234,7 +3562,6 @@ def render_ai_assistant(default_query="",
 
     if q_key not in st.session_state:
         st.session_state[q_key] = default_query or ""
-
     if submitted_key not in st.session_state:
         st.session_state[submitted_key] = default_query or ""
 
@@ -3245,26 +3572,17 @@ def render_ai_assistant(default_query="",
         if st.session_state.get(submitted_key) == previous_demo:
             st.session_state[submitted_key] = ""
 
-    # The exact answer opens with Answer by default.
     st.session_state.setdefault(selected_key, None)
-    st.session_state.setdefault(action_key, "answer")
+    if st.session_state.get(action_key) not in {"answer", "steps", "files"}:
+        st.session_state[action_key] = "answer"
 
     query = st.session_state[submitted_key].strip()
     records = []
     docs = []
 
-    # Resolve the current query before rendering the question area so the
-    # matching-answer options can live inside the same bordered box as the
-    # question entry.
     if query:
-        records, docs = search(query, family=family, limit=6)
+        records, docs = search(query, family=family, limit=8)
 
-        # PDF/document matches are intentionally NOT converted into an
-        # AI exact answer. The AI answer area must only use a matching
-        # knowledge article/atomic KB record. Documents remain available
-        # through Global Search and Related Knowledge.
-
-    # One bordered question box: question entry + matching options.
     with st.container(key=f"{key_prefix}_question_box"):
         with st.form(f"{key_prefix}_question_form", clear_on_submit=False):
             c1, c2 = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
@@ -3272,7 +3590,7 @@ def render_ai_assistant(default_query="",
                 st.text_input(
                     "Ask HPE AI",
                     key=q_key,
-                    placeholder="Ask a question...",
+                    placeholder="How do I use the HPE Knowledge Base?",
                     label_visibility="collapsed",
                     help="Type your question and press Enter, or select the arrow to submit."
                 )
@@ -3284,10 +3602,7 @@ def render_ai_assistant(default_query="",
             if value:
                 st.session_state[submitted_key] = value
                 st.session_state[selected_key] = None
-                # Always reopen the Answer view for a new question.
                 st.session_state[action_key] = "answer"
-                # AI Assistant state is intentionally independent from the
-                # hero/global search state.
                 st.rerun()
 
         if query and records:
@@ -3307,17 +3622,13 @@ def render_ai_assistant(default_query="",
                         use_container_width=True
                     ):
                         st.session_state[selected_key] = r["kb_id"]
-                        # Keep Answer open when a suggested answer is selected.
                         st.session_state[action_key] = "answer"
                         st.rerun()
 
-    # Keep the assistant blank until the user enters a question.
     if not query:
         return
 
     if not records:
-        # No matching KB article: do not fabricate an AI answer from a PDF
-        # excerpt. Show a compact, neutral no-match message instead.
         with st.container(key=f"{key_prefix}_exact_answer_box"):
             st.markdown(
                 '<div class="no-match-answer" aria-label="No matching information found">'
@@ -3332,7 +3643,14 @@ def render_ai_assistant(default_query="",
     selected = next((r for r in options if r["kb_id"] == selected_id), None)
     selected = selected or options[0]
 
-    # Keep the complete answer experience inside one bordered answer box.
+    related_files = [
+        d for d in docs
+        if Path(d.get("filename") or "").suffix.lower() in SUPPORTED_KB_FILES
+    ]
+
+    sop_images = load_kb_images(kb_id=selected["kb_id"], limit=50)
+    sop_videos = load_sop_videos(selected["kb_id"], limit=20)
+
     with st.container(key=f"{key_prefix}_exact_answer_box"):
         st.markdown(
             f"""
@@ -3348,40 +3666,6 @@ def render_ai_assistant(default_query="",
             unsafe_allow_html=True
         )
 
-        # Images are connected to the selected SOP or to matching PDF source
-        # documents. They are shown only when actual image files exist.
-        related_document_ids = [d["id"] for d in docs if d.get("id")]
-        # Keep all images belonging to the selected SOP so placement such as
-        # "After Step 5" is never lost. PDF visuals are capped separately.
-        sop_related_images = load_kb_images(
-            kb_id=selected["kb_id"],
-            limit=50
-        )
-        pdf_related_images = load_kb_images(
-            document_ids=related_document_ids,
-            limit=6
-        )
-        seen_image_ids = {img["id"] for img in sop_related_images}
-        related_images = sop_related_images + [
-            img for img in pdf_related_images
-            if img["id"] not in seen_image_ids
-        ][:6]
-        if related_images:
-            st.markdown(
-                '<div class="exact-section-title">RELATED VISUALS</div>',
-                unsafe_allow_html=True
-            )
-            image_cols = st.columns(min(3, len(related_images)), gap="small")
-            for image_index, image_record in enumerate(related_images):
-                with image_cols[image_index % len(image_cols)]:
-                    image_path = image_record.get("image_path")
-                    if image_path and Path(image_path).exists():
-                        st.image(
-                            image_path,
-                            caption=image_record.get("caption") or image_record.get("placement") or "",
-                            use_container_width=True
-                        )
-
         a1, a2, a3 = st.columns(3, gap="small")
         with a1:
             if st.button("✦ Answer", key=f"{key_prefix}_answer", use_container_width=True):
@@ -3392,8 +3676,8 @@ def render_ai_assistant(default_query="",
                 st.session_state[action_key] = "steps"
                 st.rerun()
         with a3:
-            if st.button("▤ Related knowledge", key=f"{key_prefix}_related", use_container_width=True):
-                st.session_state[action_key] = "related"
+            if st.button("▤ Related knowledge", key=f"{key_prefix}_files", use_container_width=True):
+                st.session_state[action_key] = "files"
                 st.rerun()
 
         action = st.session_state[action_key] or "answer"
@@ -3406,17 +3690,49 @@ def render_ai_assistant(default_query="",
                 unsafe_allow_html=True
             )
 
+            step_lines = []
+            for line in (selected.get("steps") or "").splitlines():
+                clean = re.sub(r"^\s*\d+\.\s*", "", line).strip()
+                if clean and not clean.lower().startswith(
+                    ("prerequisites:", "procedure:", "verification:", "escalation:")
+                ):
+                    step_lines.append(clean)
+
+            if step_lines:
+                st.markdown('<div class="summary-subtitle">Key points</div>', unsafe_allow_html=True)
+                for item in step_lines[:5]:
+                    st.markdown(
+                        f'<div class="summary-bullet"><span>•</span><div>{eh(item)}</div></div>',
+                        unsafe_allow_html=True
+                    )
+
+            if sop_images or sop_videos:
+                st.markdown(
+                    '<div class="exact-section-title">RELATED VISUALS & MEDIA</div>',
+                    unsafe_allow_html=True
+                )
+                if sop_images:
+                    image_cols = st.columns(min(3, len(sop_images)), gap="small")
+                    for image_index, image_record in enumerate(sop_images):
+                        with image_cols[image_index % len(image_cols)]:
+                            image_path = image_record.get("image_path")
+                            if image_path and Path(image_path).exists():
+                                st.image(
+                                    image_path,
+                                    caption=image_record.get("caption") or image_record.get("placement") or "",
+                                    use_container_width=True
+                                )
+                for video_record in sop_videos:
+                    video_path = video_record.get("video_path")
+                    if video_path and Path(video_path).exists():
+                        st.video(video_path)
+                        if video_record.get("caption"):
+                            st.caption(video_record["caption"])
+
         elif action == "steps":
             st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
-
-            # Honor the image placement selected by Admin when the SOP was
-            # authored. "After Step N" images appear immediately after that
-            # step, so screenshots/diagrams can sit between procedures.
-            step_images = {
-                str(img.get("placement") or ""): img
-                for img in related_images
-                if img.get("kb_id") == selected["kb_id"]
-            }
+            step_images = {str(img.get("placement") or ""): img for img in sop_images}
+            step_videos = {str(video.get("placement") or ""): video for video in sop_videos}
 
             for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
                 clean = re.sub(r"^\s*\d+\.\s*", "", line)
@@ -3426,11 +3742,11 @@ def render_ai_assistant(default_query="",
                 if i == 1 and "Before Step 1" in step_images:
                     img = step_images["Before Step 1"]
                     if Path(img["image_path"]).exists():
-                        st.image(
-                            img["image_path"],
-                            caption=img.get("caption") or "SOP image — Before Step 1",
-                            use_container_width=True
-                        )
+                        st.image(img["image_path"], caption=img.get("caption") or "SOP image — Before Step 1", use_container_width=True)
+                if i == 1 and "Before Step 1" in step_videos:
+                    vid = step_videos["Before Step 1"]
+                    if Path(vid["video_path"]).exists():
+                        st.video(vid["video_path"])
 
                 st.markdown(
                     f'<div class="ai-step"><div class="ai-num">{i}</div>'
@@ -3442,90 +3758,74 @@ def render_ai_assistant(default_query="",
                 if placement_key in step_images:
                     img = step_images[placement_key]
                     if Path(img["image_path"]).exists():
-                        st.image(
-                            img["image_path"],
-                            caption=img.get("caption") or f"SOP image — {placement_key}",
-                            use_container_width=True
-                        )
+                        st.image(img["image_path"], caption=img.get("caption") or f"SOP image — {placement_key}", use_container_width=True)
+                if placement_key in step_videos:
+                    vid = step_videos[placement_key]
+                    if Path(vid["video_path"]).exists():
+                        st.video(vid["video_path"])
 
             if "End of SOP" in step_images:
                 img = step_images["End of SOP"]
                 if Path(img["image_path"]).exists():
-                    st.image(
-                        img["image_path"],
-                        caption=img.get("caption") or "SOP image — End of SOP",
-                        use_container_width=True
-                    )
+                    st.image(img["image_path"], caption=img.get("caption") or "SOP image — End of SOP", use_container_width=True)
+            if "End of SOP" in step_videos:
+                vid = step_videos["End of SOP"]
+                if Path(vid["video_path"]).exists():
+                    st.video(vid["video_path"])
 
-        elif action == "related":
+        elif action == "files":
             st.markdown('<div class="exact-section-title">RELATED KNOWLEDGE</div>', unsafe_allow_html=True)
 
-            # The current knowledge article/SOP is always shown first so the
-            # user can open its procedure directly.
-            related_kb = [selected]
-
-            # Add other matching SOP/knowledge records.
-            for r in records:
-                if r["kb_id"] not in {x["kb_id"] for x in related_kb}:
-                    related_kb.append(r)
-
-            # Keep Related Knowledge populated with saved SOPs even if the
-            # current search returned only one result.
-            if len(related_kb) < 5:
-                for r in load_records():
-                    if r["kb_id"] not in {x["kb_id"] for x in related_kb}:
-                        related_kb.append(r)
-                    if len(related_kb) >= 5:
-                        break
-
-            for idx, r in enumerate(related_kb[:5]):
-                is_current = r["kb_id"] == selected["kb_id"]
-                label = f"▤  Open SOP — {r['question']}" if is_current else f"▤  {r['question']}"
-
-                if st.button(
-                    label,
-                    key=f"{key_prefix}_related_kb_{idx}_{r['kb_id']}",
-                    use_container_width=True,
-                    help=f"Open SOP {r['question']}"
-                ):
-                    st.session_state[selected_key] = r["kb_id"]
-                    # Open the selected SOP directly in the procedure view.
-                    st.session_state[action_key] = "steps"
-                    st.rerun()
-
+            if not related_files:
                 st.markdown(
-                    f'<div class="related-meta">{eh(r["family"])} • {eh(r["topic"])} • {eh(r["kb_id"])}</div>',
+                    '<div class="related-empty">No related PDF, Excel, Word, PowerPoint, or video file was found.</div>',
                     unsafe_allow_html=True
                 )
+            else:
+                for file_index, d in enumerate(related_files[:8]):
+                    suffix = Path(d["filename"]).suffix.lower()
+                    file_type = SUPPORTED_KB_FILES.get(suffix, d.get("doc_type") or "File")
+                    icon = {
+                        "PDF": "▤",
+                        "Excel": "▦",
+                        "Word": "▤",
+                        "PowerPoint": "▥",
+                        "Video": "▶",
+                    }.get(file_type, "▤")
 
-            # PDFs are first-class Related Knowledge items and open directly
-            # in the existing indexed-document reader.
-            if docs:
-                st.markdown('<div class="related-subtitle">SOURCE PDFS</div>', unsafe_allow_html=True)
-                for d in docs[:6]:
-                    if st.button(
-                        f"▤  Open PDF — {d['title']}",
-                        key=f"{key_prefix}_view_source_{d['id']}",
-                        use_container_width=True,
-                        help=f"Open source PDF {d['title']}"
-                    ):
-                        st.session_state.selected_document = d["id"]
-                        st.session_state.view = "document"
-                        st.rerun()
+                    if suffix == ".pdf":
+                        if st.button(
+                            f"{icon}  {d['filename']}",
+                            key=f"{key_prefix}_open_pdf_{file_index}_{d['id']}",
+                            use_container_width=True
+                        ):
+                            st.session_state.selected_document = d["id"]
+                            st.session_state.view = "document"
+                            st.rerun()
+                    else:
+                        path = BASE_DIR / "files" / file_type.lower().replace(" ", "_") / d["filename"]
+                        data_uri = file_data_uri(path)
+                        if data_uri:
+                            st.markdown(
+                                f"""
+                                <a class="related-file-link" href="{data_uri}" target="_blank" rel="noopener">
+                                  <span class="related-file-icon">{icon}</span>
+                                  <span>
+                                    <b>{eh(d["filename"])}</b>
+                                    <small>{eh(file_type)} • Click to open</small>
+                                  </span>
+                                  <span class="related-file-arrow">↗</span>
+                                </a>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.markdown(
+                                f'<div class="related-empty">{eh(d["filename"])} could not be opened from the stored file.</div>',
+                                unsafe_allow_html=True
+                            )
 
-                    st.markdown(
-                        f'<div class="related-meta">PDF • Indexed • {eh(d["family"])} • {eh(d["topic"])}</div>',
-                        unsafe_allow_html=True
-                    )
-            elif not related_kb:
-                st.markdown(
-                    '<div class="related-empty">No related SOP or PDF source is available for this answer yet.</div>',
-                    unsafe_allow_html=True
-                )
-
-
-    # No follow-up input: the original question field remains the single active question entry.
-
+    # No second question field: the original AI field remains the single input.
 
 def render_documents(docs):
     cols = st.columns(min(4, max(1, len(docs))))
@@ -4034,7 +4334,8 @@ def admin_login():
 def create_ai_ready_sop(
     family, product, topic, question, direct_answer,
     prerequisites, steps, verification, escalation, keywords,
-    source_title="", source_url="", uploaded_images=None, image_placements=None
+    source_title="", source_url="", uploaded_images=None, image_placements=None,
+    uploaded_videos=None, video_placements=None
 ):
     """
     Store one atomic SOP record designed for deterministic AI retrieval.
@@ -4085,9 +4386,14 @@ def create_ai_ready_sop(
         uploaded_images or [],
         image_placements or []
     )
+    video_count = save_sop_videos(
+        kb_id,
+        uploaded_videos or [],
+        video_placements or []
+    )
 
     search.clear()
-    return kb_id, image_count
+    return kb_id, image_count, video_count
 
 
 def render_admin():
@@ -4098,11 +4404,13 @@ def render_admin():
     st.markdown("""
     <div class="family-banner">
       <h1>⚙ Knowledge Base Admin</h1>
-      <p>Create AI-ready SOPs or upload PDF source documents. Every SOP is stored as an atomic question-and-answer record for accurate retrieval.</p>
+      <p>Create, update or delete AI-ready SOPs, attach images/videos, and upload related source files.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    create_tab, upload_tab = st.tabs(["Create AI-Ready SOP", "Upload PDF"])
+    create_tab, manage_tab, upload_tab = st.tabs(
+        ["Create AI-Ready SOP", "Manage Existing SOPs", "Upload Related Files"]
+    )
 
     with create_tab:
         st.markdown("""
@@ -4111,8 +4419,7 @@ def render_admin():
           <div class="panel-sub">
             Use one question per SOP. Put the exact answer first, then prerequisites,
             numbered steps, verification, escalation criteria, and search terms.
-            This structure keeps retrieval precise and prevents unrelated procedures
-            from being mixed into one answer.
+            Attach screenshots, diagrams and optional instructional video directly to the SOP.
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -4120,82 +4427,81 @@ def render_admin():
         with st.form("create_sop_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
             with c1:
-                family = st.selectbox("Product Family", list(PRODUCT_GROUPS.keys()))
-                product = st.text_input("Product / Platform",
-                                        placeholder="e.g. Aruba ClearPass Policy Manager")
-                topic = st.text_input("Topic / Feature",
-                                      placeholder="e.g. RADIUS Authentication Failure")
+                family = st.selectbox("Product Family", list(PRODUCT_GROUPS.keys()), key="create_family")
+                product = st.text_input(
+                    "Product / Platform",
+                    placeholder="e.g. Aruba ClearPass Policy Manager",
+                    key="create_product"
+                )
+                topic = st.text_input(
+                    "Topic / Feature",
+                    placeholder="e.g. RADIUS Authentication Failure",
+                    key="create_topic"
+                )
                 question = st.text_input(
                     "Exact User Question",
-                    placeholder="e.g. How do I troubleshoot a ClearPass RADIUS authentication failure?"
+                    placeholder="e.g. How do I troubleshoot a ClearPass RADIUS authentication failure?",
+                    key="create_question"
                 )
             with c2:
                 source_title = st.text_input(
                     "Source Title (optional)",
-                    placeholder="e.g. ClearPass RADIUS Troubleshooting SOP"
+                    placeholder="e.g. ClearPass RADIUS Troubleshooting SOP",
+                    key="create_source_title"
                 )
                 source_url = st.text_input(
                     "Source URL (optional)",
-                    placeholder="https://..."
+                    placeholder="https://...",
+                    key="create_source_url"
                 )
                 keywords = st.text_input(
                     "Search Keywords",
-                    placeholder="ClearPass, RADIUS, authentication, timeout, Access Tracker"
+                    placeholder="ClearPass, RADIUS, authentication, timeout, Access Tracker",
+                    key="create_keywords"
                 )
 
             direct_answer = st.text_area(
                 "Direct Answer — write the exact answer the AI should return",
                 height=130,
-                placeholder=(
-                    "State the answer directly and completely. Include scope or "
-                    "version limitations when they matter. Avoid introductions."
-                )
+                placeholder="State the answer directly and completely.",
+                key="create_answer"
             )
-
             prerequisites = st.text_area(
                 "Prerequisites / Required Information",
                 height=90,
-                placeholder=(
-                    "Example:\n"
-                    "• Identify the ClearPass server.\n"
-                    "• Record the request timestamp.\n"
-                    "• Have access to Access Tracker."
-                )
+                placeholder="Identify required access, model/version, timestamps, tools, etc.",
+                key="create_prerequisites"
             )
-
             steps = st.text_area(
                 "Procedure — one step per line",
                 height=170,
-                placeholder=(
-                    "1. Open Access Tracker.\n"
-                    "2. Locate the affected authentication request.\n"
-                    "3. Confirm the selected service.\n"
-                    "4. Review the authentication failure reason.\n"
-                    "5. Correct the identified configuration issue.\n"
-                    "6. Retest the authentication request."
-                )
+                placeholder="1. Open Access Tracker.\n2. Locate the affected request.\n3. Review the failure reason.",
+                key="create_steps"
             )
 
             st.markdown(
-                '<div class="sop-image-help">'
-                '<b>SOP Images</b> — Upload screenshots, diagrams, or reference images. '
-                'Each image can be placed before/after a specific procedure step or at the end of the SOP. '
-                'Uploaded images are stored with the SOP and can be displayed with the AI exact answer.'
-                '</div>',
+                '<div class="sop-image-help"><b>SOP Images</b> — Upload screenshots or diagrams and place each one before/after a procedure step or at the end.</div>',
                 unsafe_allow_html=True
             )
             sop_images = st.file_uploader(
                 "Upload SOP images",
                 type=["png", "jpg", "jpeg", "webp", "gif"],
                 accept_multiple_files=True,
-                key="sop_image_upload",
-                help="Images are saved as part of this SOP. You can place them between procedure steps."
+                key="create_sop_images"
             )
 
-            step_count = len([
-                line for line in steps.splitlines()
-                if line.strip()
-            ])
+            st.markdown(
+                '<div class="sop-image-help"><b>SOP Video</b> — Attach an instructional or troubleshooting video. It can be displayed in the Answer and at a selected procedure position.</div>',
+                unsafe_allow_html=True
+            )
+            sop_videos = st.file_uploader(
+                "Upload SOP video",
+                type=["mp4", "webm", "mov", "m4v", "avi"],
+                accept_multiple_files=True,
+                key="create_sop_videos"
+            )
+
+            step_count = len([line for line in steps.splitlines() if line.strip()])
             placement_options = ["Before Step 1"]
             if step_count:
                 placement_options += [f"After Step {i}" for i in range(1, step_count + 1)]
@@ -4203,33 +4509,39 @@ def render_admin():
 
             image_placements = []
             if sop_images:
-                st.markdown(
-                    '<div class="sop-image-placement-title">Image placement</div>',
-                    unsafe_allow_html=True
-                )
+                st.markdown('<div class="sop-image-placement-title">Image placement</div>', unsafe_allow_html=True)
                 for image_index, image_file in enumerate(sop_images):
-                    placement = st.selectbox(
-                        f"{image_file.name}",
-                        placement_options,
-                        key=f"sop_image_placement_{image_index}"
+                    image_placements.append(
+                        st.selectbox(
+                            image_file.name,
+                            placement_options,
+                            key=f"create_image_placement_{image_index}"
+                        )
                     )
-                    image_placements.append(placement)
+
+            video_placements = []
+            if sop_videos:
+                st.markdown('<div class="sop-image-placement-title">Video placement</div>', unsafe_allow_html=True)
+                for video_index, video_file in enumerate(sop_videos):
+                    video_placements.append(
+                        st.selectbox(
+                            video_file.name,
+                            placement_options,
+                            key=f"create_video_placement_{video_index}"
+                        )
+                    )
 
             verification = st.text_area(
                 "Verification / Expected Result",
                 height=100,
-                placeholder=(
-                    "Describe exactly how the agent confirms the issue is resolved."
-                )
+                placeholder="Describe exactly how the agent confirms the issue is resolved.",
+                key="create_verification"
             )
-
             escalation = st.text_area(
                 "Escalation Criteria",
                 height=100,
-                placeholder=(
-                    "State when the case must be escalated and exactly what evidence "
-                    "must accompany the escalation."
-                )
+                placeholder="State when the case must be escalated and what evidence must accompany the escalation.",
+                key="create_escalation"
             )
 
             submitted = st.form_submit_button(
@@ -4250,21 +4562,260 @@ def render_admin():
             if missing:
                 st.error("Complete these required fields: " + ", ".join(missing))
             else:
-                kb_id, image_count = create_ai_ready_sop(
+                kb_id, image_count, video_count = create_ai_ready_sop(
                     family, product, topic, question, direct_answer,
                     prerequisites, steps, verification, escalation,
                     keywords, source_title, source_url,
                     uploaded_images=sop_images,
-                    image_placements=image_placements
+                    image_placements=image_placements,
+                    uploaded_videos=sop_videos,
+                    video_placements=video_placements
                 )
                 st.success(
                     f"SOP created successfully: {kb_id}"
-                    + (f" • {image_count} image(s) attached." if image_count else "")
+                    + (f" • {image_count} image(s)" if image_count else "")
+                    + (f" • {video_count} video(s)" if video_count else "")
                 )
-                st.info(
-                    "The new SOP is immediately searchable by the AI Assistant."
-                    + (" Attached images can also appear in matching exact answers." if image_count else "")
+                st.info("The SOP is immediately searchable by the AI Assistant.")
+
+    with manage_tab:
+        conn = db()
+        sop_rows = conn.execute("""
+            SELECT kb_id, family, topic, question, answer, steps, keywords, source, created_at
+            FROM kb_records
+            ORDER BY id DESC
+        """).fetchall()
+        conn.close()
+        sop_rows = [dict(r) for r in sop_rows]
+
+        if not sop_rows:
+            st.info("No AI-ready SOPs are currently stored.")
+        else:
+            sop_labels = {
+                r["kb_id"]: f'{r["kb_id"]} — {r["question"]}'
+                for r in sop_rows
+            }
+            selected_manage_id = st.selectbox(
+                "Select an existing SOP",
+                list(sop_labels.keys()),
+                format_func=lambda x: sop_labels[x],
+                key="manage_sop_id"
+            )
+            current = next(r for r in sop_rows if r["kb_id"] == selected_manage_id)
+
+            current_topic = current["topic"]
+            if " — " in current_topic:
+                current_product, current_feature = current_topic.split(" — ", 1)
+            else:
+                current_product, current_feature = current_topic, ""
+
+            current_steps = current["steps"] or ""
+            current_prereq = ""
+            current_procedure = current_steps
+            current_verification = ""
+            current_escalation = ""
+
+            if "\n\nProcedure:\n" in current_procedure:
+                current_prereq, current_procedure = current_procedure.split(
+                    "\n\nProcedure:\n", 1
                 )
+                current_prereq = re.sub(r"^Prerequisites:\n", "", current_prereq)
+
+            if "\n\nVerification:\n" in current_procedure:
+                current_procedure, current_verification = current_procedure.split(
+                    "\n\nVerification:\n", 1
+                )
+            if "\n\nEscalation:\n" in current_procedure:
+                current_procedure, current_escalation = current_procedure.split(
+                    "\n\nEscalation:\n", 1
+                )
+
+            st.markdown(
+                f'<div class="panel"><div class="panel-title">Editing {eh(current["kb_id"])}</div>'
+                f'<div class="panel-sub">Changes keep the existing KB ID and update the searchable record.</div></div>',
+                unsafe_allow_html=True
+            )
+
+            with st.form(f"update_sop_form_{selected_manage_id}", clear_on_submit=False):
+                u1, u2 = st.columns(2)
+                with u1:
+                    ufamily = st.selectbox(
+                        "Product Family",
+                        list(PRODUCT_GROUPS.keys()),
+                        index=list(PRODUCT_GROUPS.keys()).index(current["family"]) if current["family"] in PRODUCT_GROUPS else 0,
+                        key=f"update_family_{selected_manage_id}"
+                    )
+                    uproduct = st.text_input(
+                        "Product / Platform",
+                        value=current_product,
+                        key=f"update_product_{selected_manage_id}"
+                    )
+                    utopic = st.text_input(
+                        "Topic / Feature",
+                        value=current_feature,
+                        key=f"update_topic_{selected_manage_id}"
+                    )
+                    uquestion = st.text_input(
+                        "Exact User Question",
+                        value=current["question"],
+                        key=f"update_question_{selected_manage_id}"
+                    )
+                with u2:
+                    usource = st.text_input(
+                        "Source / Source Title",
+                        value=current["source"] or "",
+                        key=f"update_source_{selected_manage_id}"
+                    )
+                    ukeywords = st.text_input(
+                        "Search Keywords",
+                        value=current["keywords"] or "",
+                        key=f"update_keywords_{selected_manage_id}"
+                    )
+
+                uanswer = st.text_area(
+                    "Direct Answer",
+                    value=current["answer"] or "",
+                    height=130,
+                    key=f"update_answer_{selected_manage_id}"
+                )
+                uprereq = st.text_area(
+                    "Prerequisites / Required Information",
+                    value=current_prereq,
+                    height=90,
+                    key=f"update_prereq_{selected_manage_id}"
+                )
+                usteps = st.text_area(
+                    "Procedure — one step per line",
+                    value=current_procedure,
+                    height=170,
+                    key=f"update_steps_{selected_manage_id}"
+                )
+                uverification = st.text_area(
+                    "Verification / Expected Result",
+                    value=current_verification,
+                    height=90,
+                    key=f"update_verification_{selected_manage_id}"
+                )
+                uescalation = st.text_area(
+                    "Escalation Criteria",
+                    value=current_escalation,
+                    height=90,
+                    key=f"update_escalation_{selected_manage_id}"
+                )
+
+                replace_media = st.checkbox(
+                    "Replace existing SOP images/videos with the new uploads",
+                    value=False,
+                    key=f"replace_media_{selected_manage_id}"
+                )
+                uimages = st.file_uploader(
+                    "Add SOP images",
+                    type=["png", "jpg", "jpeg", "webp", "gif"],
+                    accept_multiple_files=True,
+                    key=f"update_images_{selected_manage_id}"
+                )
+                uvideos = st.file_uploader(
+                    "Add SOP videos",
+                    type=["mp4", "webm", "mov", "m4v", "avi"],
+                    accept_multiple_files=True,
+                    key=f"update_videos_{selected_manage_id}"
+                )
+
+                u_step_count = len([line for line in usteps.splitlines() if line.strip()])
+                u_placements = ["Before Step 1"] + (
+                    [f"After Step {i}" for i in range(1, u_step_count + 1)]
+                    if u_step_count else []
+                ) + ["End of SOP"]
+
+                ui_placements = []
+                if uimages:
+                    st.markdown('<div class="sop-image-placement-title">New image placement</div>', unsafe_allow_html=True)
+                    for i, f in enumerate(uimages):
+                        ui_placements.append(
+                            st.selectbox(
+                                f.name,
+                                u_placements,
+                                key=f"update_image_place_{selected_manage_id}_{i}"
+                            )
+                        )
+
+                uv_placements = []
+                if uvideos:
+                    st.markdown('<div class="sop-image-placement-title">New video placement</div>', unsafe_allow_html=True)
+                    for i, f in enumerate(uvideos):
+                        uv_placements.append(
+                            st.selectbox(
+                                f.name,
+                                u_placements,
+                                key=f"update_video_place_{selected_manage_id}_{i}"
+                            )
+                        )
+
+                update_submitted = st.form_submit_button(
+                    "Update SOP",
+                    type="primary",
+                    use_container_width=True
+                )
+
+            if update_submitted:
+                missing = [
+                    label for label, value in {
+                        "Product / Platform": uproduct,
+                        "Topic / Feature": utopic,
+                        "Exact User Question": uquestion,
+                        "Direct Answer": uanswer,
+                        "Procedure": usteps,
+                    }.items() if not value.strip()
+                ]
+                if missing:
+                    st.error("Complete these required fields: " + ", ".join(missing))
+                else:
+                    image_count, video_count = update_ai_ready_sop(
+                        selected_manage_id,
+                        ufamily, uproduct, utopic, uquestion, uanswer,
+                        uprereq, usteps, uverification, uescalation, ukeywords,
+                        usource, "",
+                        uploaded_images=uimages,
+                        image_placements=ui_placements,
+                        uploaded_videos=uvideos,
+                        video_placements=uv_placements,
+                        replace_media=replace_media
+                    )
+                    st.success(
+                        f"{selected_manage_id} updated successfully."
+                        + (f" • {image_count} image(s) added" if image_count else "")
+                        + (f" • {video_count} video(s) added" if video_count else "")
+                    )
+                    st.rerun()
+
+            st.markdown("---")
+            st.markdown("### Delete SOP")
+            st.warning(
+                "Deleting an SOP permanently removes its AI knowledge record and all attached SOP images/videos."
+            )
+            confirm_delete = st.checkbox(
+                "I understand that this SOP and its attached media will be deleted.",
+                key=f"confirm_delete_{selected_manage_id}"
+            )
+            if st.button(
+                "Delete Selected SOP",
+                key=f"delete_sop_{selected_manage_id}",
+                type="secondary",
+                disabled=not confirm_delete,
+                use_container_width=True
+            ):
+                delete_ai_ready_sop(selected_manage_id)
+                st.success(f"{selected_manage_id} deleted.")
+                st.rerun()
+
+            existing_images = load_kb_images(kb_id=selected_manage_id, limit=50)
+            existing_videos = load_sop_videos(selected_manage_id, limit=20)
+            if existing_images or existing_videos:
+                st.markdown("### Attached SOP Media")
+                for img in existing_images:
+                    st.caption(f"Image • {img['filename']} • {img.get('placement') or 'End of SOP'}")
+                for vid in existing_videos:
+                    st.caption(f"Video • {vid['filename']} • {vid.get('placement') or 'End of SOP'}")
 
     with upload_tab:
         c1, c2 = st.columns(2)
@@ -4282,35 +4833,30 @@ def render_admin():
             )
 
         file = st.file_uploader(
-            "Upload PDF source document",
-            type=["pdf"],
-            help="PDF text is extracted and indexed into the Knowledge Base."
+            "Upload related knowledge file",
+            type=[ext.lstrip(".") for ext in SUPPORTED_KB_FILES.keys()],
+            help="Supported: PDF, Excel, Word, PowerPoint and video."
         )
 
-        if file and st.button("Upload & Index PDF", type="primary", use_container_width=True):
-            ok, msg = index_pdf(file, upload_family, upload_topic or "General")
+        if file and st.button("Upload & Index File", type="primary", use_container_width=True):
+            ok, msg = index_supported_file(
+                file,
+                upload_family,
+                upload_topic or "General"
+            )
             if ok:
                 st.success(msg)
                 st.rerun()
             else:
                 st.error(msg)
 
-    st.markdown("### Current AI-ready SOPs")
-    conn = db()
-    sop_rows = conn.execute("""
-        SELECT kb_id, family, topic, question, source, created_at
-        FROM kb_records
-        ORDER BY id DESC
-    """).fetchall()
-    conn.close()
-
-    for r in sop_rows:
-        with st.expander(f"{r['kb_id']} — {r['question']}"):
-            st.write(f"**Family:** {r['family']}")
-            st.write(f"**Topic:** {r['topic']}")
-            st.write(f"**Source:** {r['source']}")
-            st.caption(r["created_at"])
-
+        st.markdown(
+            '<div class="panel-sub" style="margin-top:8px;">'
+            'Related files are shown only as files — PDF, Excel, Word, PowerPoint or video. '
+            'They are not converted into AI answer cards.'
+            '</div>',
+            unsafe_allow_html=True
+        )
 
 
 # ============================================================
