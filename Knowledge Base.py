@@ -6379,19 +6379,22 @@ def render_admin():
         )
         
 # ============================================================
-# PERSISTENT ONE-TIME ACCESS — BROWSER LOCALSTORAGE ONLY
+# PERSISTENT ONE-TIME ACCESS — DESKTOP + MOBILE BROWSER STORAGE
 # ============================================================
 # The access code is requested only once per browser profile. A signed
-# authorization token is stored in the browser's parent-page localStorage.
-# The token is NEVER placed in the URL or query string.
+# authorization token is stored locally in the browser and is NEVER placed
+# in the URL or query string.
 #
-# Why localStorage here:
-#   Streamlit exposes cookies for reading through st.context.cookies, but does
-#   not currently expose a native server-side API for setting arbitrary cookies.
-#   Third-party cookie components can also have iframe/request timing issues.
-#   This implementation uses a tiny JavaScript bridge to the parent page's
-#   localStorage instead, which persists across refreshes, tabs and browser
-#   restarts without putting the token in the URL.
+# Mobile-safe behavior:
+#   - Prefer the top-level Streamlit page localStorage.
+#   - Fall back to the parent page and the component's own localStorage.
+#   - Fall back to sessionStorage when a mobile webview/browser blocks
+#     persistent localStorage access.
+#   - Read from all supported stores, so a token written by desktop or mobile
+#     storage is recognized consistently on subsequent sessions.
+#
+# This keeps the same one-time access condition on desktop, Android and iOS
+# browsers without exposing the access code in the URL.
 #
 # Required dependency:
 #   streamlit-js-eval
@@ -6460,7 +6463,12 @@ def validate_browser_token(token):
 
 
 def _js_parent_storage(expression: str, key: str):
-    """Evaluate JavaScript against the parent Streamlit page storage."""
+    """Evaluate browser storage through streamlit-js-eval.
+
+    The JavaScript deliberately tries several storage locations. Some mobile
+    browsers and embedded webviews restrict access to one of the parent/top
+    contexts, while normal desktop browsers generally allow all of them.
+    """
     if streamlit_js_eval is None:
         return None
     try:
@@ -6474,12 +6482,42 @@ def _js_parent_storage(expression: str, key: str):
 
 
 def _read_browser_token():
-    # Read from the parent page, not the component iframe.
-    expression = (
-        "(() => { try { return window.parent.localStorage.getItem(" 
-        + repr(ACCESS_STORAGE_KEY) 
-        + ") || ''; } catch (e) { return ''; } })()"
-    )
+    """Read the persistent authorization token from desktop or mobile storage."""
+    key = repr(ACCESS_STORAGE_KEY)
+    expression = f"""
+    (() => {{
+        try {{
+            const key = {key};
+            const stores = [];
+            const addStore = (store) => {{ if (store && !stores.includes(store)) stores.push(store); }};
+
+            // Top-level page is preferred. Access can throw in restricted
+            // mobile webviews, so every context is isolated in try/catch.
+            try {{ addStore(window.top.localStorage); }} catch (e) {{}}
+            try {{ addStore(window.parent.localStorage); }} catch (e) {{}}
+            try {{ addStore(window.localStorage); }} catch (e) {{}}
+
+            for (const store of stores) {{
+                try {{
+                    const value = store.getItem(key);
+                    if (value) return value;
+                }} catch (e) {{}}
+            }}
+
+            // Last-resort session storage for mobile webviews that disable
+            // persistent localStorage. It keeps the authorization alive for
+            // the active browser session without exposing the token in the URL.
+            try {{
+                const value = window.sessionStorage.getItem(key);
+                if (value) return value;
+            }} catch (e) {{}}
+
+            return '';
+        }} catch (e) {{
+            return '';
+        }}
+    }})()
+    """
     value = _js_parent_storage(expression, JS_READ_KEY)
     if value is None:
         return None
@@ -6487,34 +6525,81 @@ def _read_browser_token():
 
 
 def _save_browser_token(token: str):
-    expression = (
-        "(() => { try { window.parent.localStorage.setItem(" 
-        + repr(ACCESS_STORAGE_KEY) + ", " + repr(str(token)) 
-        + "); return 'saved'; } catch (e) { return 'error'; } })()"
-    )
+    """Persist the authorization token across desktop and mobile browsers."""
+    key = repr(ACCESS_STORAGE_KEY)
+    value = repr(str(token))
+    expression = f"""
+    (() => {{
+        try {{
+            const key = {key};
+            const value = {value};
+            let saved = false;
+            const stores = [];
+            const addStore = (store) => {{ if (store && !stores.includes(store)) stores.push(store); }};
+
+            try {{ addStore(window.top.localStorage); }} catch (e) {{}}
+            try {{ addStore(window.parent.localStorage); }} catch (e) {{}}
+            try {{ addStore(window.localStorage); }} catch (e) {{}}
+
+            for (const store of stores) {{
+                try {{ store.setItem(key, value); saved = true; }} catch (e) {{}}
+            }}
+
+            // Mobile webview fallback. If localStorage is unavailable, keep
+            // the same authorization condition for the active session.
+            if (!saved) {{
+                try {{ window.sessionStorage.setItem(key, value); saved = true; }} catch (e) {{}}
+            }}
+
+            return saved ? 'saved' : 'error';
+        }} catch (e) {{
+            return 'error';
+        }}
+    }})()
+    """
     result = _js_parent_storage(expression, JS_SAVE_KEY)
     return result == "saved"
 
 
 def _clear_browser_token():
-    expression = (
-        "(() => { try { window.parent.localStorage.removeItem(" 
-        + repr(ACCESS_STORAGE_KEY) 
-        + "); return 'cleared'; } catch (e) { return 'error'; } })()"
-    )
+    """Clear authorization from every storage location used by the app."""
+    key = repr(ACCESS_STORAGE_KEY)
+    expression = f"""
+    (() => {{
+        try {{
+            const key = {key};
+            let cleared = false;
+            const stores = [];
+            const addStore = (store) => {{ if (store && !stores.includes(store)) stores.push(store); }};
+
+            try {{ addStore(window.top.localStorage); }} catch (e) {{}}
+            try {{ addStore(window.parent.localStorage); }} catch (e) {{}}
+            try {{ addStore(window.localStorage); }} catch (e) {{}}
+
+            for (const store of stores) {{
+                try {{ store.removeItem(key); cleared = true; }} catch (e) {{}}
+            }}
+            try {{ window.sessionStorage.removeItem(key); cleared = true; }} catch (e) {{}}
+
+            return cleared ? 'cleared' : 'error';
+        }} catch (e) {{
+            return 'error';
+        }}
+    }})()
+    """
     result = _js_parent_storage(expression, JS_CLEAR_KEY)
     return result == "cleared"
 
 
 def browser_is_authorized():
-    """Check session state first, then the persistent parent-page token."""
+    """Check session state first, then persistent desktop/mobile browser storage."""
     if st.session_state.get("access_authorized", False):
         return True
 
     token = _read_browser_token()
     if token is None:
-        # The JS bridge has not returned yet. The gate will display a tiny
-        # loading state rather than incorrectly asking for the access code.
+        # The JS bridge has not returned yet. The gate displays a small
+        # restoring state instead of incorrectly asking for the access code.
         return None
 
     if validate_browser_token(token):
@@ -6525,18 +6610,14 @@ def browser_is_authorized():
 
 
 def authorize_browser():
-    """Authorize immediately and persist the token in browser localStorage.
-
-    The JS bridge may not synchronously return its write result on the same
-    Streamlit rerun. The previous implementation treated that timing as a
-    failed login, which is why the access code could be required twice.
-    """
+    """Authorize immediately and persist the token on desktop or mobile."""
     token = create_browser_token()
     if not token:
         return False
 
-    # Fire the browser-storage write, but do not make the current login depend
-    # on the component echoing the result before Streamlit reruns.
+    # Do not make the current login depend on the JS bridge echoing the write
+    # result before Streamlit reruns. The token is written to browser storage,
+    # while the current session is authorized immediately.
     _save_browser_token(token)
     st.session_state["access_authorized"] = True
     st.session_state["access_granted"] = True
@@ -6550,7 +6631,7 @@ def clear_browser_access():
 
 
 def access_token_gate():
-    """One-time access-code gate with persistent browser authorization."""
+    """One-time access-code gate with persistent desktop/mobile authorization."""
     if URLSafeTimedSerializer is None or streamlit_js_eval is None:
         st.error(
             "Persistent browser authorization is not installed. "
@@ -6633,7 +6714,8 @@ def access_token_gate():
 
     st.caption(
         "The access code and authorization token are never placed in the URL. "
-        "Authorization is stored in this browser's persistent local storage."
+        "Authorization is stored in persistent browser storage when supported, "
+        "with a mobile-session fallback for restricted webviews."
     )
     st.stop()
 
