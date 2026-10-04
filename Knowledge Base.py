@@ -32,11 +32,13 @@ st.set_page_config(
 
 BASE_DIR = Path("knowledge_base_data")
 PDF_DIR = BASE_DIR / "pdfs"
+IMAGE_DIR = BASE_DIR / "images"
 DB_PATH = BASE_DIR / "knowledge_base.db"
 RESET_MARKER = BASE_DIR / ".knowledge_base_v2_reset_complete"
 
 BASE_DIR.mkdir(exist_ok=True)
 PDF_DIR.mkdir(exist_ok=True)
+IMAGE_DIR.mkdir(exist_ok=True)
 
 
 # ============================================================
@@ -404,6 +406,20 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kb_id TEXT,
+            document_id INTEGER,
+            filename TEXT NOT NULL,
+            image_path TEXT NOT NULL,
+            placement TEXT DEFAULT 'Related Knowledge',
+            page_number INTEGER,
+            caption TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
 
     if conn.execute("SELECT COUNT(*) FROM kb_records").fetchone()[0] == 0:
         now = datetime.now().isoformat(timespec="seconds")
@@ -452,6 +468,7 @@ def load_documents():
 
 
 def index_pdf(uploaded_file, family, topic):
+    """Index PDF text and persist embedded PDF images for visual retrieval."""
     if fitz is None:
         return False, "PyMuPDF is not installed. Add pymupdf to requirements.txt."
 
@@ -462,9 +479,9 @@ def index_pdf(uploaded_file, family, topic):
     try:
         pdf = fitz.open(pdf_path)
         text = "\n".join(page.get_text("text") for page in pdf).strip()
-        pdf.close()
 
         if not text:
+            pdf.close()
             return False, "The PDF contains no extractable text."
 
         conn = db()
@@ -482,12 +499,66 @@ def index_pdf(uploaded_file, family, topic):
             "PDF",
             datetime.now().isoformat(timespec="seconds")
         ))
+        document_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        image_count = 0
+        seen_hashes = set()
+        safe_stem = Path(safe).stem
+
+        for page_number, page in enumerate(pdf, start=1):
+            try:
+                page_images = page.get_images(full=True)
+            except Exception:
+                page_images = []
+
+            for image_index, image_info in enumerate(page_images, start=1):
+                try:
+                    xref = image_info[0]
+                    extracted = pdf.extract_image(xref)
+                    image_bytes = extracted.get("image")
+                    ext = extracted.get("ext", "png")
+
+                    if not image_bytes:
+                        continue
+
+                    import hashlib
+                    digest = hashlib.sha1(image_bytes).hexdigest()
+                    if digest in seen_hashes:
+                        continue
+                    seen_hashes.add(digest)
+
+                    image_name = (
+                        f"{safe_stem}_doc{document_id}_"
+                        f"p{page_number}_img{image_index}.{ext}"
+                    )
+                    image_path = IMAGE_DIR / image_name
+                    image_path.write_bytes(image_bytes)
+
+                    conn.execute("""
+                        INSERT INTO knowledge_images
+                        (document_id, filename, image_path, placement, page_number, caption, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        document_id,
+                        image_name,
+                        str(image_path),
+                        "PDF Page",
+                        page_number,
+                        f"{Path(uploaded_file.name).stem} — page {page_number}",
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    image_count += 1
+                except Exception:
+                    continue
+
+        pdf.close()
         conn.commit()
         conn.close()
         search.cache_clear()
-        return True, f"Indexed {uploaded_file.name}"
+        return True, f"Indexed {uploaded_file.name} • {image_count} embedded image(s) extracted"
     except Exception as e:
         return False, str(e)
+
 
 
 # ============================================================
@@ -2690,6 +2761,134 @@ div.stButton > button {
   flex:0 0 34px !important;
 }
 
+
+/* ============================================================
+   FINAL REQUESTED VISUAL OVERRIDES
+   ============================================================ */
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > button {
+  background:#ffffff !important;
+  color:#062a3a !important;
+  border:1px solid #00bfa5 !important;
+  box-shadow:0 0 0 1px rgba(6,42,58,.55), inset 0 0 0 1px rgba(0,191,165,.22) !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > button p,
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > button span,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > button p,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > button span {
+  color:#062a3a !important;
+}
+
+/* The prompt is a real layout row and cannot be overlapped by buttons. */
+[class*="st-key-home_ai_question_box"] .chatbot-prompt,
+[class*="st-key-answer_"][class*="_question_box"] .chatbot-prompt {
+  display:block !important;
+  height:auto !important;
+  min-height:20px !important;
+  margin:4px 0 4px !important;
+  padding:0 2px !important;
+  overflow:visible !important;
+  line-height:15px !important;
+}
+[class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlock"] {
+  gap:0 !important;
+  row-gap:0 !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]),
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]),
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
+  margin:0 !important;
+  padding:0 !important;
+  min-height:0 !important;
+}
+.suggested-answer-gap {
+  display:block !important;
+  height:5px !important;
+  min-height:5px !important;
+  max-height:5px !important;
+  margin:0 !important;
+  padding:0 !important;
+  line-height:0 !important;
+  overflow:hidden !important;
+}
+
+/* Summary / Troubleshooting Steps / Related Knowledge buttons. */
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] > button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] > button {
+  background:#ffffff !important;
+  color:#062a3a !important;
+  border:1px solid #00bfa5 !important;
+  box-shadow:0 0 0 1px rgba(6,42,58,.55), inset 0 0 0 1px rgba(0,191,165,.22) !important;
+}
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] > button p,
+[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] > button span,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] > button p,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] > button span {
+  color:#062a3a !important;
+}
+
+/* AI question/search bar: HPE teal lining + teal submit button + white arrow. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"] input,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] input {
+  border:2px solid #00bfa5 !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stFormSubmitButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stFormSubmitButton"] button {
+  background:#00bfa5 !important;
+  border:1px solid #00bfa5 !important;
+  color:#ffffff !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stFormSubmitButton"] button p,
+[class*="st-key-home_ai_question_box"] div[data-testid="stFormSubmitButton"] button span,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stFormSubmitButton"] button p,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stFormSubmitButton"] button span {
+  color:#ffffff !important;
+}
+
+/* Global hero search also uses the HPE teal treatment. */
+.st-key-hero_search_area div[data-testid="stTextInput"] input {
+  border:2px solid #00bfa5 !important;
+}
+.st-key-hero_search_area div[data-testid="stFormSubmitButton"] button {
+  background:#00bfa5 !important;
+  border:1px solid #00bfa5 !important;
+  color:#ffffff !important;
+}
+.st-key-hero_search_area div[data-testid="stFormSubmitButton"] button p,
+.st-key-hero_search_area div[data-testid="stFormSubmitButton"] button span {
+  color:#ffffff !important;
+}
+
+/* Exact-answer image presentation. */
+.related-images-title { margin-top:10px !important; }
+[class*="st-key-home_ai_exact_answer_box"] [data-testid="stImage"] img,
+[class*="st-key-answer_"][class*="_exact_answer_box"] [data-testid="stImage"] img {
+  border:1px solid #d8e7ec !important;
+  border-radius:8px !important;
+}
+
+/* Admin SOP image placement panel. */
+.sop-image-panel {
+  margin:8px 0 6px;
+  padding:10px 12px;
+  border:1px solid #d8e7ec;
+  border-left:3px solid #00bfa5;
+  border-radius:9px;
+  background:#f7fbfc;
+  color:#173a56;
+  font-size:9px;
+  line-height:1.45;
+}
+.sop-image-panel strong {
+  display:block;
+  color:#062a3a;
+  font-size:10px;
+  margin-bottom:3px;
+}
+.sop-image-panel span { color:#637b8e; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -2907,6 +3106,12 @@ def render_ai_assistant(default_query="",
                         st.session_state[action_key] = "summary"
                         st.rerun()
 
+                    if i < len(options) - 1:
+                        st.markdown(
+                            '<div class="suggested-answer-gap" aria-hidden="true"></div>',
+                            unsafe_allow_html=True
+                        )
+
     # Keep the assistant blank until the user enters a question.
     if not query:
         return
@@ -2944,6 +3149,8 @@ def render_ai_assistant(default_query="",
             """,
             unsafe_allow_html=True
         )
+
+        render_related_images(selected, query=query)
 
         a1, a2, a3 = st.columns(3, gap="small")
         with a1:
@@ -3490,6 +3697,157 @@ def render_document():
 
 
 # ============================================================
+# KNOWLEDGE IMAGES
+# ============================================================
+SOP_IMAGE_PLACEMENTS = [
+    "Direct Answer",
+    "Prerequisites",
+    "Procedure",
+    "Verification",
+    "Escalation",
+    "Related Knowledge",
+]
+
+
+def save_sop_images(kb_id, image_files, placement="Direct Answer"):
+    """Persist admin-uploaded SOP images and associate them with a KB record."""
+    if not image_files:
+        return 0
+
+    conn = db()
+    saved = 0
+    safe_kb = re.sub(r"[^A-Za-z0-9_.-]+", "_", kb_id)
+
+    for index, image_file in enumerate(image_files, start=1):
+        try:
+            raw = image_file.getvalue()
+            if not raw:
+                continue
+
+            import hashlib
+            ext = Path(image_file.name).suffix.lower().lstrip(".") or "png"
+            if ext not in {"png", "jpg", "jpeg", "webp", "gif"}:
+                ext = "png"
+
+            digest = hashlib.sha1(raw).hexdigest()[:12]
+            filename = f"{safe_kb}_{index}_{digest}.{ext}"
+            image_path = IMAGE_DIR / filename
+            image_path.write_bytes(raw)
+
+            conn.execute("""
+                INSERT INTO knowledge_images
+                (kb_id, filename, image_path, placement, page_number, caption, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                kb_id,
+                filename,
+                str(image_path),
+                placement,
+                None,
+                Path(image_file.name).stem,
+                datetime.now().isoformat(timespec="seconds")
+            ))
+            saved += 1
+        except Exception:
+            continue
+
+    conn.commit()
+    conn.close()
+    return saved
+
+
+def get_exact_answer_images(record, query=""):
+    """Return images directly attached to the answer plus strongly related PDF images."""
+    conn = db()
+
+    rows = conn.execute("""
+        SELECT id, kb_id, document_id, filename, image_path, placement, page_number, caption
+        FROM knowledge_images
+        WHERE kb_id = ?
+        ORDER BY
+            CASE placement
+                WHEN 'Direct Answer' THEN 0
+                WHEN 'Procedure' THEN 1
+                WHEN 'Verification' THEN 2
+                WHEN 'Prerequisites' THEN 3
+                WHEN 'Escalation' THEN 4
+                ELSE 5
+            END,
+            id DESC
+        LIMIT 8
+    """, (record["kb_id"],)).fetchall()
+
+    images = [dict(r) for r in rows]
+
+    q_tokens = [
+        t for t in re.findall(r"[a-z0-9][a-z0-9\-]+", (query or "").lower())
+        if len(t) >= 3
+    ]
+    topic = (record.get("topic") or "").lower()
+
+    docs = conn.execute("""
+        SELECT id, content, family, topic
+        FROM documents
+        WHERE family = ?
+        ORDER BY id DESC
+    """, (record.get("family"),)).fetchall()
+
+    for d in docs:
+        body = (d["content"] or "").lower()
+        topic_match = topic and topic in (d["topic"] or "").lower()
+        token_hits = sum(1 for t in q_tokens if t in body)
+        if not topic_match and token_hits < max(1, min(3, len(q_tokens))):
+            continue
+
+        img_rows = conn.execute("""
+            SELECT id, kb_id, document_id, filename, image_path, placement, page_number, caption
+            FROM knowledge_images
+            WHERE document_id = ?
+            ORDER BY page_number, id
+            LIMIT 4
+        """, (d["id"],)).fetchall()
+
+        for row in img_rows:
+            item = dict(row)
+            if not any(x["id"] == item["id"] for x in images):
+                images.append(item)
+            if len(images) >= 8:
+                break
+        if len(images) >= 8:
+            break
+
+    conn.close()
+    return [x for x in images if Path(x["image_path"]).exists()]
+
+
+def render_related_images(record, query=""):
+    """Render connected SOP/PDF images inside the exact-answer experience."""
+    images = get_exact_answer_images(record, query=query)
+    if not images:
+        return
+
+    st.markdown(
+        '<div class="exact-section-title related-images-title">RELATED IMAGES</div>',
+        unsafe_allow_html=True
+    )
+
+    cols = st.columns(min(2, len(images)), gap="small")
+    for i, image in enumerate(images):
+        with cols[i % len(cols)]:
+            try:
+                st.image(
+                    image["image_path"],
+                    use_container_width=True,
+                    caption=(
+                        f'{image["caption"] or image["filename"]}'
+                        + (f' • page {image["page_number"]}' if image["page_number"] else "")
+                    )
+                )
+            except Exception:
+                pass
+
+
+# ============================================================
 # ADMIN ACCESS + SOP AUTHORING
 # ============================================================
 def get_admin_password():
@@ -3535,7 +3893,7 @@ def admin_login():
 def create_ai_ready_sop(
     family, product, topic, question, direct_answer,
     prerequisites, steps, verification, escalation, keywords,
-    source_title="", source_url=""
+    source_title="", source_url="", image_files=None, image_placement="Direct Answer"
 ):
     """
     Store one atomic SOP record designed for deterministic AI retrieval.
@@ -3580,8 +3938,15 @@ def create_ai_ready_sop(
     ))
     conn.commit()
     conn.close()
+
+    image_count = save_sop_images(
+        kb_id,
+        image_files or [],
+        image_placement or "Direct Answer"
+    )
+
     search.clear()
-    return kb_id
+    return kb_id, image_count
 
 
 def render_admin():
@@ -3687,6 +4052,29 @@ def render_admin():
                 )
             )
 
+            st.markdown(
+                '<div class="sop-image-panel">'
+                '<strong>Visual Evidence / SOP Images</strong>'
+                '<span>Upload screenshots, diagrams, UI captures, or other supporting images. '
+                'Choose the exact SOP section where the images belong.</span>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+            image_placement = st.selectbox(
+                "Place uploaded images in",
+                SOP_IMAGE_PLACEMENTS,
+                index=0,
+                help=(
+                    "Direct Answer images are also eligible to appear in the exact-answer view."
+                )
+            )
+            sop_images = st.file_uploader(
+                "Upload SOP images",
+                type=["png", "jpg", "jpeg", "webp", "gif"],
+                accept_multiple_files=True,
+                help="All selected images use the placement above."
+            )
+
             submitted = st.form_submit_button(
                 "Create SOP & Add to AI Knowledge",
                 type="primary",
@@ -3705,13 +4093,21 @@ def render_admin():
             if missing:
                 st.error("Complete these required fields: " + ", ".join(missing))
             else:
-                kb_id = create_ai_ready_sop(
+                kb_id, image_count = create_ai_ready_sop(
                     family, product, topic, question, direct_answer,
                     prerequisites, steps, verification, escalation,
-                    keywords, source_title, source_url
+                    keywords, source_title, source_url,
+                    image_files=sop_images,
+                    image_placement=image_placement
                 )
                 st.success(f"SOP created successfully: {kb_id}")
-                st.info("The new SOP is immediately searchable by the AI Assistant.")
+                if image_count:
+                    st.info(
+                        f"{image_count} image(s) attached to the SOP under "
+                        f"“{image_placement}”. They are available to the exact-answer view."
+                    )
+                else:
+                    st.info("The new SOP is immediately searchable by the AI Assistant.")
 
     with upload_tab:
         c1, c2 = st.columns(2)
