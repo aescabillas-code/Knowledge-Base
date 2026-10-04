@@ -40,9 +40,23 @@ except Exception:
 # ============================================================
 # PAGE
 # ============================================================
+# Use the HPE logo shown in the supplied browser-tab reference as the
+# Streamlit page favicon. The tiny PNG is embedded so deployment does not
+# depend on a separate uploaded asset.
+HPE_FAVICON_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAABMAAAATCAIAAAD9MqGbAAABRklEQVR4nO2TvWoCQRSFv9kZV1QUY2xsBLsYhOQRFC3F1hT6XPoSdlERn0KCrRDSmGJBiH+7zjop3LhuCCmsUmSqO3fud87MgREvbz5XLes67J/8o6Q6V3dPNbVyEAJjfiOEwBidvQ091crBmAh2rr81jVErJ3pbIcI5Y4Ltl094JAQ/vFPKEAC0RuuItBUgVqTreXx8IARCICWbDdUqjQbrNVIGM6570goTYr+n02G5ZDgkHkdKCgXabZRiNuP9HSnRmlKJTIb53IqQvk+vR79PuRwIZbMkk3S7HI/c3FCv02wiBIeDOP/PSuOeRILRiEKB3Y7plHQapVCKWIzxGGPI53EcBgM878LTtnEcJhN8H9um1eLhgXSa/R7XpVYjlcLzeH1lu8WyLkhjiMV4fg4S0ppcjsdHKhVsm+ORYhHXZbE4hf8J56F+3lhGnJkAAAAASUVORK5CYII="
+)
+HPE_FAVICON_PATH = Path("knowledge_base_data") / "hpe_favicon.png"
+HPE_FAVICON_PATH.parent.mkdir(exist_ok=True)
+try:
+    if not HPE_FAVICON_PATH.exists():
+        HPE_FAVICON_PATH.write_bytes(base64.b64decode(HPE_FAVICON_B64))
+except Exception:
+    pass
+
 st.set_page_config(
     page_title="HPE Knowledge Base",
-    page_icon="◈",
+    page_icon=str(HPE_FAVICON_PATH) if HPE_FAVICON_PATH.exists() else "◈",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -967,6 +981,26 @@ def file_data_uri(path):
         return f"data:{mime};base64,{encoded}"
     except Exception:
         return None
+
+
+def render_clickable_image(path, caption="", max_height=190):
+    """Show a compact image thumbnail; clicking it opens the image at its actual size."""
+    data_uri = file_data_uri(path)
+    if not data_uri:
+        return False
+    safe_caption = eh(caption)
+    st.markdown(
+        f"""
+        <div class="kb-image-preview">
+          <a href="{data_uri}" target="_blank" rel="noopener" title="Open image at actual size">
+            <img src="{data_uri}" alt="{safe_caption}" class="kb-clickable-image" style="max-height:{int(max_height)}px;">
+          </a>
+          <div class="kb-image-caption">{safe_caption}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    return True
 
 
 # ============================================================
@@ -3491,35 +3525,35 @@ def open_group(group):
 
 
 def render_family_cards():
-    """Render compact, fully clickable family tiles without a second button row."""
-    from urllib.parse import quote
-
+    """Render the six product-family tiles in one horizontal row below global search."""
     st.markdown(
-        '<div class="family-stack-title">HPE & Aruba Product Families</div>',
+        '<div class="family-stack-title">HPE &amp; Aruba Product Families</div>',
         unsafe_allow_html=True
     )
 
-    for group, data in PRODUCT_GROUPS.items():
-        # Use a normal in-app URL instead of a Streamlit button. This keeps the
-        # clickable hit area exactly on top of the visual tile and prevents the
-        # button from rendering as a separate white row underneath it.
-        family_param = quote(group, safe="")
-        st.markdown(
-            f"""
-            <a class="family-link" href="?family={family_param}"
-               aria-label="Open {eh(group)} product family">
-              <div class="family-card family-card-compact">
-                <div class="family-icon {data['class']}">{data['icon']}</div>
-                <div class="family-card-copy">
-                  <div class="family-name">{eh(group)}</div>
-                  <div class="family-desc">{eh(data['description'])}</div>
-                </div>
-                <div class="family-arrow arrow-{data['class']}">→</div>
-              </div>
-            </a>
-            """,
-            unsafe_allow_html=True
-        )
+    groups = list(PRODUCT_GROUPS.items())
+    cols = st.columns(6, gap="small")
+    for index, (group, data) in enumerate(groups):
+        with cols[index]:
+            from urllib.parse import quote
+            family_param = quote(group, safe="")
+            st.markdown(
+                f"""
+                <a class="family-link family-link-horizontal" href="?family={family_param}"
+                   aria-label="Open {eh(group)} product family">
+                  <div class="family-card family-card-compact">
+                    <div class="family-icon {data['class']}">{data['icon']}</div>
+                    <div class="family-card-copy">
+                      <div class="family-name">{eh(group)}</div>
+                      <div class="family-desc">{eh(data['description'])}</div>
+                    </div>
+                    <div class="family-arrow arrow-{data['class']}">→</div>
+                  </div>
+                </a>
+                """,
+                unsafe_allow_html=True
+            )
+
 
 def answer_card(r):
     st.markdown(
@@ -3717,10 +3751,10 @@ def render_ai_assistant(default_query="",
                         with image_cols[image_index % len(image_cols)]:
                             image_path = image_record.get("image_path")
                             if image_path and Path(image_path).exists():
-                                st.image(
+                                render_clickable_image(
                                     image_path,
-                                    caption=image_record.get("caption") or image_record.get("placement") or "",
-                                    use_container_width=True
+                                    image_record.get("caption") or image_record.get("placement") or "",
+                                    max_height=180
                                 )
                 for video_record in sop_videos:
                     video_path = video_record.get("video_path")
@@ -3742,7 +3776,7 @@ def render_ai_assistant(default_query="",
                 if i == 1 and "Before Step 1" in step_images:
                     img = step_images["Before Step 1"]
                     if Path(img["image_path"]).exists():
-                        st.image(img["image_path"], caption=img.get("caption") or "SOP image — Before Step 1", use_container_width=True)
+                        render_clickable_image(img["image_path"], img.get("caption") or "SOP image — Before Step 1", max_height=180)
                 if i == 1 and "Before Step 1" in step_videos:
                     vid = step_videos["Before Step 1"]
                     if Path(vid["video_path"]).exists():
@@ -3758,7 +3792,7 @@ def render_ai_assistant(default_query="",
                 if placement_key in step_images:
                     img = step_images[placement_key]
                     if Path(img["image_path"]).exists():
-                        st.image(img["image_path"], caption=img.get("caption") or f"SOP image — {placement_key}", use_container_width=True)
+                        render_clickable_image(img["image_path"], img.get("caption") or f"SOP image — {placement_key}", max_height=180)
                 if placement_key in step_videos:
                     vid = step_videos[placement_key]
                     if Path(vid["video_path"]).exists():
@@ -3767,7 +3801,7 @@ def render_ai_assistant(default_query="",
             if "End of SOP" in step_images:
                 img = step_images["End of SOP"]
                 if Path(img["image_path"]).exists():
-                    st.image(img["image_path"], caption=img.get("caption") or "SOP image — End of SOP", use_container_width=True)
+                    render_clickable_image(img["image_path"], img.get("caption") or "SOP image — End of SOP", max_height=180)
             if "End of SOP" in step_videos:
                 vid = step_videos["End of SOP"]
                 if Path(vid["video_path"]).exists():
@@ -3972,19 +4006,14 @@ def render_bottom_strip():
 def render_home():
     render_hero()
 
-    # The hero search is a TRUE GLOBAL SEARCH. It is intentionally not
-    # passed into the AI Assistant and does not modify any home_ai_* state.
-    # The AI question field below is completely independent.
-    left, right = st.columns([1.72, 0.78], gap="medium")
+    # Product families now sit immediately below the global search.
+    # The AI question + answer area then uses the full page width.
+    render_family_cards()
 
-    with left:
-        render_ai_assistant(
-            default_query="How do I use the HPE Knowledge Base?",  # Default AI question
-            key_prefix="home_ai",
-        )
-
-    with right:
-        render_family_cards()
+    render_ai_assistant(
+        default_query="How do I use the HPE Knowledge Base?",
+        key_prefix="home_ai",
+    )
 
     render_bottom_strip()
 
@@ -4924,3 +4953,160 @@ st.markdown(
     'Validate production procedures against current authoritative HPE documentation.</div>',
     unsafe_allow_html=True
 )
+
+# ============================================================
+# FINAL UI OVERRIDES — SUPPLIED REFERENCE LAYOUT
+# ============================================================
+st.markdown("""
+<style>
+/* Product families: six compact tiles side-by-side directly below global search. */
+.family-stack-title {
+  margin: 8px 0 7px !important;
+  color:#123c55 !important;
+  font-size:11px !important;
+  font-weight:800 !important;
+  letter-spacing:.15px !important;
+}
+.family-link-horizontal {
+  display:block !important;
+  width:100% !important;
+  text-decoration:none !important;
+}
+.family-link-horizontal .family-card-compact {
+  height:78px !important;
+  min-height:78px !important;
+  padding:10px 9px !important;
+  border-radius:13px !important;
+  box-sizing:border-box !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:7px !important;
+  overflow:hidden !important;
+}
+.family-link-horizontal .family-icon {
+  flex:0 0 31px !important;
+  width:31px !important;
+  height:31px !important;
+  border-radius:9px !important;
+  font-size:15px !important;
+}
+.family-link-horizontal .family-card-copy {
+  min-width:0 !important;
+  flex:1 1 auto !important;
+}
+.family-link-horizontal .family-name {
+  font-size:10px !important;
+  line-height:12px !important;
+  white-space:normal !important;
+}
+.family-link-horizontal .family-desc {
+  margin-top:2px !important;
+  font-size:7px !important;
+  line-height:9px !important;
+  display:-webkit-box !important;
+  -webkit-line-clamp:2 !important;
+  -webkit-box-orient:vertical !important;
+  overflow:hidden !important;
+}
+.family-link-horizontal .family-arrow {
+  flex:0 0 20px !important;
+  width:20px !important;
+  height:20px !important;
+  font-size:12px !important;
+}
+.family-link-horizontal:hover .family-card-compact {
+  transform:translateY(-1px) !important;
+}
+
+/* AI question bar: translucent HPE teal. */
+[class*="st-key-home_ai_question_box"],
+[class*="st-key-answer_"][class*="_question_box"] {
+  width:100% !important;
+  margin:12px 0 12px !important;
+  padding:9px 12px !important;
+  border:1px solid rgba(0,159,141,.38) !important;
+  border-radius:13px !important;
+  background:rgba(0,191,165,.15) !important;
+  box-shadow:0 5px 18px rgba(0,139,123,.08) !important;
+  backdrop-filter:blur(7px) !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] {
+  width:100% !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"] input,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] input {
+  height:44px !important;
+  border:1px solid rgba(0,151,135,.48) !important;
+  border-radius:11px !important;
+  background:rgba(0,191,165,.20) !important;
+  color:#08384b !important;
+  box-shadow:inset 0 1px 3px rgba(0,88,80,.06) !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"] input::placeholder,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] input::placeholder {
+  color:#356f75 !important;
+  opacity:.9 !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stFormSubmitButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stFormSubmitButton"] button {
+  height:44px !important;
+  min-height:44px !important;
+  border-radius:11px !important;
+  border:1px solid rgba(0,145,130,.45) !important;
+  background:rgba(0,159,141,.82) !important;
+  color:#ffffff !important;
+  font-size:18px !important;
+}
+
+/* AI answer area is full-width below the six family tiles. */
+[class*="st-key-home_ai_exact_answer_box"],
+[class*="st-key-answer_"][class*="_exact_answer_box"] {
+  width:100% !important;
+  max-width:none !important;
+}
+
+/* Compact image previews; click opens the original image at natural size. */
+.kb-image-preview {
+  width:100% !important;
+  min-height:70px !important;
+  margin:5px 0 9px !important;
+  padding:6px !important;
+  border:1px solid #d7e7eb !important;
+  border-radius:10px !important;
+  background:#f7fbfc !important;
+  text-align:center !important;
+  box-sizing:border-box !important;
+}
+.kb-image-preview a {
+  display:block !important;
+  cursor:zoom-in !important;
+}
+.kb-clickable-image {
+  display:block !important;
+  width:auto !important;
+  max-width:100% !important;
+  max-height:190px !important;
+  height:auto !important;
+  margin:0 auto !important;
+  object-fit:contain !important;
+  border-radius:6px !important;
+}
+.kb-image-caption {
+  margin-top:4px !important;
+  color:#6c808d !important;
+  font-size:7px !important;
+  line-height:10px !important;
+}
+
+@media (max-width:1100px) {
+  .family-link-horizontal .family-card-compact { height:72px !important; min-height:72px !important; }
+  .family-link-horizontal .family-name { font-size:9px !important; }
+  .family-link-horizontal .family-desc { font-size:6.5px !important; }
+}
+@media (max-width:800px) {
+  .family-link-horizontal .family-card-compact { height:70px !important; min-height:70px !important; }
+  .family-link-horizontal .family-icon { flex-basis:28px !important; width:28px !important; height:28px !important; }
+}
+</style>
+""", unsafe_allow_html=True)
