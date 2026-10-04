@@ -5082,29 +5082,23 @@ def render_admin():
             '</div>',
             unsafe_allow_html=True
         )
-
-
-
+        
 # ============================================================
-# PERSISTENT ONE-TIME ACCESS TOKEN
+# PERSISTENT ONE-TIME ACCESS TOKEN (BROWSER LOCALSTORAGE + SECRETS BINDING)
 # ============================================================
-# Uses the same working behavior as the supplied reference script:
-# - ACCESS_CODE and TOKEN_SECRET are server-side values.
-# - The raw access code is never written to the URL.
-# - Successful access creates a signed, non-expiring authorization token.
-# - The token is stored in the kb_access query parameter.
-# - Refresh/new Streamlit sessions restore authorization from that token.
-# - Authorization is removed only when Clear Browser Access is used or the
-#   kb_access URL parameter is removed.
+# - Persists authorization in browser localStorage across new tabs, restarts, and reboots.
+# - Token is cryptographically bound to the current ACCESS_CODE. If ACCESS_CODE in secrets
+#   changes, all existing tokens immediately become invalid.
+# - Cleared only when "Clear access token" is explicitly clicked.
 
 ACCESS_QUERY_PARAM = "kb_access"
+LOCAL_STORAGE_KEY = "hpe_kb_browser_auth_token"
 
 
 def _get_access_secrets():
     """Read ACCESS_CODE and TOKEN_SECRET from Streamlit Secrets/environment."""
     access_code = ""
     token_secret = ""
-
     try:
         access_code = str(
             st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
@@ -5119,50 +5113,47 @@ def _get_access_secrets():
     return access_code, token_secret
 
 
-ACCESS_CODE = str(
-    st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
-).strip()
-
-TOKEN_SECRET = str(
-    st.secrets.get("TOKEN_SECRET", os.getenv("TOKEN_SECRET", ""))
-).strip()
-
-# Match the reference script: if TOKEN_SECRET is not configured, create a
-# deterministic fallback for the current runtime. For Streamlit Cloud, a
-# stable TOKEN_SECRET in Secrets is strongly recommended so tokens survive
-# app/container replacement.
-if not TOKEN_SECRET:
-    TOKEN_SECRET = hashlib.sha256(
-        f"{os.getcwd()}::{os.getenv('HOSTNAME', 'streamlit')}".encode()
-    ).hexdigest()
+def _get_code_fingerprint(code: str) -> str:
+    """Generate a SHA-256 hash of the current ACCESS_CODE."""
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()[:16]
 
 
 def get_token_serializer():
-    if URLSafeTimedSerializer is None or not TOKEN_SECRET:
+    access_code, token_secret = _get_access_secrets()
+    if URLSafeTimedSerializer is None:
         return None
-    return URLSafeTimedSerializer(
-        TOKEN_SECRET,
-        salt="knowledge-base-browser-access",
-    )
+    if not token_secret:
+        token_secret = hashlib.sha256(
+            f"{os.getcwd()}::{os.getenv('HOSTNAME', 'streamlit')}".encode()
+        ).hexdigest()
+    # Salt is combined with the fingerprint of the ACCESS_CODE so any secret change invalidates all tokens
+    salt = f"knowledge-base-browser-access-{_get_code_fingerprint(access_code)}"
+    return URLSafeTimedSerializer(token_secret, salt=salt)
 
 
 def create_browser_token():
     serializer = get_token_serializer()
-    if serializer is None:
+    access_code, _ = _get_access_secrets()
+    if serializer is None or not access_code:
         return ""
-    return serializer.dumps({"authorized": True})
+    return serializer.dumps({
+        "authorized": True,
+        "fp": _get_code_fingerprint(access_code)
+    })
 
 
 def validate_browser_token(token):
     if not token:
         return False
     serializer = get_token_serializer()
-    if serializer is None:
+    access_code, _ = _get_access_secrets()
+    if serializer is None or not access_code:
         return False
     try:
-        # Deliberately no max_age: authorization remains valid until cleared.
         payload = serializer.loads(str(token))
-        return bool(payload.get("authorized"))
+        if payload.get("authorized") and payload.get("fp") == _get_code_fingerprint(access_code):
+            return True
+        return False
     except Exception:
         return False
 
@@ -5194,9 +5185,21 @@ def authorize_browser():
     if not token:
         return False
 
-    # Streamlit preserves query parameters across refreshes/new sessions.
     st.query_params[ACCESS_QUERY_PARAM] = token
     st.session_state["access_authorized"] = True
+    
+    # Save token directly into the browser's persistent localStorage
+    st.components.v1.html(
+        f"""
+        <script>
+            try {{
+                localStorage.setItem("{LOCAL_STORAGE_KEY}", "{token}");
+            }} catch(e) {{}}
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
     return True
 
 
@@ -5206,20 +5209,27 @@ def clear_browser_access():
     try:
         st.query_params.clear()
     except Exception:
-        try:
-            st.experimental_set_query_params()
-        except Exception:
-            pass
+        pass
 
+    # Clear token from browser localStorage
+    st.components.v1.html(
+        f"""
+        <script>
+            try {{
+                localStorage.removeItem("{LOCAL_STORAGE_KEY}");
+            }} catch(e) {{}}
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def access_token_gate():
     """
     Gate the entire app behind a one-time access code.
-
-    The successful access creates a signed authorization token in the
-    browser URL. The access code is not requested again on refresh or
-    Streamlit reruns. The gear menu can explicitly clear that token.
+    Persists via localStorage and query parameters across tab closures,
+    restarts, and shutdowns, invalidating only if cleared or if ACCESS_CODE changes.
     """
     if URLSafeTimedSerializer is None:
         st.error(
@@ -5230,18 +5240,48 @@ def access_token_gate():
 
     access_code, token_secret = _get_access_secrets()
 
-    if not access_code or not token_secret:
+    if not access_code:
         st.error(
             "Access control is not configured. Add ACCESS_CODE and TOKEN_SECRET "
             "to Streamlit Secrets; do not place them in the GitHub source code."
         )
         st.stop()
 
+    # 1. Check if token in URL or session state is already valid
     if browser_is_authorized():
+        # Sync to localStorage in case user navigated directly with a valid URL token
+        current_token = get_url_access_token() or create_browser_token()
+        st.components.v1.html(
+            f"""
+            <script>
+                try {{
+                    localStorage.setItem("{LOCAL_STORAGE_KEY}", "{current_token}");
+                }} catch(e) {{}}
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
         return True
 
-    # Dedicated access screen. No Knowledge Base content is rendered before
-    # the access code is accepted.
+    # 2. Check client-side localStorage and restore token into URL if present
+    st.components.v1.html(
+        f"""
+        <script>
+            try {{
+                const token = localStorage.getItem("{LOCAL_STORAGE_KEY}");
+                const urlParams = new URLSearchParams(window.location.search);
+                if (token && !urlParams.has("{ACCESS_QUERY_PARAM}")) {{
+                    urlParams.set("{ACCESS_QUERY_PARAM}", token);
+                    window.location.search = urlParams.toString();
+                }}
+            }} catch(e) {{}}
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
     st.markdown(
         """
         <style>
@@ -5298,8 +5338,8 @@ def access_token_gate():
             <div class="kb-access-title">Secure access</div>
             <div class="kb-access-copy">
               Enter your one-time access code to open the Knowledge Base.
-              This browser stays authorized until access is explicitly cleared
-              from the gear menu.
+              This browser stays authorized permanently across sessions, tabs, and reboots
+              until access is explicitly cleared from the gear menu or the access code changes.
             </div>
           </div>
         </div>
@@ -5325,8 +5365,6 @@ def access_token_gate():
     if submit:
         if hmac.compare_digest(entered.strip(), access_code):
             if authorize_browser():
-                # The signed token is now in the URL. Rerun immediately so the
-                # router renders the Knowledge Base instead of the access page.
                 st.rerun()
             else:
                 st.error(
@@ -5338,7 +5376,7 @@ def access_token_gate():
 
     st.caption(
         "Your access code is never stored in the URL. "
-        "A signed authorization token is used to keep this browser authorized."
+        "A signed token is stored in your browser to maintain one-time authorization."
     )
     st.stop()
 
@@ -5347,7 +5385,7 @@ def render_access_controls():
     """Render the persistent-access status and explicit clear control."""
     with st.expander("Secure access", expanded=False):
         st.caption(
-            "This browser is authorized with a signed server-derived access token."
+            "This browser is permanently authorized with a signed token stored in localStorage."
         )
 
         if st.button(
@@ -5358,11 +5396,8 @@ def render_access_controls():
             clear_browser_access()
             st.session_state["admin_authenticated"] = False
             st.session_state["view"] = "home"
-
-            # Do not leave the user on an authorized page after clearing.
             st.rerun()
-
-
+            
 # ============================================================
 # ROUTER
 # ============================================================
