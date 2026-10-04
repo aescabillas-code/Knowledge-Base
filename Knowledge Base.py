@@ -6567,5 +6567,194 @@ html, body, .stApp, .stApp *, button, input, textarea, select, option {
 }
 
 /* ============================================================
+
+
+/* ============================================================
+   FINAL AI TAB RESET — v4
+   This is intentionally the LAST CSS in the file. It neutralizes
+   every earlier AI-tab rule and styles only the new tab-row DOM.
+   ============================================================ */
+
+/* Kill all legacy tab styling inside the new row. */
+.stApp .st-key-home_ai_tab_row,
+.stApp [class*="st-key-answer_"][class*="_tab_row"] {
+  display:flex !important;
+  flex-direction:row !important;
+  flex-wrap:nowrap !important;
+  align-items:stretch !important;
+  justify-content:stretch !important;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  gap:0 !important;
+  column-gap:0 !important;
+  row-gap:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  border-bottom:1px solid #00bfa5 !important;
+  border-radius:12px 12px 0 0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  overflow:visible !important;
+}
+
+/* Streamlit may wrap horizontal-container children in a block. Collapse
+   every wrapper layer but keep the three tab children equal width. */
+.stApp .st-key-home_ai_tab_row > div,
+.stApp [class*="st-key-answer_"][class*="_tab_row"] > div,
+.stApp .st-key-home_ai_tab_row > div > div,
+.stApp [class*="st-key-answer_"][class*="_tab_row"] > div > div {
+  margin:0 !important;
+  padding:0 !important;
+  gap:0 !important;
+  row-gap:0 !important;
+  column-gap:0 !important;
+  border:0 !important;
+  box-shadow:none !important;
+  min-width:0 !important;
+}
+
+/* Direct tab wrappers are the only elements allowed to carry width. */
+.stApp .st-key-home_ai_tab_row > div,
+.stApp [class*="st-key-answer_"][class*="_tab_row"] > div {
+  flex:1 1 0 !important;
+  width:33.333333% !important;
+  max-width:33.333333% !important;
+  min-width:0 !important;
+  align-self:stretch !important;
+}
+
+/* Remove Streamlit's default vertical spacing from the tab row. */
+.stApp .st-key-home_ai_tab_row [data-testid="stVerticalBlock"],
+.stApp [class*="st-key-answer_"][class*="_tab_row"] [data-testid="stVerticalBlock"],
+.stApp .st-key-home_ai_tab_row [data-testid="stHorizontalBlock"],
+.stApp [class*="st-key-answer_"][class*="_tab_row"] [data-testid="stHorizontalBlock"] {
+  gap:0 !important;
+  row-gap:0 !important;
+  column-gap:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  box-shadow:none !important;
+}
+
+/* Every tab button has one continuous shared baseline. */
+.stApp .st-key-home_ai_tab_row button,
+.stApp [class*="st-key-answer_"][class*="_tab_row"] button {
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  width:100% !important;
+  max-width:none !important;
+  min-width:0 !important;
+  height:44px !important;
+  min-height:44px !important;
+  margin:0 !important;
+  padding:8px 12px !important;
+  box-sizing:border-box !important;
+  border:1px solid #8fd8cf !important;
+  border-bottom:1px solid #00bfa5 !important;
+  border-radius:12px 12px 0 0 !important;
+  background:#d9f7f2 !important;
+  color:#008f7b !important;
+  -webkit-text-fill-color:#008f7b !important;
+  box-shadow:none !important;
+  transform:none !important;
+  top:auto !important;
+  position:relative !important;
+  z-index:2 !important;
+}
+
+/* Remove the one-pixel double edge between neighboring buttons. */
+.stApp .st-key-home_ai_tab_row > div + div button,
+.stApp [class*="st-key-answer_"][class*="_tab_row"] > div + div button {
+  margin-left:-1px !important;
+}
+
+/* ACTIVE = WHITE. The state is encoded in the keyed parent, so it cannot
+   be stale after a refresh or fragment rerun. */
+.stApp .st-key-home_ai_tab_answer_active button,
+.stApp .st-key-home_ai_tab_steps_active button,
+.stApp .st-key-home_ai_tab_files_active button,
+.stApp [class*="st-key-answer_"][class*="_tab_answer_active"] button,
+.stApp [class*="st-key-answer_"][class*="_tab_steps_active"] button,
+.stApp [class*="st-key-answer_"][class*="_tab_files_active"] button {
+  background:#ffffff !important;
+  color:#007f70 !important;
+  -webkit-text-fill-color:#007f70 !important;
+  border:1px solid #00bfa5 !important;
+  border-bottom-color:#ffffff !important;
+  margin-bottom:-1px !important;
+  z-index:20 !important;
+}
+
+.stApp .st-key-home_ai_tab_answer_active button p,
+.stApp .st-key-home_ai_tab_steps_active button p,
+.stApp .st-key-home_ai_tab_files_active button p,
+.stApp [class*="st-key-answer_"][class*="_tab_answer_active"] button p,
+.stApp [class*="st-key-answer_"][class*="_tab_steps_active"] button p,
+.stApp [class*="st-key-answer_"][class*="_tab_files_active"] button p {
+  color:#007f70 !important;
+  -webkit-text-fill-color:#007f70 !important;
+}
+
+/* INACTIVE tabs stay teal. This also overrides old primary/secondary rules. */
+.stApp .st-key-home_ai_tab_answer_inactive button,
+.stApp .st-key-home_ai_tab_steps_inactive button,
+.stApp .st-key-home_ai_tab_files_inactive button,
+.stApp [class*="st-key-answer_"][class*="_tab_answer_inactive"] button,
+.stApp [class*="st-key-answer_"][class*="_tab_steps_inactive"] button,
+.stApp [class*="st-key-answer_"][class*="_tab_files_inactive"] button {
+  background:#d9f7f2 !important;
+  color:#008f7b !important;
+  -webkit-text-fill-color:#008f7b !important;
+  border:1px solid #8fd8cf !important;
+  border-bottom-color:#00bfa5 !important;
+  margin-bottom:0 !important;
+  z-index:2 !important;
+}
+
+/* The content shell is the continuation of the active tab. */
+.stApp .st-key-home_ai_tab_content,
+.stApp [class*="st-key-answer_"][class*="_tab_content"] {
+  width:100% !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+  margin:0 !important;
+  padding:16px 18px 20px !important;
+  border:1px solid #00bfa5 !important;
+  border-top:0 !important;
+  border-radius:0 0 12px 12px !important;
+  background:#ffffff !important;
+  box-shadow:none !important;
+  outline:0 !important;
+  position:relative !important;
+  z-index:1 !important;
+}
+
+/* No wrapper between tab row and body is allowed to create a seam. */
+.stApp .st-key-home_ai_exact_answer_box > [data-testid="stVerticalBlock"],
+.stApp [class*="st-key-answer_"][class*="_exact_answer_box"] > [data-testid="stVerticalBlock"] {
+  gap:0 !important;
+  row-gap:0 !important;
+}
+.stApp .st-key-home_ai_exact_answer_box .st-key-home_ai_tab_row + div,
+.stApp [class*="st-key-answer_"][class*="_exact_answer_box"] [class*="_tab_row"] + div {
+  margin-top:0 !important;
+  padding-top:0 !important;
+  border-top:0 !important;
+}
+
+/* Remove the application-level horizontal rule that was appearing after
+   refresh. Keep this scoped to the AI area rather than altering content. */
+.stApp .st-key-home_ai_exact_answer_box hr,
+.stApp [class*="st-key-answer_"][class*="_exact_answer_box"] hr {
+  display:none !important;
+  height:0 !important;
+  border:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
