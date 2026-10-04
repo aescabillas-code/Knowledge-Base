@@ -33,16 +33,16 @@ st.set_page_config(
 BASE_DIR = Path("knowledge_base_data")
 PDF_DIR = BASE_DIR / "pdfs"
 IMAGE_DIR = BASE_DIR / "images"
-SOP_IMAGE_DIR = IMAGE_DIR / "sops"
-DOC_IMAGE_DIR = IMAGE_DIR / "documents"
+PDF_IMAGE_DIR = IMAGE_DIR / "pdf"
+SOP_IMAGE_DIR = IMAGE_DIR / "sop"
 DB_PATH = BASE_DIR / "knowledge_base.db"
 RESET_MARKER = BASE_DIR / ".knowledge_base_v2_reset_complete"
 
 BASE_DIR.mkdir(exist_ok=True)
 PDF_DIR.mkdir(exist_ok=True)
 IMAGE_DIR.mkdir(exist_ok=True)
+PDF_IMAGE_DIR.mkdir(exist_ok=True)
 SOP_IMAGE_DIR.mkdir(exist_ok=True)
-DOC_IMAGE_DIR.mkdir(exist_ok=True)
 
 
 # ============================================================
@@ -410,27 +410,17 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
-
-    # Visual assets connected to SOP records and uploaded PDFs.
+\
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS sop_images (
+        CREATE TABLE IF NOT EXISTS kb_images (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            kb_id TEXT NOT NULL,
+            kb_id TEXT,
+            document_id INTEGER,
             filename TEXT NOT NULL,
-            path TEXT NOT NULL,
-            placement TEXT NOT NULL DEFAULT 'After Direct Answer',
-            created_at TEXT NOT NULL
-        )
-    """)
-
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS document_images (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            document_id INTEGER NOT NULL,
-            page_number INTEGER NOT NULL,
-            image_index INTEGER NOT NULL,
-            filename TEXT NOT NULL,
-            path TEXT NOT NULL,
+            image_path TEXT NOT NULL,
+            page_num INTEGER,
+            placement TEXT,
+            caption TEXT,
             created_at TEXT NOT NULL
         )
     """)
@@ -481,73 +471,8 @@ def load_documents():
     return [dict(x) for x in rows]
 
 
-def _safe_image_filename(name):
-    return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name)).strip("._") or "image"
-
-
-def _extract_pdf_images(pdf, document_id):
-    """Extract embedded PDF images and store searchable visual assets."""
-    if fitz is None:
-        return 0
-
-    saved = 0
-    target_dir = DOC_IMAGE_DIR / f"doc_{document_id}"
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    conn = db()
-    try:
-        for page_index in range(len(pdf)):
-            page = pdf[page_index]
-            seen_xrefs = set()
-
-            for image_index, image_info in enumerate(page.get_images(full=True), start=1):
-                xref = image_info[0]
-                if xref in seen_xrefs:
-                    continue
-                seen_xrefs.add(xref)
-
-                try:
-                    extracted = pdf.extract_image(xref)
-                    ext = extracted.get("ext", "png")
-                    image_bytes = extracted.get("image", b"")
-                    if not image_bytes:
-                        continue
-
-                    filename = _safe_image_filename(
-                        f"page_{page_index + 1:04d}_image_{image_index:02d}.{ext}"
-                    )
-                    path = target_dir / filename
-                    path.write_bytes(image_bytes)
-
-                    conn.execute(
-                        """
-                        INSERT INTO document_images
-                        (document_id, page_number, image_index, filename, path, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            document_id,
-                            page_index + 1,
-                            image_index,
-                            filename,
-                            str(path),
-                            datetime.now().isoformat(timespec="seconds"),
-                        ),
-                    )
-                    saved += 1
-                except Exception:
-                    # One malformed/unsupported embedded image must not prevent
-                    # the PDF itself from being indexed.
-                    continue
-
-        conn.commit()
-    finally:
-        conn.close()
-
-    return saved
-
-
 def index_pdf(uploaded_file, family, topic):
+    """Index PDF text and extract embedded PDF images for Related Knowledge."""
     if fitz is None:
         return False, "PyMuPDF is not installed. Add pymupdf to requirements.txt."
 
@@ -557,57 +482,177 @@ def index_pdf(uploaded_file, family, topic):
 
     try:
         pdf = fitz.open(pdf_path)
-        text = "\n".join(page.get_text("text") for page in pdf).strip()
+        page_text = []
+        extracted_images = []
 
-        if not text:
-            # Image-only PDFs are still useful as visual source documents.
-            has_images = any(page.get_images(full=True) for page in pdf)
-            if not has_images:
-                pdf.close()
-                return False, "The PDF contains no extractable text or embedded images."
+        for page_number, page in enumerate(pdf, start=1):
+            page_text.append(page.get_text("text") or "")
 
-            text = (
-                "[Image-based PDF]\n"
-                "This document contains visual content without extractable text. "
-                "Use the document images as the visual source."
-            )
+            for image_index, image_info in enumerate(page.get_images(full=True), start=1):
+                xref = image_info[0]
+                try:
+                    image_data = pdf.extract_image(xref)
+                    image_bytes = image_data.get("image")
+                    ext = image_data.get("ext", "png")
+                    if not image_bytes:
+                        continue
+
+                    image_name = (
+                        f"{Path(safe).stem}_p{page_number}_img{image_index}.{ext}"
+                    )
+                    image_path = PDF_IMAGE_DIR / image_name
+                    image_path.write_bytes(image_bytes)
+
+                    extracted_images.append(
+                        (page_number, image_name, str(image_path), f"Page {page_number}")
+                    )
+                except Exception:
+                    # One unsupported/invalid embedded image must not prevent
+                    # the rest of the PDF from being indexed.
+                    continue
+
+        text = "\n".join(page_text).strip()
+
+        if not text and not extracted_images:
+            pdf.close()
+            return False, "The PDF contains no extractable text or embedded images."
 
         conn = db()
-        cur = conn.execute(
-            """
+        cursor = conn.execute("""
             INSERT INTO documents
             (title, filename, family, topic, source_url, content, doc_type, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
+        """, (
+            Path(uploaded_file.name).stem,
+            uploaded_file.name,
+            family,
+            topic,
+            "",
+            text,
+            "PDF",
+            datetime.now().isoformat(timespec="seconds")
+        ))
+        document_id = cursor.lastrowid
+
+        now = datetime.now().isoformat(timespec="seconds")
+        conn.executemany("""
+            INSERT INTO kb_images
+            (kb_id, document_id, filename, image_path, page_num, placement, caption, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
             (
-                Path(uploaded_file.name).stem,
-                uploaded_file.name,
-                family,
-                topic,
-                "",
-                text,
-                "PDF",
-                datetime.now().isoformat(timespec="seconds"),
-            ),
-        )
-        document_id = cur.lastrowid
+                None,
+                document_id,
+                filename,
+                image_path,
+                page_num,
+                placement,
+                f"{Path(uploaded_file.name).stem} — {placement}",
+                now
+            )
+            for page_num, filename, image_path, placement in extracted_images
+        ])
+
         conn.commit()
         conn.close()
-
-        image_count = _extract_pdf_images(pdf, document_id)
         pdf.close()
 
         search.clear()
-        if image_count:
-            return True, f"Indexed {uploaded_file.name} with {image_count} extracted image(s)."
-        return True, f"Indexed {uploaded_file.name}."
-
+        return True, (
+            f"Indexed {uploaded_file.name}"
+            f"{f' and extracted {len(extracted_images)} image(s)' if extracted_images else ''}"
+        )
     except Exception as e:
         try:
             pdf.close()
         except Exception:
             pass
         return False, str(e)
+
+
+def load_kb_images(kb_id=None, document_ids=None, limit=8):
+    """Return images attached to an SOP and/or matching PDF documents."""
+    conn = db()
+    clauses = []
+    params = []
+
+    if kb_id:
+        clauses.append("kb_id = ?")
+        params.append(kb_id)
+
+    if document_ids:
+        placeholders = ",".join("?" for _ in document_ids)
+        clauses.append(f"document_id IN ({placeholders})")
+        params.extend(document_ids)
+
+    if not clauses:
+        conn.close()
+        return []
+
+    rows = conn.execute(
+        f"""
+        SELECT id, kb_id, document_id, filename, image_path,
+               page_num, placement, caption, created_at
+        FROM kb_images
+        WHERE {" OR ".join(clauses)}
+        ORDER BY
+            CASE WHEN kb_id = ? THEN 0 ELSE 1 END,
+            page_num ASC,
+            id ASC
+        LIMIT ?
+        """,
+        params + [kb_id or "", limit]
+    ).fetchall()
+    conn.close()
+    return [dict(x) for x in rows]
+
+
+def save_sop_images(kb_id, uploaded_images, placements):
+    """Persist admin-uploaded SOP images with an exact step placement."""
+    if not uploaded_images:
+        return 0
+
+    target_dir = SOP_IMAGE_DIR / kb_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    conn = db()
+    now = datetime.now().isoformat(timespec="seconds")
+    saved = 0
+
+    for index, uploaded_image in enumerate(uploaded_images):
+        try:
+            safe = re.sub(
+                r"[^A-Za-z0-9_.-]+",
+                "_",
+                uploaded_image.name
+            )
+            filename = f"{index + 1:02d}_{safe}"
+            path = target_dir / filename
+            path.write_bytes(uploaded_image.getbuffer())
+
+            placement = placements[index] if index < len(placements) else "End of SOP"
+
+            conn.execute("""
+                INSERT INTO kb_images
+                (kb_id, document_id, filename, image_path, page_num, placement, caption, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                kb_id,
+                None,
+                filename,
+                str(path),
+                None,
+                placement,
+                f"{uploaded_image.name} — {placement}",
+                now
+            ))
+            saved += 1
+        except Exception:
+            continue
+
+    conn.commit()
+    conn.close()
+    return saved
 
 
 # ============================================================
@@ -899,7 +944,7 @@ div[data-testid="stToolbar"] { display:none !important; }
 .st-key-hero_search_area form { background:transparent !important; border:0 !important; padding:0 !important; }
 .st-key-hero_search_area div[data-testid="stTextInput"] { margin:0 !important; }
 .st-key-hero_search_area div[data-testid="stTextInput"] label { display:none !important; }
-.st-key-hero_search_area div[data-testid="stTextInput"] input { height:54px !important; border-radius:29px !important; border:2px solid #00bfa5 !important; background:#fff !important; color:#36526a !important; font-size:14px !important; padding:0 20px 0 22px !important; box-shadow:0 7px 20px rgba(0,30,50,.20) !important; }
+.st-key-hero_search_area div[data-testid="stTextInput"] input { height:54px !important; border-radius:29px !important; border:2px solid rgba(0,205,190,.40) !important; background:#fff !important; color:#36526a !important; font-size:14px !important; padding:0 20px 0 22px !important; box-shadow:0 7px 20px rgba(0,30,50,.20) !important; }
 .st-key-hero_search_area div[data-testid="stFormSubmitButton"] button { width:52px !important; height:52px !important; min-height:52px !important; padding:0 !important; margin-top:0 !important; border-radius:50% !important; border:0 !important; background:#08bca3 !important; color:white !important; box-shadow:0 4px 12px rgba(0,160,140,.25) !important; font-size:25px !important; line-height:1 !important; }
 .st-key-hero_search_area .try-label { text-align:left; display:inline-block; color:#e5f6f5; font-size:10px; font-weight:600; margin:6px 0 0; text-shadow:0 1px 3px rgba(0,0,0,.25); }
 .st-key-hero_search_area div[data-testid="stButton"] button { height:34px !important; min-height:34px !important; padding:3px 8px !important; margin-top:3px !important; border-radius:18px !important; border:1px solid rgba(255,255,255,.34) !important; background:rgba(255,255,255,.11) !important; color:white !important; font-size:9px !important; font-weight:500 !important; box-shadow:none !important; white-space:nowrap !important; }
@@ -2812,148 +2857,142 @@ div.stButton > button {
 
 
 /* ============================================================
-   FINAL UI OVERRIDE — HPE WHITE / TEAL CONTROLS
-   User-requested final state:
-   - Possible Answer buttons: white background, HPE teal text, no lining
-   - Summary / Troubleshooting / Related Knowledge: same
-   - exactly 5px between suggested answers
-   - AI question input: HPE teal lining
-   - AI submit arrow: HPE teal background + white arrow
+   FINAL REQUEST OVERRIDES
+   - Possible Answers: white / HPE teal text / light teal lining
+   - AI action buttons: same treatment
+   - Suggested answers: exactly 5px separation
+   - AI question bar: HPE teal surface + white text
    ============================================================ */
 
-/* Suggested-answer area: keep explanatory text visible. */
-[class*="st-key-home_ai_question_box"] .chatbot-prompt,
-[class*="st-key-answer_"][class*="_question_box"] .chatbot-prompt {
-  display:block !important;
-  height:auto !important;
-  min-height:18px !important;
-  margin:6px 0 6px !important;
-  padding:0 !important;
-  overflow:visible !important;
-  line-height:1.4 !important;
-  color:#526c7d !important;
-  white-space:normal !important;
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
+  height:28px !important;
+  min-height:28px !important;
+  margin:0 !important;
+  padding:2px 10px !important;
+  border-radius:15px !important;
+  border:1px solid #9fe4da !important;
+  background:#ffffff !important;
+  color:#00a991 !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(0,191,165,.10),
+    0 1px 3px rgba(6,42,58,.06) !important;
+  font-size:9px !important;
+  font-weight:700 !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button p,
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button span,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button p,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button span {
+  color:#00a991 !important;
+}
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button:hover,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button:hover {
+  background:#f6fffd !important;
+  border-color:#00bfa5 !important;
+  color:#008f7b !important;
 }
 
-/* Collapse Streamlit's wrapper gaps, then add exactly 5px only to
-   the space after each suggestion row except the final row. */
+/* Streamlit wrapper gap is collapsed; the element container itself supplies
+   the ONLY 5px separation between consecutive suggested answers. */
 [class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlock"],
-[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlock"],
-[class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlockBorderWrapper"],
-[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlockBorderWrapper"] {
+[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlock"] {
   gap:0 !important;
   row-gap:0 !important;
 }
-
 [class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"],
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"] {
   margin-top:0 !important;
   padding-top:0 !important;
-  padding-bottom:0 !important;
-  min-height:0 !important;
 }
-
-/* White possible-answer buttons, no visible lining. */
 [class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]),
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]) {
   margin-bottom:5px !important;
+  padding-bottom:0 !important;
 }
-[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-of-type,
-[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-of-type {
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-child,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-child {
   margin-bottom:0 !important;
 }
 
-[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
-[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
-  margin:0 !important;
-  width:100% !important;
+/* Summary / Troubleshooting / Related Knowledge buttons:
+   white surface, HPE teal text, light teal lining with a navy hairline. */
+.st-key-home_ai_exact_answer_box div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button {
   min-height:30px !important;
   height:30px !important;
-  padding:3px 10px !important;
+  margin:0 !important;
+  padding:4px 10px !important;
+  border:1px solid #9fe4da !important;
   border-radius:16px !important;
-  border:0 !important;
-  outline:none !important;
   background:#ffffff !important;
-  color:#008f7b !important;
-  box-shadow:none !important;
+  color:#00a991 !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(0,191,165,.10),
+    0 1px 3px rgba(6,42,58,.07) !important;
   font-size:10px !important;
   font-weight:700 !important;
-  line-height:1.15 !important;
 }
-[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button:hover,
-[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button:hover {
-  background:#f4fbfa !important;
-  color:#006f63 !important;
-  border:0 !important;
-  box-shadow:none !important;
+.st-key-home_ai_exact_answer_box div[data-testid="stButton"] button p,
+.st-key-home_ai_exact_answer_box div[data-testid="stButton"] button span,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button p,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button span {
+  color:#00a991 !important;
 }
-
-/* AI question field: HPE teal lining all around. */
-[class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"] input,
-[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] input {
-  border:2px solid #00bfa5 !important;
-  outline:none !important;
-  background:#ffffff !important;
-  color:#243f55 !important;
-  box-shadow:0 0 0 1px rgba(0,191,165,.05) !important;
-}
-[class*="st-key-home_ai_question_box"] div[data-testid="stTextInput"] input:focus,
-[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] input:focus {
+.st-key-home_ai_exact_answer_box div[data-testid="stButton"] button:hover,
+[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button:hover {
+  background:#f6fffd !important;
   border-color:#00bfa5 !important;
-  box-shadow:0 0 0 2px rgba(0,191,165,.14) !important;
+  color:#008f7b !important;
 }
 
-/* AI submit arrow: HPE teal with white arrow. */
-[class*="st-key-home_ai_question_box"] div[data-testid="stFormSubmitButton"] button,
+/* AI Assistant question input: HPE teal background and white text. */
+.st-key-home_ai_question_box div[data-testid="stTextInput"] input,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] input {
+  background:#00bfa5 !important;
+  color:#ffffff !important;
+  border:1px solid #8de4d8 !important;
+  caret-color:#ffffff !important;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.14) !important;
+}
+.st-key-home_ai_question_box div[data-testid="stTextInput"] input::placeholder,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stTextInput"] input::placeholder {
+  color:rgba(255,255,255,.78) !important;
+}
+.st-key-home_ai_question_box div[data-testid="stFormSubmitButton"] button,
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stFormSubmitButton"] button {
   background:#00bfa5 !important;
   color:#ffffff !important;
-  border:0 !important;
-  box-shadow:none !important;
+  border:1px solid #00bfa5 !important;
 }
-[class*="st-key-home_ai_question_box"] div[data-testid="stFormSubmitButton"] button:hover,
+.st-key-home_ai_question_box div[data-testid="stFormSubmitButton"] button:hover,
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stFormSubmitButton"] button:hover {
-  background:#009f8d !important;
+  background:#00a991 !important;
   color:#ffffff !important;
 }
 
-/* Summary / Troubleshooting / Related Knowledge buttons:
-   white, HPE teal text, absolutely no lining. */
-[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] button,
-[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button {
-  background:#ffffff !important;
-  color:#008f7b !important;
-  border:0 !important;
-  outline:none !important;
-  box-shadow:none !important;
-  border-radius:16px !important;
-  min-height:30px !important;
-  height:30px !important;
-  padding:3px 10px !important;
-  font-size:10px !important;
-  font-weight:700 !important;
+/* SOP image authoring UI */
+.sop-image-help {
+  margin:7px 0 8px;
+  padding:8px 10px;
+  border:1px solid #cfe8e3;
+  border-radius:8px;
+  background:#f5fffd;
+  color:#4b6677;
+  font-size:10px;
+  line-height:1.45;
 }
-[class*="st-key-home_ai_exact_answer_box"] div[data-testid="stButton"] button:hover,
-[class*="st-key-answer_"][class*="_exact_answer_box"] div[data-testid="stButton"] button:hover {
-  background:#f4fbfa !important;
-  color:#006f63 !important;
-  border:0 !important;
-  box-shadow:none !important;
+.sop-image-placement-title {
+  margin:5px 0 4px;
+  color:#008f7b;
+  font-size:10px;
+  font-weight:800;
 }
 
-/* Keep the exact-answer box aligned with the question box and preserve
-   equal top/bottom breathing room. */
-[class*="st-key-home_ai_exact_answer_box"],
-[class*="st-key-answer_"][class*="_exact_answer_box"] {
-  margin-top:9px !important;
-  margin-bottom:9px !important;
-  padding-top:13px !important;
-  padding-bottom:13px !important;
-}
-
-/* Visuals extracted from SOP/PDF source documents. */
-.exact-connected-visuals {
-  margin-top:10px !important;
+/* Related visuals inside the exact answer remain compact and aligned. */
+.st-key-home_ai_exact_answer_box .stImage,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .stImage {
+  margin-top:3px !important;
 }
 
 </style>
@@ -3211,9 +3250,39 @@ def render_ai_assistant(default_query="",
             unsafe_allow_html=True
         )
 
-        # Surface visuals connected to this exact answer. This includes
-        # images uploaded with the SOP and images extracted from matching PDFs.
-        render_connected_images(selected["kb_id"], docs, key_prefix)
+        # Images are connected to the selected SOP or to matching PDF source
+        # documents. They are shown only when actual image files exist.
+        related_document_ids = [d["id"] for d in docs if d.get("id")]
+        # Keep all images belonging to the selected SOP so placement such as
+        # "After Step 5" is never lost. PDF visuals are capped separately.
+        sop_related_images = load_kb_images(
+            kb_id=selected["kb_id"],
+            limit=50
+        )
+        pdf_related_images = load_kb_images(
+            document_ids=related_document_ids,
+            limit=6
+        )
+        seen_image_ids = {img["id"] for img in sop_related_images}
+        related_images = sop_related_images + [
+            img for img in pdf_related_images
+            if img["id"] not in seen_image_ids
+        ][:6]
+        if related_images:
+            st.markdown(
+                '<div class="exact-section-title">RELATED VISUALS</div>',
+                unsafe_allow_html=True
+            )
+            image_cols = st.columns(min(3, len(related_images)), gap="small")
+            for image_index, image_record in enumerate(related_images):
+                with image_cols[image_index % len(image_cols)]:
+                    image_path = image_record.get("image_path")
+                    if image_path and Path(image_path).exists():
+                        st.image(
+                            image_path,
+                            caption=image_record.get("caption") or image_record.get("placement") or "",
+                            use_container_width=True
+                        )
 
         a1, a2, a3 = st.columns(3, gap="small")
         with a1:
@@ -3255,13 +3324,53 @@ def render_ai_assistant(default_query="",
 
         elif action == "steps":
             st.markdown('<div class="exact-section-title">TROUBLESHOOTING STEPS</div>', unsafe_allow_html=True)
+
+            # Honor the image placement selected by Admin when the SOP was
+            # authored. "After Step N" images appear immediately after that
+            # step, so screenshots/diagrams can sit between procedures.
+            step_images = {
+                str(img.get("placement") or ""): img
+                for img in related_images
+                if img.get("kb_id") == selected["kb_id"]
+            }
+
             for i, line in enumerate((selected.get("steps") or "").splitlines(), 1):
                 clean = re.sub(r"^\s*\d+\.\s*", "", line)
-                if clean.strip():
-                    st.markdown(
-                        f'<div class="ai-step"><div class="ai-num">{i}</div>'
-                        f'<div style="font-size:9px;color:#324e63;padding-top:3px;line-height:1.45;">{eh(clean)}</div></div>',
-                        unsafe_allow_html=True
+                if not clean.strip():
+                    continue
+
+                if i == 1 and "Before Step 1" in step_images:
+                    img = step_images["Before Step 1"]
+                    if Path(img["image_path"]).exists():
+                        st.image(
+                            img["image_path"],
+                            caption=img.get("caption") or "SOP image — Before Step 1",
+                            use_container_width=True
+                        )
+
+                st.markdown(
+                    f'<div class="ai-step"><div class="ai-num">{i}</div>'
+                    f'<div style="font-size:9px;color:#324e63;padding-top:3px;line-height:1.45;">{eh(clean)}</div></div>',
+                    unsafe_allow_html=True
+                )
+
+                placement_key = f"After Step {i}"
+                if placement_key in step_images:
+                    img = step_images[placement_key]
+                    if Path(img["image_path"]).exists():
+                        st.image(
+                            img["image_path"],
+                            caption=img.get("caption") or f"SOP image — {placement_key}",
+                            use_container_width=True
+                        )
+
+            if "End of SOP" in step_images:
+                img = step_images["End of SOP"]
+                if Path(img["image_path"]).exists():
+                    st.image(
+                        img["image_path"],
+                        caption=img.get("caption") or "SOP image — End of SOP",
+                        use_container_width=True
                     )
 
         elif action == "related":
@@ -3802,136 +3911,10 @@ def admin_login():
                 st.error("Incorrect admin password.")
 
 
-
-def _save_sop_images(kb_id, image_files, placement):
-    """Persist images uploaded with an SOP and connect them to the SOP."""
-    if not image_files:
-        return 0
-
-    target_dir = SOP_IMAGE_DIR / kb_id
-    target_dir.mkdir(parents=True, exist_ok=True)
-    conn = db()
-    saved = 0
-
-    try:
-        for idx, uploaded in enumerate(image_files, start=1):
-            original = getattr(uploaded, "name", f"image_{idx}.png")
-            suffix = Path(original).suffix.lower() or ".png"
-            safe_name = _safe_image_filename(Path(original).stem) + suffix
-            path = target_dir / f"{idx:02d}_{safe_name}"
-            path.write_bytes(uploaded.getbuffer())
-
-            conn.execute(
-                """
-                INSERT INTO sop_images
-                (kb_id, filename, path, placement, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    kb_id,
-                    safe_name,
-                    str(path),
-                    placement,
-                    datetime.now().isoformat(timespec="seconds"),
-                ),
-            )
-            saved += 1
-
-        conn.commit()
-    finally:
-        conn.close()
-
-    return saved
-
-
-def load_sop_images(kb_id, placement=None):
-    conn = db()
-    if placement:
-        rows = conn.execute(
-            """
-            SELECT id, kb_id, filename, path, placement, created_at
-            FROM sop_images
-            WHERE kb_id = ? AND placement = ?
-            ORDER BY id
-            """,
-            (kb_id, placement),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT id, kb_id, filename, path, placement, created_at
-            FROM sop_images
-            WHERE kb_id = ?
-            ORDER BY id
-            """,
-            (kb_id,),
-        ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def load_document_images(document_ids, limit=8):
-    ids = [int(x) for x in document_ids if str(x).isdigit()]
-    if not ids:
-        return []
-
-    placeholders = ",".join(["?"] * len(ids))
-    conn = db()
-    rows = conn.execute(
-        f"""
-        SELECT id, document_id, page_number, image_index, filename, path, created_at
-        FROM document_images
-        WHERE document_id IN ({placeholders})
-        ORDER BY document_id, page_number, image_index
-        LIMIT ?
-        """,
-        (*ids, int(limit)),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def render_connected_images(kb_id, docs, key_prefix):
-    """
-    Show visuals connected to the selected answer:
-    - images explicitly uploaded to the SOP
-    - embedded images extracted from PDF source documents matched by search
-    """
-    sop_images = load_sop_images(kb_id)
-    doc_images = load_document_images([d["id"] for d in docs], limit=8)
-
-    if not sop_images and not doc_images:
-        return
-
-    st.markdown(
-        '<div class="exact-section-title">RELATED VISUALS</div>',
-        unsafe_allow_html=True,
-    )
-
-    if sop_images:
-        for i, img in enumerate(sop_images):
-            if Path(img["path"]).exists():
-                st.image(
-                    img["path"],
-                    caption=f"SOP image · {img['placement']}",
-                    use_container_width=True,
-                )
-
-    if doc_images:
-        for i, img in enumerate(doc_images):
-            if Path(img["path"]).exists():
-                st.image(
-                    img["path"],
-                    caption=f"PDF image · Page {img['page_number']}",
-                    use_container_width=True,
-                )
-
-
 def create_ai_ready_sop(
     family, product, topic, question, direct_answer,
     prerequisites, steps, verification, escalation, keywords,
-    source_title="", source_url="", image_files=None,
-    image_placement="After Direct Answer"
+    source_title="", source_url="", uploaded_images=None, image_placements=None
 ):
     """
     Store one atomic SOP record designed for deterministic AI retrieval.
@@ -3977,12 +3960,14 @@ def create_ai_ready_sop(
     conn.commit()
     conn.close()
 
-    # Save visual assets only after the SOP record exists, so every image
-    # has a stable kb_id connection.
-    saved_images = _save_sop_images(kb_id, image_files or [], image_placement)
+    image_count = save_sop_images(
+        kb_id,
+        uploaded_images or [],
+        image_placements or []
+    )
 
     search.clear()
-    return kb_id, saved_images
+    return kb_id, image_count
 
 
 def render_admin():
@@ -4071,6 +4056,45 @@ def render_admin():
                 )
             )
 
+            st.markdown(
+                '<div class="sop-image-help">'
+                '<b>SOP Images</b> — Upload screenshots, diagrams, or reference images. '
+                'Each image can be placed before/after a specific procedure step or at the end of the SOP. '
+                'Uploaded images are stored with the SOP and can be displayed with the AI exact answer.'
+                '</div>',
+                unsafe_allow_html=True
+            )
+            sop_images = st.file_uploader(
+                "Upload SOP images",
+                type=["png", "jpg", "jpeg", "webp", "gif"],
+                accept_multiple_files=True,
+                key="sop_image_upload",
+                help="Images are saved as part of this SOP. You can place them between procedure steps."
+            )
+
+            step_count = len([
+                line for line in steps.splitlines()
+                if line.strip()
+            ])
+            placement_options = ["Before Step 1"]
+            if step_count:
+                placement_options += [f"After Step {i}" for i in range(1, step_count + 1)]
+            placement_options.append("End of SOP")
+
+            image_placements = []
+            if sop_images:
+                st.markdown(
+                    '<div class="sop-image-placement-title">Image placement</div>',
+                    unsafe_allow_html=True
+                )
+                for image_index, image_file in enumerate(sop_images):
+                    placement = st.selectbox(
+                        f"{image_file.name}",
+                        placement_options,
+                        key=f"sop_image_placement_{image_index}"
+                    )
+                    image_placements.append(placement)
+
             verification = st.text_area(
                 "Verification / Expected Result",
                 height=100,
@@ -4086,42 +4110,6 @@ def render_admin():
                     "State when the case must be escalated and exactly what evidence "
                     "must accompany the escalation."
                 )
-            )
-
-            st.markdown(
-                '<div class="panel-sub" style="margin:4px 0 6px;">'
-                '<b>SOP Visuals</b> — upload screenshots, diagrams, topology images, '
-                'tables exported as images, or other visuals that should appear with this SOP.'
-                '</div>',
-                unsafe_allow_html=True
-            )
-            sop_images = st.file_uploader(
-                "Upload SOP images",
-                type=["png", "jpg", "jpeg", "webp", "gif"],
-                accept_multiple_files=True,
-                key="admin_sop_images",
-                help="Images are stored with this SOP and displayed in the selected position."
-            )
-            st.caption(
-                "Placement controls where the image is attached to the SOP: "
-                "before/after the Direct Answer, Procedure, Verification, Escalation, or at the End."
-            )
-            image_placement = st.selectbox(
-                "Place uploaded image(s)",
-                [
-                    "Before Direct Answer",
-                    "After Direct Answer",
-                    "Before Procedure",
-                    "After Procedure",
-                    "Before Verification",
-                    "After Verification",
-                    "Before Escalation",
-                    "After Escalation",
-                    "End of SOP",
-                ],
-                index=1,
-                key="admin_sop_image_placement",
-                help="This controls where the visual is attached to the SOP. The AI answer can also surface it as a related visual."
             )
 
             submitted = st.form_submit_button(
@@ -4142,21 +4130,21 @@ def render_admin():
             if missing:
                 st.error("Complete these required fields: " + ", ".join(missing))
             else:
-                kb_id, saved_images = create_ai_ready_sop(
+                kb_id, image_count = create_ai_ready_sop(
                     family, product, topic, question, direct_answer,
                     prerequisites, steps, verification, escalation,
                     keywords, source_title, source_url,
-                    image_files=sop_images,
-                    image_placement=image_placement,
+                    uploaded_images=sop_images,
+                    image_placements=image_placements
                 )
-                st.success(f"SOP created successfully: {kb_id}")
-                if saved_images:
-                    st.info(
-                        f"The new SOP is immediately searchable and {saved_images} "
-                        "uploaded image(s) were attached to it."
-                    )
-                else:
-                    st.info("The new SOP is immediately searchable by the AI Assistant.")
+                st.success(
+                    f"SOP created successfully: {kb_id}"
+                    + (f" • {image_count} image(s) attached." if image_count else "")
+                )
+                st.info(
+                    "The new SOP is immediately searchable by the AI Assistant."
+                    + (" Attached images can also appear in matching exact answers." if image_count else "")
+                )
 
     with upload_tab:
         c1, c2 = st.columns(2)
