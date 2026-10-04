@@ -5,7 +5,7 @@ import mimetypes
 import base64
 import hashlib
 import hmac
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from html import escape
 
@@ -5166,7 +5166,17 @@ def _read_access_cookie():
         # establishing communication with the page.
         if hasattr(controller, "ready") and not controller.ready():
             return None, True
-        return controller.get(ACCESS_COOKIE_NAME), False
+
+        token = controller.get(ACCESS_COOKIE_NAME)
+
+        # On a fresh browser reopen, allow one component round-trip before
+        # deciding that the cookie is truly absent. This avoids briefly showing
+        # the access screen while the browser is restoring its persistent cookie.
+        if token is None and not st.session_state.get("_hpe_cookie_read_once", False):
+            st.session_state["_hpe_cookie_read_once"] = True
+            return None, True
+
+        return token, False
     except Exception:
         return None, False
 
@@ -5177,10 +5187,17 @@ def _write_access_cookie(token):
         return False
     try:
         # Keep the access token until the user explicitly clears it.
+        # Explicitly set BOTH max_age and expires.  The cookie-controller
+        # component forwards these values to the browser; using an explicit
+        # expiration date prevents the browser from treating the token as a
+        # short-lived/session cookie after the browser is closed.
         controller.set(
             ACCESS_COOKIE_NAME,
             token,
-            max_age=60 * 60 * 24 * 365 * 10,
+            path="/",
+            expires=datetime.now() + timedelta(days=3650),
+            max_age=60 * 60 * 24 * 3650,
+            same_site="lax",
         )
         return True
     except Exception:
@@ -5219,8 +5236,10 @@ def access_token_gate():
     """
     Gate the entire app behind a one-time access code.
 
-    The first successful entry creates the persistent browser cookie.
-    Subsequent refreshes open the app without asking for the code again.
+    The first successful entry creates a persistent browser cookie.
+    Refreshing, closing/reopening the browser, and Streamlit app restarts do not
+    require the code again, unless the browser cookie is cleared or the admin
+    explicitly uses Clear access token.
     """
     if CookieController is None:
         st.error(
@@ -5315,6 +5334,7 @@ def access_token_gate():
         if hmac.compare_digest(entered.strip(), access_code):
             derived = _derive_access_token(access_code, token_secret)
             if _write_access_cookie(derived):
+                st.session_state["_hpe_cookie_read_once"] = True
                 st.session_state["access_granted"] = True
                 st.rerun()
             else:
