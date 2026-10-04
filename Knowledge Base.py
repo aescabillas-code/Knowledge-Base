@@ -4166,44 +4166,31 @@ def render_ai_assistant(default_query="",
             # nth-child CSS behavior that made users click twice.
             current_action = st.session_state.get(action_key) or "answer"
 
-            # Use a true Streamlit horizontal container instead of st.columns.
-            # Columns create their own wrapper/gap geometry, which can leave a
-            # visible seam between adjacent tab borders. The horizontal
-            # container has an explicit zero gap and lets CSS make the three
-            # tab controls equal-width without relying on column internals.
-            with st.container(
-                key=f"{key_prefix}_tab_row",
-                horizontal=True,
-                wrap=False,
-                gap=None,
-            ):
-                with st.container(key=f"{key_prefix}_tab_answer_{'active' if current_action == 'answer' else 'inactive'}"):
-                    st.button(
-                        "✦ Answer",
-                        key=f"{key_prefix}_answer",
-                        use_container_width=True,
-                        type="secondary",
-                        on_click=_set_ai_tab,
-                        args=(action_key, "answer"),
-                    )
-                with st.container(key=f"{key_prefix}_tab_steps_{'active' if current_action == 'steps' else 'inactive'}"):
-                    st.button(
-                        "⌕ Troubleshooting steps",
-                        key=f"{key_prefix}_steps",
-                        use_container_width=True,
-                        type="secondary",
-                        on_click=_set_ai_tab,
-                        args=(action_key, "steps"),
-                    )
-                with st.container(key=f"{key_prefix}_tab_files_{'active' if current_action == 'files' else 'inactive'}"):
-                    st.button(
-                        "▤ Related knowledge",
-                        key=f"{key_prefix}_files",
-                        use_container_width=True,
-                        type="secondary",
-                        on_click=_set_ai_tab,
-                        args=(action_key, "files"),
-                    )
+            # Render the visual tab ourselves and use an invisible Streamlit
+            # button only as the click target. This deliberately avoids relying
+            # on Streamlit's primary/secondary button background, which can be
+            # overridden by the app theme and legacy CSS.
+            tabs = [
+                ("answer", "✦ Answer", f"{key_prefix}_answer"),
+                ("steps", "⌕ Troubleshooting steps", f"{key_prefix}_steps"),
+                ("files", "▤ Related knowledge", f"{key_prefix}_files"),
+            ]
+            with st.container(key=f"{key_prefix}_tab_row", horizontal=True, wrap=False, gap=None):
+                for tab_id, label, button_key in tabs:
+                    state_class = "active" if current_action == tab_id else "inactive"
+                    with st.container(key=f"{key_prefix}_tab_hit_{tab_id}"):
+                        st.markdown(
+                            f'<div class="kb-tab-visual {state_class}">{label}</div>',
+                            unsafe_allow_html=True,
+                        )
+                        st.button(
+                            label,
+                            key=button_key,
+                            use_container_width=True,
+                            type="tertiary",
+                            on_click=_set_ai_tab,
+                            args=(action_key, tab_id),
+                        )
 
             # The callback runs before this fragment redraw, so this is already
             # the newly selected tab on the very first click.
@@ -6734,5 +6721,162 @@ html, body, .stApp, .stApp *, button, input, textarea, select, option {
   border-bottom:0 !important;
 }
 
+
+
+/* FINAL UI FIX v6 — remove the actual Streamlit vertical layout seam */
+/* The screenshot shows the remaining white strip is the parent vertical
+   container's default inter-element gap, not the tab border itself. */
+.stApp div[data-testid="stVerticalBlock"]:has(> .st-key-home_ai_tab_row),
+.stApp div[data-testid="stVerticalBlock"]:has(> [class*="st-key-answer_"][class*="_tab_row"]) {
+  gap:0 !important;
+  row-gap:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+
+/* There must be no baseline rule under the complete tab row. */
+.stApp .st-key-home_ai_tab_row,
+.stApp [class*="st-key-answer_"][class*="_tab_row"] {
+  border-bottom:0 !important;
+  box-shadow:none !important;
+}
+
+/* The content panel supplies the single shared teal top edge. */
+.stApp .st-key-home_ai_tab_content,
+.stApp [class*="st-key-answer_"][class*="_tab_content"] {
+  margin-top:0 !important;
+  border-top:1px solid #00bfa5 !important;
+}
+
+/* Active tab sits directly over the content edge. */
+.stApp .st-key-home_ai_tab_row button[data-testid="stBaseButton-primary"],
+.stApp [class*="st-key-answer_"][class*="_tab_row"] button[data-testid="stBaseButton-primary"],
+.stApp [class*="st-key-home_ai_tab_answer_active"] button,
+.stApp [class*="st-key-home_ai_tab_steps_active"] button,
+.stApp [class*="st-key-home_ai_tab_files_active"] button,
+.stApp [class*="st-key-answer_"][class*="_tab_answer_active"] button,
+.stApp [class*="st-key-answer_"][class*="_tab_steps_active"] button,
+.stApp [class*="st-key-answer_"][class*="_tab_files_active"] button {
+  background:#fff !important;
+  border-bottom-color:#fff !important;
+  margin-bottom:-1px !important;
+  z-index:30 !important;
+}
+
+/* Never let an old exact-answer tab rule reintroduce the horizontal line. */
+.stApp .st-key-home_ai_exact_answer_box .st-key-home_ai_tab_row::after,
+.stApp .st-key-home_ai_exact_answer_box .st-key-home_ai_tab_row::before,
+.stApp [class*="st-key-answer_"][class*="_exact_answer_box"] [class*="_tab_row"]::after,
+.stApp [class*="st-key-answer_"][class*="_exact_answer_box"] [class*="_tab_row"]::before {
+  content:none !important;
+  display:none !important;
+}
+
+
+/* FINAL V7 TAB VISUAL — the visible tab is HTML, the Streamlit button is only a transparent click layer. */
+.stApp [class*="st-key-home_ai_tab_row"],
+.stApp [class*="st-key-answer_"][class*="_tab_row"] {
+  display:flex !important;
+  gap:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  background:transparent !important;
+}
+
+.stApp [class*="st-key-home_ai_tab_row"] > div,
+.stApp [class*="st-key-answer_"][class*="_tab_row"] > div {
+  flex:1 1 0 !important;
+  width:33.333333% !important;
+  min-width:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+
+.stApp [class*="st-key-home_ai_tab_hit_"] {
+  position:relative !important;
+  height:44px !important;
+  min-height:44px !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:visible !important;
+}
+
+.stApp .kb-tab-visual {
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:44px !important;
+  box-sizing:border-box !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  margin:0 !important;
+  padding:0 12px !important;
+  border:1px solid #8fd8cf !important;
+  border-bottom:1px solid #00bfa5 !important;
+  border-radius:12px 12px 0 0 !important;
+  background:#d9f7f2 !important;
+  color:#008f7b !important;
+  font-family:Inter, sans-serif !important;
+  font-size:12px !important;
+  font-weight:700 !important;
+  line-height:1 !important;
+  z-index:1 !important;
+}
+
+.stApp .kb-tab-visual.active {
+  background:#ffffff !important;
+  color:#007f70 !important;
+  border-color:#00bfa5 !important;
+  border-bottom-color:#ffffff !important;
+  margin-bottom:-1px !important;
+  z-index:2 !important;
+}
+
+.stApp [class*="st-key-home_ai_tab_hit_"] [data-testid="stButton"],
+.stApp [class*="st-key-answer_"][class*="_tab_hit_"] [data-testid="stButton"] {
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:44px !important;
+  margin:0 !important;
+  padding:0 !important;
+  z-index:10 !important;
+}
+
+.stApp [class*="st-key-home_ai_tab_hit_"] [data-testid="stButton"] > button,
+.stApp [class*="st-key-answer_"][class*="_tab_hit_"] [data-testid="stButton"] > button {
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:44px !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  border-radius:12px 12px 0 0 !important;
+  background:transparent !important;
+  color:transparent !important;
+  -webkit-text-fill-color:transparent !important;
+  box-shadow:none !important;
+  outline:none !important;
+  opacity:0 !important;
+}
+
+.stApp [class*="st-key-home_ai_tab_hit_"] [data-testid="stButton"] > button:hover,
+.stApp [class*="st-key-home_ai_tab_hit_"] [data-testid="stButton"] > button:focus,
+.stApp [class*="st-key-home_ai_tab_hit_"] [data-testid="stButton"] > button:active {
+  background:transparent !important;
+  color:transparent !important;
+  box-shadow:none !important;
+}
+
+/* The content panel touches the active white tab with no intervening line/gap. */
+.stApp [class*="st-key-home_ai_tab_content"],
+.stApp [class*="st-key-answer_"][class*="_tab_content"] {
+  margin-top:0 !important;
+  border-top:1px solid #00bfa5 !important;
+  background:#ffffff !important;
+}
 </style>
 """, unsafe_allow_html=True)
