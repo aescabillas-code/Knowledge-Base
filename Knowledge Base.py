@@ -1933,19 +1933,41 @@ div.stButton > button {
   margin:4px 0 3px !important;
 }
 
-[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
-[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
-  height:28px !important;
-  min-height:28px !important;
-  margin:1px 0 !important;
-  padding:2px 8px !important;
-  line-height:1.05 !important;
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"],
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > div,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > div {
+  margin:0 !important;
+  padding:0 !important;
 }
 
-/* Equal top and bottom breathing room around the exact-answer block. */
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
+  height:26px !important;
+  min-height:26px !important;
+  margin:0 !important;
+  padding:1px 8px !important;
+  line-height:1.0 !important;
+}
+
+/* Remove Streamlit's inter-element gap around the stacked suggested answers. */
+[class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlock"] {
+  gap:0 !important;
+}
+
+/* Equal top and bottom breathing room inside the exact-answer box. */
 .st-key-home_ai_exact_answer_box,
 [class*="st-key-answer_"][class*="_exact_answer_box"] {
   margin:9px 0 9px 12px !important;
+  padding:13px 14px 13px !important;
+}
+
+/* The question line already supplies the visual top spacing; normalize its
+   outer margin so the box padding, rather than margin collapse, controls it. */
+.st-key-home_ai_exact_answer_box .user-msg,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .user-msg {
+  margin-top:0 !important;
 }
 
 @media (max-width:800px) {
