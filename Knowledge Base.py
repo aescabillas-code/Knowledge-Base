@@ -1998,6 +1998,53 @@ div.stButton > button {
 }
 
 /* ============================================================
+   SUGGESTED ANSWERS — HARD 1PX ROW SPACING
+   Streamlit can add spacing through nested element containers.
+   Collapse every wrapper and put the only visual separation on the
+   consecutive suggestion rows themselves.
+   ============================================================ */
+[class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlockBorderWrapper"],
+[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlockBorderWrapper"],
+[class*="st-key-home_ai_question_box"] [data-testid="stVerticalBlock"],
+[class*="st-key-answer_"][class*="_question_box"] [data-testid="stVerticalBlock"] {
+  gap:0 !important;
+  row-gap:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"] {
+  margin-top:0 !important;
+  margin-bottom:0 !important;
+  padding-top:0 !important;
+  padding-bottom:0 !important;
+  min-height:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]),
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]) {
+  margin-bottom:1px !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-of-type,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(> div[data-testid="stButton"]):last-of-type {
+  margin-bottom:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"],
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] > div,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] > div {
+  margin:0 !important;
+  padding:0 !important;
+  min-height:0 !important;
+}
+
+[class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
+[class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] button {
+  margin:0 !important;
+}
+
+/* ============================================================
    EXACT ANSWER BOX — BALANCED INNER TOP/BOTTOM SPACE
    ============================================================ */
 .st-key-home_ai_exact_answer_box,
@@ -2050,7 +2097,7 @@ div.stButton > button {
 
   [class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
   [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
-    margin-bottom:2px !important;
+    margin-bottom:1px !important;
   }
 
   [class*="st-key-home_ai_question_box"] div[data-testid="stButton"] button,
@@ -2071,7 +2118,7 @@ div.stButton > button {
 /* ============================================================
    USER REQUESTED FINAL UI OVERRIDES
    - Exact answer box aligns with the question box.
-   - Suggested answers use 5px spacing and HPE teal.
+   - Suggested answers use 1px spacing and HPE teal.
    - Summary / Troubleshooting / Related Knowledge use HPE teal.
    - Product-family tiles use HPE teal while retaining icon colors.
    ============================================================ */
@@ -2086,18 +2133,19 @@ div.stButton > button {
   box-sizing:border-box !important;
 }
 
-/* Suggested-answer buttons: exactly 5px between rows. */
+/* Suggested-answer buttons: exactly 1px between rows. */
 [class*="st-key-home_ai_question_box"] div[data-testid="stButton"],
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stButton"] {
-  margin:0 0 5px 0 !important;
+  margin:0 0 1px 0 !important;
   padding:0 !important;
 }
 
 /* Remove Streamlit wrapper spacing only for the suggested-answer button rows. */
 [class*="st-key-home_ai_question_box"] div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]),
 [class*="st-key-answer_"][class*="_question_box"] div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]) {
-  margin:0 0 5px 0 !important;
+  margin:0 0 1px 0 !important;
   padding:0 !important;
+  min-height:0 !important;
 }
 
 /* The final suggested answer has no extra trailing gap. */
