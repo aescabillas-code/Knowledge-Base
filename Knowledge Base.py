@@ -5137,12 +5137,24 @@ def _derive_access_token(access_code, token_secret):
     return hmac.new(secret, payload, hashlib.sha256).hexdigest()
 
 
-@st.cache_resource(show_spinner=False)
 def _get_cookie_controller():
-    """Create one persistent cookie controller for this Streamlit session."""
+    """Return one cookie controller per browser session.
+
+    CookieController creates a Streamlit widget during construction, so it must
+    NOT be created from an @st.cache_data/@st.cache_resource function. The
+    controller instance is kept in session_state instead; this preserves the
+    one-controller-per-session behavior without triggering CachedWidgetWarning.
+    """
     if CookieController is None:
         return None
-    return CookieController()
+
+    controller_key = "_hpe_kb_cookie_controller"
+    controller = st.session_state.get(controller_key)
+    if controller is None:
+        controller = CookieController(key="hpe_kb_access_cookie_controller")
+        st.session_state[controller_key] = controller
+
+    return controller
 
 
 def _read_access_cookie():
