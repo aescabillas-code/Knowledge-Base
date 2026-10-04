@@ -11,6 +11,12 @@ from html import escape
 
 import streamlit as st
 
+# Persistent browser-cookie support for one-time Knowledge Base authorization.
+try:
+    from streamlit_cookies_controller import CookieController
+except Exception:
+    CookieController = None
+
 # Signed browser authorization token support.
 # The raw access code is never placed in the URL; only a signed token is.
 try:
