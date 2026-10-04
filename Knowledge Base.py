@@ -862,6 +862,7 @@ def get_mongo_client():
     except Exception:
         return None
 
+@st.cache_resource(show_spinner=False)
 def mongo_handles():
     client = get_mongo_client()
     if client is None or GridFSBucket is None:
@@ -1220,7 +1221,9 @@ def load_mongo_documents():
     except Exception:
         return []
 
+@st.cache_data(ttl=60, show_spinner=False)
 def load_mongo_images(kb_id=None, document_ids=None, limit=50):
+    """Load only image media; never download videos through the image path."""
     handles = mongo_handles()
     if not handles:
         return []
@@ -1230,11 +1233,29 @@ def load_mongo_images(kb_id=None, document_ids=None, limit=50):
         if kb_id:
             clauses.append({"kb_id": kb_id})
         if document_ids:
-            clauses.append({"document_id": {"$in": document_ids}})
+            clauses.append({"document_id": {"$in": tuple(document_ids)}})
         if not clauses:
             return []
-        query = {"$or": clauses} if len(clauses) > 1 else clauses[0]
-        for m in handles["media"].find(query).sort("created_at", 1).limit(limit):
+        query = {
+            "$and": [
+                {"media_type": "image"},
+                {"$or": clauses} if len(clauses) > 1 else clauses[0],
+            ]
+        }
+        for m in handles["media"].find(
+            query,
+            {
+                "_id": 1,
+                "kb_id": 1,
+                "document_id": 1,
+                "filename": 1,
+                "gridfs_id": 1,
+                "page_num": 1,
+                "placement": 1,
+                "caption": 1,
+                "created_at": 1,
+            },
+        ).sort("created_at", 1).limit(limit):
             path = _mongo_cache_file(m.get("gridfs_id"), m.get("filename"))
             if path:
                 out.append({
@@ -1252,13 +1273,25 @@ def load_mongo_images(kb_id=None, document_ids=None, limit=50):
         pass
     return out
 
+@st.cache_data(ttl=60, show_spinner=False)
 def load_mongo_videos(kb_id, limit=20):
     handles = mongo_handles()
     if not handles:
         return []
     out = []
     try:
-        for m in handles["media"].find({"kb_id": kb_id, "media_type": "video"}).sort("created_at", 1).limit(limit):
+        for m in handles["media"].find(
+            {"kb_id": kb_id, "media_type": "video"},
+            {
+                "_id": 1,
+                "kb_id": 1,
+                "filename": 1,
+                "gridfs_id": 1,
+                "placement": 1,
+                "caption": 1,
+                "created_at": 1,
+            },
+        ).sort("created_at", 1).limit(limit):
             path = _mongo_cache_file(m.get("gridfs_id"), m.get("filename"))
             if path:
                 out.append({
@@ -1695,8 +1728,9 @@ def index_supported_file(uploaded_file, family, topic):
     return True, f"Indexed {uploaded_file.name} as {doc_type} in shared MongoDB storage."
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def file_data_uri(path):
-    """Create a browser-openable data URI for a related file."""
+    """Create and cache a browser-openable data URI for a related file."""
     try:
         p = Path(path)
         if not p.exists():
@@ -4571,7 +4605,14 @@ section.main > div:first-child,
 
 def clear_search_cache():
     """Invalidate the lightweight search/read caches after knowledge changes."""
-    for fn in (search, load_records, load_documents):
+    for fn in (
+        search,
+        load_records,
+        load_documents,
+        load_mongo_images,
+        load_mongo_videos,
+        file_data_uri,
+    ):
         try:
             fn.clear()
         except Exception:
