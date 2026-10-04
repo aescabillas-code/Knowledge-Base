@@ -5099,6 +5099,26 @@ def render_admin():
 
 ACCESS_QUERY_PARAM = "kb_access"
 
+
+def _get_access_secrets():
+    """Read ACCESS_CODE and TOKEN_SECRET from Streamlit Secrets/environment."""
+    access_code = ""
+    token_secret = ""
+
+    try:
+        access_code = str(
+            st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
+        ).strip()
+        token_secret = str(
+            st.secrets.get("TOKEN_SECRET", os.getenv("TOKEN_SECRET", ""))
+        ).strip()
+    except Exception:
+        access_code = os.getenv("ACCESS_CODE", "").strip()
+        token_secret = os.getenv("TOKEN_SECRET", "").strip()
+
+    return access_code, token_secret
+
+
 ACCESS_CODE = str(
     st.secrets.get("ACCESS_CODE", os.getenv("ACCESS_CODE", ""))
 ).strip()
