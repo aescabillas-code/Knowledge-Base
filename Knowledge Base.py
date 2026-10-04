@@ -5188,12 +5188,12 @@ def authorize_browser():
     st.query_params[ACCESS_QUERY_PARAM] = token
     st.session_state["access_authorized"] = True
     
-    # Save token directly into the browser's persistent localStorage
+    # Save token directly into the parent browser's persistent localStorage
     st.components.v1.html(
         f"""
         <script>
             try {{
-                localStorage.setItem("{LOCAL_STORAGE_KEY}", "{token}");
+                window.parent.localStorage.setItem("{LOCAL_STORAGE_KEY}", "{token}");
             }} catch(e) {{}}
         </script>
         """,
@@ -5206,23 +5206,11 @@ def authorize_browser():
 def clear_browser_access():
     st.session_state["access_authorized"] = False
     st.session_state["access_granted"] = False
+    st.session_state["clear_browser_storage"] = True
     try:
         st.query_params.clear()
     except Exception:
         pass
-
-    # Clear token from browser localStorage
-    st.components.v1.html(
-        f"""
-        <script>
-            try {{
-                localStorage.removeItem("{LOCAL_STORAGE_KEY}");
-            }} catch(e) {{}}
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
 
 
 def access_token_gate():
@@ -5237,6 +5225,21 @@ def access_token_gate():
             "Add `itsdangerous` to requirements.txt and redeploy."
         )
         st.stop()
+
+    # Handle pending clear storage action before doing anything else
+    if st.session_state.get("clear_browser_storage"):
+        st.components.v1.html(
+            f"""
+            <script>
+                try {{
+                    window.parent.localStorage.removeItem("{LOCAL_STORAGE_KEY}");
+                }} catch(e) {{}}
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
+        st.session_state["clear_browser_storage"] = False
 
     access_code, token_secret = _get_access_secrets()
 
@@ -5255,7 +5258,7 @@ def access_token_gate():
             f"""
             <script>
                 try {{
-                    localStorage.setItem("{LOCAL_STORAGE_KEY}", "{current_token}");
+                    window.parent.localStorage.setItem("{LOCAL_STORAGE_KEY}", "{current_token}");
                 }} catch(e) {{}}
             </script>
             """,
@@ -5269,11 +5272,11 @@ def access_token_gate():
         f"""
         <script>
             try {{
-                const token = localStorage.getItem("{LOCAL_STORAGE_KEY}");
-                const urlParams = new URLSearchParams(window.location.search);
+                const token = window.parent.localStorage.getItem("{LOCAL_STORAGE_KEY}");
+                const urlParams = new URLSearchParams(window.parent.location.search);
                 if (token && !urlParams.has("{ACCESS_QUERY_PARAM}")) {{
                     urlParams.set("{ACCESS_QUERY_PARAM}", token);
-                    window.location.search = urlParams.toString();
+                    window.parent.location.search = urlParams.toString();
                 }}
             }} catch(e) {{}}
         </script>
