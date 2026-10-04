@@ -6878,5 +6878,47 @@ html, body, .stApp, .stApp *, button, input, textarea, select, option {
   border-top:1px solid #00bfa5 !important;
   background:#ffffff !important;
 }
+
+/* ============================================================
+   FINAL TOP WHITE STRIP FIX v8
+   The live render showed a 7px white strip immediately above the hero.
+   Remove the shell spacing and pull the hero upward so it physically
+   covers that strip. This avoids relying on a fragile Streamlit header
+   selector whose DOM position can change between reruns.
+   ============================================================ */
+[data-testid="stAppViewContainer"] > .main,
+[data-testid="stAppViewContainer"] > .main > div,
+[data-testid="stAppViewBlockContainer"],
+section.main,
+section.main > div,
+.block-container {
+  margin-top:0 !important;
+  padding-top:0 !important;
+  border-top:0 !important;
+  box-shadow:none !important;
+}
+
+[data-testid="stDecoration"],
+[data-testid="stHeader"],
+header[data-testid="stHeader"],
+[data-testid="stToolbar"] {
+  display:none !important;
+  visibility:hidden !important;
+  height:0 !important;
+  min-height:0 !important;
+  max-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  box-shadow:none !important;
+}
+
+/* The hero is the first visible surface and must cover any residual
+   1rem/8px shell gap that Streamlit may reserve above the first element. */
+.hero {
+  margin-top:-8px !important;
+  border-top:0 !important;
+  box-shadow:none !important;
+}
 </style>
 """, unsafe_allow_html=True)
