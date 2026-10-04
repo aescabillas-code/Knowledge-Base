@@ -1804,6 +1804,71 @@ div.stButton > button {
   min-height:30px !important;
 }
 
+/* FINAL AI ANSWER TYPOGRAPHY OVERRIDE */
+.st-key-home_ai_exact_answer_box .user-msg,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .user-msg {
+  font-size:11px !important;
+  line-height:1.55 !important;
+}
+.st-key-home_ai_exact_answer_box .msg-label,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .msg-label {
+  font-size:8px !important;
+  line-height:1.2 !important;
+}
+.st-key-home_ai_exact_answer_box .exact-answer-label,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .exact-answer-label {
+  font-size:9px !important;
+  line-height:1.2 !important;
+}
+.st-key-home_ai_exact_answer_box .exact-answer-title,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .exact-answer-title {
+  font-size:11px !important;
+  line-height:1.35 !important;
+}
+.st-key-home_ai_exact_answer_box .exact-answer-body,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .exact-answer-body {
+  font-size:14px !important;
+  line-height:1.65 !important;
+}
+.st-key-home_ai_exact_answer_box .exact-section-title,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .exact-section-title {
+  font-size:10px !important;
+  line-height:1.35 !important;
+}
+.st-key-home_ai_exact_answer_box .summary-paragraph,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .summary-paragraph {
+  font-size:13px !important;
+  line-height:1.65 !important;
+}
+.st-key-home_ai_exact_answer_box .summary-subtitle,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .summary-subtitle {
+  font-size:11px !important;
+}
+.st-key-home_ai_exact_answer_box .summary-bullet,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .summary-bullet {
+  font-size:12px !important;
+  line-height:1.55 !important;
+}
+.st-key-home_ai_exact_answer_box .ai-step > div:last-child,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-step > div:last-child {
+  font-size:12px !important;
+  line-height:1.55 !important;
+}
+.st-key-home_ai_exact_answer_box .ai-num,
+[class*="st-key-answer_"][class*="_exact_answer_box"] .ai-num {
+  font-size:10px !important;
+}
+@media (max-width:800px) {
+  .st-key-home_ai_exact_answer_box .exact-answer-body,
+  [class*="st-key-answer_"][class*="_exact_answer_box"] .exact-answer-body {
+    font-size:13px !important;
+    line-height:1.6 !important;
+  }
+  .st-key-home_ai_exact_answer_box .summary-paragraph,
+  [class*="st-key-answer_"][class*="_exact_answer_box"] .summary-paragraph {
+    font-size:12px !important;
+  }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1936,7 +2001,7 @@ def render_ai_answer(query, family=None):
     )
 
 
-def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing issues?",
+def render_ai_assistant(default_query="",
                          family=None, key_prefix="home_ai"):
     """Option-based HPE AI chatbot with exact-answer retrieval."""
     q_key = f"{key_prefix}_query"
@@ -1944,8 +2009,19 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
     selected_key = f"{key_prefix}_selected"
     action_key = f"{key_prefix}_action"
 
-    st.session_state.setdefault(q_key, default_query)
-    st.session_state.setdefault(submitted_key, default_query)
+    # Start with an empty question field. Clear the previous demo question
+    # from an already-running Streamlit session as well.
+    previous_demo = "How do I troubleshoot ClearPass licensing issues?"
+    if q_key not in st.session_state:
+        st.session_state[q_key] = default_query or ""
+    elif st.session_state.get(q_key) == previous_demo and not default_query:
+        st.session_state[q_key] = ""
+
+    if submitted_key not in st.session_state:
+        st.session_state[submitted_key] = default_query or ""
+    elif st.session_state.get(submitted_key) == previous_demo and not default_query:
+        st.session_state[submitted_key] = ""
+
     st.session_state.setdefault(selected_key, None)
     st.session_state.setdefault(action_key, None)
 
@@ -1984,6 +2060,12 @@ def render_ai_assistant(default_query="How do I troubleshoot ClearPass licensing
             st.rerun()
 
     query = st.session_state[submitted_key].strip()
+
+    # Keep the assistant blank until the user enters a question.
+    if not query:
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
     records, docs = search(query, family=family, limit=6)
 
     if not records and docs:
@@ -2293,7 +2375,7 @@ def render_home():
 
     with left:
         render_ai_assistant(
-            default_query=query or "How do I troubleshoot ClearPass licensing issues?",
+            default_query=query,
             key_prefix="home_ai",
         )
 
